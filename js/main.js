@@ -287,7 +287,7 @@ function majorStats(id) {
     longhaul: [c((n) => n.id.startsWith('bb_')), c((n) => n.type === 'ila')],
     metro: [c((n) => n.type === 'hub'), c((n) => n.type === 'dc')],
     ipcore: [c((n) => n.type === 'core'), c((n) => n.type === 'dc'), c((n) => n.type === 'ixp')],
-    aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_'))],
+    aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_')), c((n) => n.type === 'home')],
     xhaul: [c((n) => n.type === 'xhub'), c((n) => n.type === 'tower')],
   }[id];
   return counts ? V.stats(id, counts) : '';

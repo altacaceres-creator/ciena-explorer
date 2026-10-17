@@ -26,6 +26,7 @@ const LAYER_PLAIN = {
   ipcore: { name: 'Internet core', short: 'Core' },
   agg: { name: 'City collector ring', short: 'Collector ring' },
   access: { name: 'Business connections', short: 'Business' },
+  pon: { name: 'Home fibre', short: 'Home fibre' },
   xhaul: { name: 'Mobile phone network', short: 'Mobile' },
 };
 
@@ -52,8 +53,8 @@ const MAJOR_PLAIN = {
   },
   aggregation: {
     name: 'Coreburg city network',
-    blurb: 'A loop of fibre round the city gathers up the packets from banks, offices, a hospital and a school, and carries them into the big routers in the middle.',
-    place: 'The loop round downtown Coreburg',
+    blurb: 'A loop of fibre round the city gathers up the packets from banks, offices, a hospital and a school, and carries them into the big routers in the middle. On Popcorn Hill, families stream films over fibre that runs right into their homes.',
+    place: 'The loop round downtown Coreburg, and Popcorn Hill',
   },
   xhaul: {
     name: 'Mobile phone network',
@@ -76,6 +77,10 @@ const TYPE_PLAIN = {
   xhub: ['Tower collector', 'Collects the packets from the phone towers on its stretch of the loop.'],
   ixp: ['Internet meeting point', 'Where this network plugs into other networks, so packets can reach the rest of the internet.'],
   access: ['Customer site', 'A place that connects to the network.'],
+  olt: ['Neighbourhood fibre hub', 'Where the fibres from the homes meet and join the city network. It talks to every home in turn, so they never talk over each other.'],
+  splitter: ['Fibre splitter', 'A tiny piece of glass in a street cabinet that shares one fibre between many homes, like a power strip for light.'],
+  home: ['Home', 'A family home with fibre to the door, WiFi and a smart TV.'],
+  cache: ['Streaming shelf', 'Computers near the homes that keep copies of the most popular shows and films, so they do not have to come from far away.'],
   bank: ['Bank branch', 'A bank branch with a small box that joins it to the city network.'],
   office: ['Office', 'An office building joined to the city network.'],
   hospital: ['Hospital', 'A hospital, connected two ways so it never loses its link.'],
@@ -99,6 +104,10 @@ const GEAR_PLAIN = {
   xhub: 'A router built for phone towers, with a very accurate clock',
   ixp: 'Routers belonging to many different networks, plugged into each other',
   tower: 'A small, tough router at the foot of the mast',
+  olt: 'A box with a laser for each street, sending light down to every home',
+  splitter: 'A sliver of glass that needs no electricity at all',
+  home: 'A fibre box on the wall, a WiFi router and a smart TV',
+  cache: 'Racks of disks full of popular shows and films',
   endpoint: 'A small box that connects the building to the network',
 };
 
@@ -112,6 +121,8 @@ const NAME_PLAIN = [
   [/ DC$/, ' data center'],
   [/ 5G Core$/, ' mobile control center'],
   [/ Internet Exchange$/, ' internet meeting point'],
+  [/ OLT$/, ' fibre hub'],
+  [/ cache$/, ' streaming shelf'],
   [/ Landing Station$/, ' cable station'],
   [/ core$/, ' main router'],
   [/\bAmplifier hut\b/, 'Booster hut'],
@@ -158,6 +169,7 @@ const ENGINEER_TYPES = {
   dc: 'Data center', pop: 'RLS ROADM site', hub: 'Metro hub', regional: 'Regional ring hut', ila: 'RLS amplifier hut',
   cls: 'Cable landing station', repeater: 'Undersea repeater', core: 'Core router', agg: 'Aggregation router',
   xhub: '5G pre-aggregation hub', ixp: 'Internet exchange', access: 'Access node',
+  olt: 'PON OLT', splitter: 'Optical splitter', home: 'FTTH home', cache: 'CDN cache',
   ...Object.fromEntries(Object.entries(ENDPOINT).map(([k, v]) => [k, v.label])),
 };
 
@@ -168,7 +180,7 @@ const STAT_WORDS = {
     longhaul: ['ROADMs', 'amplifier huts'],
     metro: ['metro hubs', 'data centers'],
     ipcore: ['core routers', 'data centers', 'internet exchange'],
-    aggregation: ['aggregation routers', 'business customers'],
+    aggregation: ['aggregation routers', 'business customers', 'FTTH homes'],
     xhaul: ['hubs', 'cell sites'],
   },
   explorer: {
@@ -176,7 +188,7 @@ const STAT_WORDS = {
     longhaul: ['light junctions', 'booster huts'],
     metro: ['city hubs', 'data centers'],
     ipcore: ['main routers', 'data centers', 'internet meeting point'],
-    aggregation: ['collector routers', 'customers'],
+    aggregation: ['collector routers', 'customers', 'homes'],
     xhaul: ['tower collectors', 'phone towers'],
   },
 };

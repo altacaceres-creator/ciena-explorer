@@ -676,6 +676,11 @@ const LAYERS = [
     gear: 'Ciena 3900 series NIDs and 5100 series routers',
   },
   {
+    id: 'pon', side: 1, data: true, name: 'Home fibre (PON)', short: 'Home fibre', color: '#43aa8b',
+    blurb: 'Fibre to the home: one fibre from the OLT, split on the street between many houses.',
+    gear: 'Ciena XGS-PON OLT, passive splitters and ONTs',
+  },
+  {
     id: 'xhaul', side: 1, data: true, name: '5G mobile xhaul', short: '5G xhaul', color: '#00a6d6',
     blurb: 'Cell sites on rings back to pre-aggregation hubs and the 5G core.',
     gear: 'Ciena 5164 and 5166 cell-site and pre-aggregation routers',
@@ -724,6 +729,7 @@ const CITIES = [
   C('leafdale', 'Leafdale', -26, 36, 3, { side: 1, town: true }),
   C('spinehill', 'Spinehill', 20, -42, 3, { side: 1, town: true }),
   C('brightwater', 'Labelbrook', -38, -16, 3, { side: 1, town: true }),
+  C('popcorn', 'Popcorn Hill', 32, 13, 3, { side: 1, town: true }),
 ];
 const CITY = Object.fromEntries(CITIES.map((c) => [c.id, c]));
 
@@ -789,6 +795,11 @@ const PLACED = [
   AGG('ag_n', 'Coreburg North aggregation', 7, -18),
   AGG('ag_e', 'Coreburg East aggregation', 19, 5),
   AGG('ag_s', 'Coreburg South aggregation', 4, 19),
+
+  // Popcorn Hill: homes on fibre, and a streaming cache next to the East aggregation router
+  NB('olt_e', 'olt', 'Coreburg East OLT', 27, 9, ['pon'], { role: 'PON head-end: one port serves up to 32 homes through a splitter' }),
+  NB('spl_pop', 'splitter', 'Popcorn Hill splitter', 31, 13, ['pon'], { role: 'Passive 1:32 splitter in a street cabinet, no power needed' }),
+  NB('cdn_e', 'cache', 'Couchwave cache', 23, 0, ['agg'], { role: 'Streaming cache (CDN) inside the network: popular titles are served from here, not from across the internet' }),
 
   XHUB('xh_bright', 'brightwater', -38, -16),
   XHUB('xh_spine', 'spinehill', 20, -42),
@@ -882,6 +893,9 @@ const LINKS = [
   L('agg', 'ag_s', 'ag_w'),
   L('agg', 'ag_w', 'cr_c1'),
   L('agg', 'ag_e', 'cr_c2'),
+  L('agg', 'ag_e', 'olt_e'),
+  L('agg', 'ag_e', 'cdn_e'),
+  L('pon', 'olt_e', 'spl_pop'),
 
   // 5G xhaul: hubs on a ring round the countryside, uplinked into the core at two points
   L('xhaul', 'xh_bright', 'cr_gw', { via: [[-50, -4]] }),
@@ -914,6 +928,9 @@ const ACCESS_RINGS = [
   { layer: 'xhaul', from: 'xh_south', to: 'xh_leaf', stops: [['tower', 16, 40, CRAN('xh_south', 'xh_east')], ['tower', -6, 42, DRAN('xh_east')]] },
   { layer: 'xhaul', from: 'xh_leaf', to: 'xh_bright', stops: [['tower', -32, 12, CRAN('xh_bright', 'xh_bright')]] },
 ];
+
+// Homes on Popcorn Hill, round the splitter.
+const SOFA_STREET = [[35, 10], [36, 14], [34, 17], [30, 17.5], [27, 15.5]];
 
 const ENDPOINT = {
   bank: { label: 'Bank branch', gear: 'Ciena 3900 series NID, Ethernet business service' },
@@ -1023,6 +1040,13 @@ function buildWorld() {
     links.push(L(layer, prev, to));
   });
 
+  // homes on Popcorn Hill, each on its own fibre from the street splitter
+  SOFA_STREET.forEach(([x, z], i) => {
+    const h = NB(`home_${i}`, 'home', `${i + 1} Sofa Street`, x, z, ['pon'], { role: 'Fibre-to-the-home subscriber' });
+    nodes.push(h); byId[h.id] = h;
+    links.push(L('pon', 'spl_pop', h.id));
+  });
+
   // each hub's share of the RAN: the C-RAN sites whose DUs it pools, and the DUs its CU serves
   for (const h of nodes) {
     if (h.type !== 'xhub') continue;
@@ -1113,6 +1137,10 @@ function gearFor(n) {
     case 'agg': return 'Ciena 5170 aggregation router';
     case 'xhub': return 'Ciena 5166 pre-aggregation router';
     case 'ixp': return 'Peering on Ciena 8100 Coherent Routers';
+    case 'olt': return 'Ciena XGS-PON OLT, 10 Gb/s shared down each fibre';
+    case 'splitter': return 'Passive optical splitter, 1:32';
+    case 'home': return 'ONT, Wi-Fi router and a smart TV streaming Couchwave';
+    case 'cache': return 'Couchwave CDN cache servers, embedded in the network';
     default: return '';
   }
 }
@@ -1164,12 +1192,12 @@ const MAJORS = [
     owns: (l) => l.layer === 'ipcore',
   },
   {
-    id: 'aggregation', side: 1, name: 'Metro aggregation', color: LAYER.agg.color, layers: ['agg', 'access'],
+    id: 'aggregation', side: 1, name: 'Metro aggregation', color: LAYER.agg.color, layers: ['agg', 'access', 'pon'],
     area: { ...COREBURG, r: 20 },
-    blurb: 'A segment-routed aggregation ring round Coreburg, homed on both core routers, with business Ethernet rings looping past banks, offices, a hospital and a school between its routers.',
-    place: 'The ring of downtown Coreburg round the core',
-    region: [[0, 2, 24]],
-    owns: (l) => l.layer === 'agg' || l.layer === 'access',
+    blurb: 'A segment-routed aggregation ring round Coreburg, homed on both core routers, with business Ethernet rings looping past banks, offices, a hospital and a school between its routers, and fibre to the homes of Popcorn Hill, streaming from a cache in the network.',
+    place: 'The ring of downtown Coreburg round the core, and Popcorn Hill',
+    region: [[0, 2, 24], [31, 12, 8]],
+    owns: (l) => l.layer === 'agg' || l.layer === 'access' || l.layer === 'pon',
   },
   {
     id: 'xhaul', side: 1, name: '5G mobile xhaul', color: LAYER.xhaul.color, layers: ['xhaul'],
@@ -1755,6 +1783,38 @@ function modelFor(n, layerColor) {
       });
       break;
     }
+    case 'olt': {
+      // the fibre hub: a grey exchange cabinet with a row of lit ports
+      g.add(box(1.8, 1.6, 1.2, '#dee2e6', 0, -0.3, 0, 0.06));
+      g.add(box(1.9, 0.2, 1.3, layerColor, 0, 1.3, 0, 0.04));
+      for (let i = 0; i < 4; i++) g.add(box(0.22, 0.14, 0.04, '#7cf2c2', -0.6 + i * 0.4, 0.6, 0.62, 0));
+      break;
+    }
+    case 'splitter': {
+      // a little green street cabinet
+      g.add(box(0.7, 1, 0.45, layerColor, 0, -0.2, 0, 0.05));
+      g.add(box(0.8, 0.12, 0.55, '#2d6a4f', 0, 0.8, 0, 0.03));
+      break;
+    }
+    case 'home': {
+      // a cottage with a lit window: the TV is on
+      const walls = ['#ffd6a5', '#bde0fe', '#ffc8dd', '#caffbf', '#fdffb6'];
+      g.add(box(2, 1.4, 1.6, walls[(+n.id.split('_')[1] || 0) % walls.length], 0, -0.3));
+      g.add(gable(2.2, 0.9, 1.9, '#c0504d', 1.1));
+      g.add(box(0.6, 0.45, 0.04, '#7cc6fe', -0.45, 0.35, 0.82, 0));
+      g.add(box(0.35, 0.7, 0.04, '#8d5524', 0.5, -0.3, 0.82, 0));
+      break;
+    }
+    case 'cache': {
+      // the streaming cache: a small server hall with a play button on the roof
+      g.add(box(2.4, 1.6, 1.8, '#eef2f7', 0, -0.3));
+      g.add(box(2.5, 0.25, 1.9, layerColor, 0, 1.3, 0, 0.04));
+      const play = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.12, 3), toon('#e63946'));
+      play.position.y = 1.65;
+      play.rotation.y = Math.PI / 2;
+      g.add(outline(play, 0.04));
+      break;
+    }
     case 'ixp': {
       // the internet exchange: a hall with a ring of flag poles for the networks that peer there
       g.add(box(4.4, 2.2, 3, '#f8f9fa', 0, -0.4));
@@ -1854,8 +1914,8 @@ function nodeY(world, n) {
 
 // ---------------------------------------------------------------- cables
 
-const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, agg: 0.45, access: 0.35, xhaul: 0.4 };
-const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, agg: 0.32, access: 0.2, xhaul: 0.26 };
+const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, agg: 0.45, access: 0.35, pon: 0.3, xhaul: 0.4 };
+const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, agg: 0.32, access: 0.2, pon: 0.18, xhaul: 0.26 };
 
 function groundY(x, z, side) {
   let h = -Infinity;
@@ -1943,7 +2003,7 @@ function routerPole(x, yTop, yBottom, z, color) {
 // laid out where they sit on the map but flat, and scaled so a far-flung network
 // (the submarine cables) reads as clearly as a compact one (the metro).
 
-const DETAIL_SPEED = { dci: 16, backbone: 20, regional: 13, metro: 15, submarine: 14, ipcore: 18, agg: 13, access: 8, xhaul: 10 };
+const DETAIL_SPEED = { dci: 16, backbone: 20, regional: 13, metro: 15, submarine: 14, ipcore: 18, agg: 13, access: 8, pon: 8, xhaul: 10 };
 
 function buildDetail(world, part) {
   const scene = new THREE.Scene();
@@ -2080,11 +2140,11 @@ function buildDetail(world, part) {
   for (const layer of new Set(links.map((l) => l.layer))) {
     const runs = [];
     for (const l of links.filter((x) => x.layer === layer)) {
-      const n = Math.max(1, Math.round(linkObjs[l.id].len / (layer === 'access' ? 6 : 10)));
+      const n = Math.max(1, Math.round(linkObjs[l.id].len / (['access', 'pon'].includes(layer) ? 6 : 10)));
       for (let k = 0; k < n; k++) runs.push({ link: linkObjs[l.id], phase: (k + Math.random() * 0.5) / n, dir: k % 2 ? -1 : 1 });
     }
     const col = new THREE.Color(LAYER[layer].color).lerp(new THREE.Color('#ffffff'), 0.45);
-    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry((layer === 'access' ? 0.32 : 0.48) * space.k, 10, 8), new THREE.MeshBasicMaterial({ color: col }), runs.length);
+    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry((['access', 'pon'].includes(layer) ? 0.32 : 0.48) * space.k, 10, 8), new THREE.MeshBasicMaterial({ color: col }), runs.length);
     mesh.raycast = () => {};
     scene.add(mesh);
     packets.push({ layer, mesh, runs });
@@ -2563,6 +2623,28 @@ const TOPICS = {
       ],
     },
     {
+      id: 'stream', name: 'FTTH and the streaming CDN', tag: 'XGS-PON · Couchwave cache on the 5170',
+      summary: 'A PON to the home, and why a film is served from inside the network.',
+      steps: [
+        {
+          say: 'Popcorn Hill is fibre to the home on a PON. Each home has an ONT; their fibres meet at a passive 1:32 splitter in a street cabinet, and one fibre runs on to the OLT, which hands off to the East aggregation router.',
+          run: (fx) => { fx.focus(fx.linksOf('pon')); for (const h of ofType(fx, 'home')) fx.anchor('<b>ONT</b>', fx.nodePos(h, 5), 'mep'); fx.anchor('<b>1:32</b>', fx.nodePos('spl_pop', 4), 'mep'); fx.anchor('<b>OLT</b>', fx.nodePos('olt_e', 5), 'mep'); fx.spot('olt_e', '#43aa8b'); },
+        },
+        {
+          say: 'Downstream, the OLT broadcasts one 10 Gb/s wavelength through the splitter to every ONT, and each keeps only its own encrypted frames. Upstream, the OLT grants each ONT its own time slots so they never collide.',
+          run: (fx) => { const homes = ofType(fx, 'home'); fx.focus(fx.linksOf('pon')); homes.forEach((h, i) => fx.packet(['olt_e', 'spl_pop', h], { color: '#43aa8b', speed: 8, delay: 0.1 * i, size: 0.4, tag: i ? null : '10G down, shared' })); homes.forEach((h, i) => fx.packet([h, 'spl_pop', 'olt_e'], { color: TC.video, speed: 8, delay: 1.6 + 0.5 * i, size: 0.3, tag: i ? null : `slot ${i + 1}` })); },
+        },
+        {
+          say: 'Press play on Couchwave. The request reaches the Couchwave cache embedded next to the East aggregation router, and the video comes back as a stream of short HLS segments over just a few hops: a cache hit.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('home_1', 'cdn_e')); fx.anchor('<b>CDN</b> cache hit', fx.nodePos('cdn_e', 5), 'note'); fx.spot('cdn_e', TC.red); fx.packet(ids, { color: TC.best, speed: 9, size: 0.3, tag: 'GET episode 4' }); [0, 1, 2, 3].forEach((i) => fx.packet([...ids].reverse(), { color: TC.red, speed: 10, delay: 0.9 + i * 0.7, size: 0.45, tag: i ? null : '4K segment' })); },
+        },
+        {
+          say: 'A title that is not cached yet is a miss: the cache fetches it once from the origin, through the core and the peering at Gateway Bay, stores it, and serves every later viewer from inside the network.',
+          run: (fx) => { const up = glowPath(fx, fx.path('cdn_e', 'cr_c2')); fx.focus([...fx.pathLinks(up), ...fx.pathLinks(fx.path('cdn_e', 'home_1'))]); fx.anchor('<b>CDN</b> cache miss', fx.nodePos('cdn_e', 5), 'note warn'); fx.packet([...up].reverse(), { color: TC.biz, speed: 10, tag: 'fill from origin' }); fx.packet(fx.path('cdn_e', 'home_1'), { color: TC.red, speed: 10, delay: 1.6, size: 0.45, tag: 'now cached' }); },
+        },
+      ],
+    },
+    {
       id: 'cfm', name: 'Connectivity fault management', tag: '802.1ag / Y.1731 on 3900 NIDs',
       summary: 'Heartbeats that prove a service is up, and measure how well.',
       steps: [
@@ -2878,6 +2960,28 @@ const BASICS = {
       ],
     },
     {
+      id: 'movie', name: 'Your film’s journey', tag: PACKETS,
+      summary: 'From the streaming shelf down the street to the TV on Popcorn Hill.',
+      steps: [
+        {
+          say: 'On Popcorn Hill the fibre runs right into each home. Down the street, a splitter shares one fibre between all the homes, and the neighbourhood fibre hub joins them to the city network.',
+          run: (fx) => { fx.focus(fx.linksOf('pon')); fx.anchor('<b>splitter</b>', fx.nodePos('spl_pop', 4), 'mep'); fx.anchor('<b>fibre hub</b>', fx.nodePos('olt_e', 5), 'mep'); ofType(fx, 'home').forEach((h, i) => fx.packet(['olt_e', 'spl_pop', h], { color: '#43aa8b', speed: 8, delay: 0.15 * i, size: 0.4 })); },
+        },
+        {
+          say: 'Press play on Couchwave. Your TV asks for the film, and the question only goes as far as the edge of the city: Couchwave keeps copies of popular shows on a streaming shelf right here in Coreburg. Engineers call it a cache.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('home_1', 'cdn_e')); fx.spot('cdn_e', TC.red); fx.packet(ids, { color: TC.best, speed: 9, size: 0.35, tag: '▶ play' }); },
+        },
+        {
+          say: 'The film comes back in small pieces, a few seconds of picture at a time, so it starts almost straight away and keeps arriving while you watch.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('cdn_e', 'home_1')); fx.spot('home_1', TC.red); [0, 1, 2, 3].forEach((i) => fx.packet(ids, { color: TC.red, speed: 10, delay: i * 0.7, size: 0.45, tag: `🎬 piece ${i + 1}` })); },
+        },
+        {
+          say: 'A brand new film may not be on the shelf yet. Then the shelf fetches it once from far away, through the main routers, keeps a copy, and the next family who presses play gets it from close by.',
+          run: (fx) => { const up = fx.path('cdn_e', 'cr_c2'); fx.focus([...fx.pathLinks(up), ...fx.pathLinks(fx.path('cdn_e', 'home_1'))]); fx.anchor('<b>not on the shelf yet</b>', fx.nodePos('cdn_e', 5), 'note warn'); fx.packet([...up].reverse(), { color: TC.biz, speed: 10, tag: 'from far away' }); fx.packet(fx.path('cdn_e', 'home_1'), { color: TC.red, speed: 10, delay: 1.6, size: 0.45, tag: 'now on the shelf' }); },
+        },
+      ],
+    },
+    {
       id: 'heartbeat', name: 'Is it still working?', tag: PACKETS,
       summary: 'The two ends keep asking each other “are you there?”',
       steps: [
@@ -2978,6 +3082,7 @@ const LAYER_PLAIN = {
   ipcore: { name: 'Internet core', short: 'Core' },
   agg: { name: 'City collector ring', short: 'Collector ring' },
   access: { name: 'Business connections', short: 'Business' },
+  pon: { name: 'Home fibre', short: 'Home fibre' },
   xhaul: { name: 'Mobile phone network', short: 'Mobile' },
 };
 
@@ -3004,8 +3109,8 @@ const MAJOR_PLAIN = {
   },
   aggregation: {
     name: 'Coreburg city network',
-    blurb: 'A loop of fibre round the city gathers up the packets from banks, offices, a hospital and a school, and carries them into the big routers in the middle.',
-    place: 'The loop round downtown Coreburg',
+    blurb: 'A loop of fibre round the city gathers up the packets from banks, offices, a hospital and a school, and carries them into the big routers in the middle. On Popcorn Hill, families stream films over fibre that runs right into their homes.',
+    place: 'The loop round downtown Coreburg, and Popcorn Hill',
   },
   xhaul: {
     name: 'Mobile phone network',
@@ -3028,6 +3133,10 @@ const TYPE_PLAIN = {
   xhub: ['Tower collector', 'Collects the packets from the phone towers on its stretch of the loop.'],
   ixp: ['Internet meeting point', 'Where this network plugs into other networks, so packets can reach the rest of the internet.'],
   access: ['Customer site', 'A place that connects to the network.'],
+  olt: ['Neighbourhood fibre hub', 'Where the fibres from the homes meet and join the city network. It talks to every home in turn, so they never talk over each other.'],
+  splitter: ['Fibre splitter', 'A tiny piece of glass in a street cabinet that shares one fibre between many homes, like a power strip for light.'],
+  home: ['Home', 'A family home with fibre to the door, WiFi and a smart TV.'],
+  cache: ['Streaming shelf', 'Computers near the homes that keep copies of the most popular shows and films, so they do not have to come from far away.'],
   bank: ['Bank branch', 'A bank branch with a small box that joins it to the city network.'],
   office: ['Office', 'An office building joined to the city network.'],
   hospital: ['Hospital', 'A hospital, connected two ways so it never loses its link.'],
@@ -3051,6 +3160,10 @@ const GEAR_PLAIN = {
   xhub: 'A router built for phone towers, with a very accurate clock',
   ixp: 'Routers belonging to many different networks, plugged into each other',
   tower: 'A small, tough router at the foot of the mast',
+  olt: 'A box with a laser for each street, sending light down to every home',
+  splitter: 'A sliver of glass that needs no electricity at all',
+  home: 'A fibre box on the wall, a WiFi router and a smart TV',
+  cache: 'Racks of disks full of popular shows and films',
   endpoint: 'A small box that connects the building to the network',
 };
 
@@ -3064,6 +3177,8 @@ const NAME_PLAIN = [
   [/ DC$/, ' data center'],
   [/ 5G Core$/, ' mobile control center'],
   [/ Internet Exchange$/, ' internet meeting point'],
+  [/ OLT$/, ' fibre hub'],
+  [/ cache$/, ' streaming shelf'],
   [/ Landing Station$/, ' cable station'],
   [/ core$/, ' main router'],
   [/\bAmplifier hut\b/, 'Booster hut'],
@@ -3110,6 +3225,7 @@ const ENGINEER_TYPES = {
   dc: 'Data center', pop: 'RLS ROADM site', hub: 'Metro hub', regional: 'Regional ring hut', ila: 'RLS amplifier hut',
   cls: 'Cable landing station', repeater: 'Undersea repeater', core: 'Core router', agg: 'Aggregation router',
   xhub: '5G pre-aggregation hub', ixp: 'Internet exchange', access: 'Access node',
+  olt: 'PON OLT', splitter: 'Optical splitter', home: 'FTTH home', cache: 'CDN cache',
   ...Object.fromEntries(Object.entries(ENDPOINT).map(([k, v]) => [k, v.label])),
 };
 
@@ -3120,7 +3236,7 @@ const STAT_WORDS = {
     longhaul: ['ROADMs', 'amplifier huts'],
     metro: ['metro hubs', 'data centers'],
     ipcore: ['core routers', 'data centers', 'internet exchange'],
-    aggregation: ['aggregation routers', 'business customers'],
+    aggregation: ['aggregation routers', 'business customers', 'FTTH homes'],
     xhaul: ['hubs', 'cell sites'],
   },
   explorer: {
@@ -3128,7 +3244,7 @@ const STAT_WORDS = {
     longhaul: ['light junctions', 'booster huts'],
     metro: ['city hubs', 'data centers'],
     ipcore: ['main routers', 'data centers', 'internet meeting point'],
-    aggregation: ['collector routers', 'customers'],
+    aggregation: ['collector routers', 'customers', 'homes'],
     xhaul: ['tower collectors', 'phone towers'],
   },
 };
@@ -3451,7 +3567,7 @@ function majorStats(id) {
     longhaul: [c((n) => n.id.startsWith('bb_')), c((n) => n.type === 'ila')],
     metro: [c((n) => n.type === 'hub'), c((n) => n.type === 'dc')],
     ipcore: [c((n) => n.type === 'core'), c((n) => n.type === 'dc'), c((n) => n.type === 'ixp')],
-    aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_'))],
+    aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_')), c((n) => n.type === 'home')],
     xhaul: [c((n) => n.type === 'xhub'), c((n) => n.type === 'tower')],
   }[id];
   return counts ? V.stats(id, counts) : '';

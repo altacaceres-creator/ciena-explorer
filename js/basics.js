@@ -208,6 +208,28 @@ export const BASICS = {
       ],
     },
     {
+      id: 'movie', name: 'Your film’s journey', tag: PACKETS,
+      summary: 'From the streaming shelf down the street to the TV on Popcorn Hill.',
+      steps: [
+        {
+          say: 'On Popcorn Hill the fibre runs right into each home. Down the street, a splitter shares one fibre between all the homes, and the neighbourhood fibre hub joins them to the city network.',
+          run: (fx) => { fx.focus(fx.linksOf('pon')); fx.anchor('<b>splitter</b>', fx.nodePos('spl_pop', 4), 'mep'); fx.anchor('<b>fibre hub</b>', fx.nodePos('olt_e', 5), 'mep'); ofType(fx, 'home').forEach((h, i) => fx.packet(['olt_e', 'spl_pop', h], { color: '#43aa8b', speed: 8, delay: 0.15 * i, size: 0.4 })); },
+        },
+        {
+          say: 'Press play on Couchwave. Your TV asks for the film, and the question only goes as far as the edge of the city: Couchwave keeps copies of popular shows on a streaming shelf right here in Coreburg. Engineers call it a cache.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('home_1', 'cdn_e')); fx.spot('cdn_e', TC.red); fx.packet(ids, { color: TC.best, speed: 9, size: 0.35, tag: '▶ play' }); },
+        },
+        {
+          say: 'The film comes back in small pieces, a few seconds of picture at a time, so it starts almost straight away and keeps arriving while you watch.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('cdn_e', 'home_1')); fx.spot('home_1', TC.red); [0, 1, 2, 3].forEach((i) => fx.packet(ids, { color: TC.red, speed: 10, delay: i * 0.7, size: 0.45, tag: `🎬 piece ${i + 1}` })); },
+        },
+        {
+          say: 'A brand new film may not be on the shelf yet. Then the shelf fetches it once from far away, through the main routers, keeps a copy, and the next family who presses play gets it from close by.',
+          run: (fx) => { const up = fx.path('cdn_e', 'cr_c2'); fx.focus([...fx.pathLinks(up), ...fx.pathLinks(fx.path('cdn_e', 'home_1'))]); fx.anchor('<b>not on the shelf yet</b>', fx.nodePos('cdn_e', 5), 'note warn'); fx.packet([...up].reverse(), { color: TC.biz, speed: 10, tag: 'from far away' }); fx.packet(fx.path('cdn_e', 'home_1'), { color: TC.red, speed: 10, delay: 1.6, size: 0.45, tag: 'now on the shelf' }); },
+        },
+      ],
+    },
+    {
       id: 'heartbeat', name: 'Is it still working?', tag: PACKETS,
       summary: 'The two ends keep asking each other “are you there?”',
       steps: [

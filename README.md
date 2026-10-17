@@ -62,7 +62,7 @@ entry in the panel, opens it.
 | A | Long-haul RLS mesh | 8 ROADMs, each with 3+ routes, 21 amplifier huts, landing on 3 Lumen City hubs | RLS with WaveLogic 6 |
 | A | Lumen City metro optical | 4 metro hubs on a packet-optical ring, 4 data centers on a DCI ring | RLS, Waveserver |
 | B | IP/MPLS core | 6 core routers in a mesh, an internet exchange, cloud and 5G core data centers | 8100 Coherent Routers |
-| B | Metro aggregation | a segment-routed ring round Coreburg on both core routers, 6 business customers on rings | 5170, 3900 series |
+| B | Metro aggregation | a segment-routed ring round Coreburg on both core routers, 6 business customers on rings, 5 homes on fibre (PON) and a streaming cache | 5170, 3900 series |
 | B | 5G mobile xhaul | 5 pre-aggregation hubs and 7 cell sites on a ring, uplinked into the core at 2 points; each cell site's RAN split into RU, DU and CU | 5164, 5166 |
 
 The product names are illustrative placements, not a real network design.
@@ -114,6 +114,21 @@ rack beside its hut. The split is data on the cell sites in `js/world.js`
 CU an uplink to the core. Explorer calls them the radio, the signal computer and
 the organiser.
 
+## Streaming at home: Popcorn Hill
+
+East of Coreburg, the homes of Popcorn Hill have fibre to the door. Each home's
+fibre meets the others at a passive splitter in a street cabinet, one fibre runs
+on to the OLT, and the OLT hands off to the East aggregation router. Next to that
+router sits the cache of Couchwave, a made-up streaming service: popular shows are
+served from there, a few hops from the sofa, and a title that is not cached yet
+is fetched once from the origin through the core.
+
+The explainers play it out: **FTTH and the streaming CDN** in Engineer (PON
+downstream and upstream, cache hit, cache miss) and **Your film's journey** in
+Explorer, where the cache is the streaming shelf. The homes are `SOFA_STREET` in
+`js/world.js`, on the `pon` layer, and a test checks every home reaches the cache
+through the splitter and the OLT.
+
 ## Explore the technology
 
 Each network's panel lists the technologies that matter in that space. Pick one and
@@ -127,7 +142,7 @@ its route, a queue readout fills, a fault alarm appears where it would.
 | Lumen City metro optical | fixed two-degree **ROADM ring** · ring protection · data center interconnect |
 | Submarine | line terminals, repeaters and spectrum sharing |
 | IP/MPLS core | **segment routing (SR-MPLS)**, a label stack that pops hop by hop · TI-LFA fast reroute |
-| Metro aggregation | **G.8032** ring protection (RPL, R-APS, flush) · low-cost Ethernet aggregation (E-Line, no MPLS at the edge) · **QoS** queues on the uplink · **CFM** heartbeats and loss of continuity |
+| Metro aggregation | **G.8032** ring protection (RPL, R-APS, flush) · low-cost Ethernet aggregation (E-Line, no MPLS at the edge) · **QoS** queues on the uplink · **FTTH and the streaming CDN** (PON, cache hit and miss) · **CFM** heartbeats and loss of continuity |
 | 5G mobile xhaul | **RAN split**: RU, DU and CU, with fronthaul, midhaul and backhaul between them · QoS for fronthaul · CFM to the cell site · G.8032 on the xhaul ring |
 
 | SR-MPLS: the stack pops at each hop | G.8032: R-APS after a span fails |
@@ -174,7 +189,7 @@ inlined, so it can be shared as one file.
 | `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos, the airliner, switching views, labels, picking, the site card |
 | `css/net.css` | the HUD, and the Engineer theme as a second set of tokens |
 | `test/tech.test.mjs` | every topic's steps, in both modes, touch only that network's sites and links; Explorer's vocabulary covers every site and network without jargon; the brief's technologies are where it asked |
-| `test/world.test.mjs` | data checks: links resolve, transport on side A and data on side B, gear and fibre on land, subsea cables at sea, no two cables run alongside each other, every ROADM and core router has 3+ routes, no customer or cell site on a spur, every cell site has an RU, DU and CU and every CU an uplink, the six networks own their own links, each network's sites stand inside its region |
+| `test/world.test.mjs` | data checks: links resolve, transport on side A and data on side B, gear and fibre on land, subsea cables at sea, no two cables run alongside each other, every ROADM and core router has 3+ routes, no customer or cell site on a spur, every cell site has an RU, DU and CU and every CU an uplink, every home reaches the streaming cache, the six networks own their own links, each network's sites stand inside its region |
 | `build.mjs` | bundles everything into `dist/netlandia.html`, and fails if two modules declare the same top-level name |
 | `vendor/` | three.js r160 and OrbitControls (MIT) |
 

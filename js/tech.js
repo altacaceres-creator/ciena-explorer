@@ -267,6 +267,28 @@ export const TOPICS = {
       ],
     },
     {
+      id: 'stream', name: 'FTTH and the streaming CDN', tag: 'XGS-PON · Couchwave cache on the 5170',
+      summary: 'A PON to the home, and why a film is served from inside the network.',
+      steps: [
+        {
+          say: 'Popcorn Hill is fibre to the home on a PON. Each home has an ONT; their fibres meet at a passive 1:32 splitter in a street cabinet, and one fibre runs on to the OLT, which hands off to the East aggregation router.',
+          run: (fx) => { fx.focus(fx.linksOf('pon')); for (const h of ofType(fx, 'home')) fx.anchor('<b>ONT</b>', fx.nodePos(h, 5), 'mep'); fx.anchor('<b>1:32</b>', fx.nodePos('spl_pop', 4), 'mep'); fx.anchor('<b>OLT</b>', fx.nodePos('olt_e', 5), 'mep'); fx.spot('olt_e', '#43aa8b'); },
+        },
+        {
+          say: 'Downstream, the OLT broadcasts one 10 Gb/s wavelength through the splitter to every ONT, and each keeps only its own encrypted frames. Upstream, the OLT grants each ONT its own time slots so they never collide.',
+          run: (fx) => { const homes = ofType(fx, 'home'); fx.focus(fx.linksOf('pon')); homes.forEach((h, i) => fx.packet(['olt_e', 'spl_pop', h], { color: '#43aa8b', speed: 8, delay: 0.1 * i, size: 0.4, tag: i ? null : '10G down, shared' })); homes.forEach((h, i) => fx.packet([h, 'spl_pop', 'olt_e'], { color: TC.video, speed: 8, delay: 1.6 + 0.5 * i, size: 0.3, tag: i ? null : `slot ${i + 1}` })); },
+        },
+        {
+          say: 'Press play on Couchwave. The request reaches the Couchwave cache embedded next to the East aggregation router, and the video comes back as a stream of short HLS segments over just a few hops: a cache hit.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('home_1', 'cdn_e')); fx.anchor('<b>CDN</b> cache hit', fx.nodePos('cdn_e', 5), 'note'); fx.spot('cdn_e', TC.red); fx.packet(ids, { color: TC.best, speed: 9, size: 0.3, tag: 'GET episode 4' }); [0, 1, 2, 3].forEach((i) => fx.packet([...ids].reverse(), { color: TC.red, speed: 10, delay: 0.9 + i * 0.7, size: 0.45, tag: i ? null : '4K segment' })); },
+        },
+        {
+          say: 'A title that is not cached yet is a miss: the cache fetches it once from the origin, through the core and the peering at Gateway Bay, stores it, and serves every later viewer from inside the network.',
+          run: (fx) => { const up = glowPath(fx, fx.path('cdn_e', 'cr_c2')); fx.focus([...fx.pathLinks(up), ...fx.pathLinks(fx.path('cdn_e', 'home_1'))]); fx.anchor('<b>CDN</b> cache miss', fx.nodePos('cdn_e', 5), 'note warn'); fx.packet([...up].reverse(), { color: TC.biz, speed: 10, tag: 'fill from origin' }); fx.packet(fx.path('cdn_e', 'home_1'), { color: TC.red, speed: 10, delay: 1.6, size: 0.45, tag: 'now cached' }); },
+        },
+      ],
+    },
+    {
       id: 'cfm', name: 'Connectivity fault management', tag: '802.1ag / Y.1731 on 3900 NIDs',
       summary: 'Heartbeats that prove a service is up, and measure how well.',
       steps: [

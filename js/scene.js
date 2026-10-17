@@ -535,6 +535,38 @@ export function modelFor(n, layerColor) {
       });
       break;
     }
+    case 'olt': {
+      // the fibre hub: a grey exchange cabinet with a row of lit ports
+      g.add(box(1.8, 1.6, 1.2, '#dee2e6', 0, -0.3, 0, 0.06));
+      g.add(box(1.9, 0.2, 1.3, layerColor, 0, 1.3, 0, 0.04));
+      for (let i = 0; i < 4; i++) g.add(box(0.22, 0.14, 0.04, '#7cf2c2', -0.6 + i * 0.4, 0.6, 0.62, 0));
+      break;
+    }
+    case 'splitter': {
+      // a little green street cabinet
+      g.add(box(0.7, 1, 0.45, layerColor, 0, -0.2, 0, 0.05));
+      g.add(box(0.8, 0.12, 0.55, '#2d6a4f', 0, 0.8, 0, 0.03));
+      break;
+    }
+    case 'home': {
+      // a cottage with a lit window: the TV is on
+      const walls = ['#ffd6a5', '#bde0fe', '#ffc8dd', '#caffbf', '#fdffb6'];
+      g.add(box(2, 1.4, 1.6, walls[(+n.id.split('_')[1] || 0) % walls.length], 0, -0.3));
+      g.add(gable(2.2, 0.9, 1.9, '#c0504d', 1.1));
+      g.add(box(0.6, 0.45, 0.04, '#7cc6fe', -0.45, 0.35, 0.82, 0));
+      g.add(box(0.35, 0.7, 0.04, '#8d5524', 0.5, -0.3, 0.82, 0));
+      break;
+    }
+    case 'cache': {
+      // the streaming cache: a small server hall with a play button on the roof
+      g.add(box(2.4, 1.6, 1.8, '#eef2f7', 0, -0.3));
+      g.add(box(2.5, 0.25, 1.9, layerColor, 0, 1.3, 0, 0.04));
+      const play = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.12, 3), toon('#e63946'));
+      play.position.y = 1.65;
+      play.rotation.y = Math.PI / 2;
+      g.add(outline(play, 0.04));
+      break;
+    }
     case 'ixp': {
       // the internet exchange: a hall with a ring of flag poles for the networks that peer there
       g.add(box(4.4, 2.2, 3, '#f8f9fa', 0, -0.4));
@@ -634,8 +666,8 @@ export function nodeY(world, n) {
 
 // ---------------------------------------------------------------- cables
 
-const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, agg: 0.45, access: 0.35, xhaul: 0.4 };
-const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, agg: 0.32, access: 0.2, xhaul: 0.26 };
+const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, agg: 0.45, access: 0.35, pon: 0.3, xhaul: 0.4 };
+const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, agg: 0.32, access: 0.2, pon: 0.18, xhaul: 0.26 };
 
 function groundY(x, z, side) {
   let h = -Infinity;
