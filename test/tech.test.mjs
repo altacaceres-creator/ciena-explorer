@@ -63,7 +63,7 @@ for (const [name, SET] of [['engineer', TOPICS], ['explorer', BASICS]]) {
 
 // Explorer mode is an introduction: the words the trade uses stay out of it unless a
 // step is there to introduce them (DWDM has its own topic).
-const JARGON = /\b(ROADM|MPLS|DWDM|CDC|G\.8032|R-APS|RPL|MEP|CCM|CFM|QoS|SR|TI-LFA|IGP|VLAN|DSCP|eCPRI|OTN|DCI|ILA|NID|IXP|SLA|Tb\/s|λ|wavelength)\b/;
+const JARGON = /\b(ROADM|MPLS|DWDM|CDC|G\.8032|R-APS|RPL|MEP|CCM|CFM|QoS|SR|TI-LFA|IGP|VLAN|DSCP|eCPRI|RAN|RU|DU|CU|F1|UPF|AMF|OTN|DCI|ILA|NID|IXP|SLA|Tb\/s|λ|wavelength)\b/;
 test('explorer: the plain vocabulary covers everything the HUD prints, without jargon', () => {
   const V = vocab('explorer');
   const E = vocab('engineer');
@@ -91,6 +91,11 @@ test('explorer: the plain vocabulary covers everything the HUD prints, without j
     assert.ok(!JARGON.test(V.nodeGear(n)), `${n.id}: plain gear has jargon`);
   }
   for (const n of world.nodes) assert.ok(!JARGON.test(V.nodeName(n)), `${n.id}: "${V.nodeName(n)}"`);
+  for (const n of world.nodes.filter((x) => x.ran)) {
+    assert.ok(V.nodeRan(n, world.byId) && E.nodeRan(n, world.byId), `${n.id}: no RAN line`);
+    assert.ok(!JARGON.test(V.nodeRan(n, world.byId)), `${n.id}: plain RAN line has jargon: ${V.nodeRan(n, world.byId)}`);
+  }
+  assert.ok(!JARGON.test(V.ranHeading));
   for (const k of Object.keys(ENDPOINT)) assert.ok(V.typeLabel(k) !== k, `endpoint ${k}`);
   assert.deepEqual(MODES.map((m) => m.id), ['explorer', 'engineer']);
 });
@@ -102,4 +107,5 @@ test('the technologies the brief asked for are where it asked for them', () => {
   assert.ok(ids('ipcore').includes('sr'), 'data core: SR-MPLS');
   assert.ok(ids('aggregation').includes('g8032') && ids('aggregation').includes('ethagg'), 'data metro: G.8032 and Ethernet aggregation');
   for (const m of ['aggregation', 'xhaul']) assert.ok(ids(m).includes('qos') && ids(m).includes('cfm'), `${m}: QoS and CFM at the edge`);
+  assert.ok(ids('xhaul').includes('split') && BASICS.xhaul.some((t) => t.id === 'parts'), '5G: the RU / DU / CU split, in both modes');
 });

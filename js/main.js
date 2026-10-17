@@ -532,6 +532,9 @@ function selectInDetail(id) {
   card.querySelector('.card-gear-h').textContent = V.gearHeading;
   card.querySelector('.card-gear').textContent = V.nodeGear(n);
   card.querySelector('dl').hidden = !V.nodeGear(n);
+  card.querySelector('.card-ran-h').textContent = V.ranHeading;
+  card.querySelector('.card-ran').textContent = V.nodeRan(n, world.byId);
+  card.querySelector('.card-ran-dl').hidden = !n.ran;
   card.querySelector('.card-layers').innerHTML = n.layers.map((lid) =>
     `<span class="chip" style="--c:${LAYER[lid].color}">${V.layerShort(lid)}</span>`).join('');
   card.querySelector('.card-links').innerHTML = neighbours.map((m) => `<li><button data-goto="${m.id}">${V.nodeName(m)}</button></li>`).join('');

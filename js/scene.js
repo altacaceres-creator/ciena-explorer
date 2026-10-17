@@ -528,6 +528,11 @@ export function modelFor(n, layerColor) {
       g.add(gable(1.8, 0.7, 1.5, layerColor, 0.9));
       g.add(cyl(0.08, 0.12, 3.2, '#adb5bd', 1.1, -0.2, 0, 6, 0.03));
       g.add(box(0.25, 0.7, 0.1, '#ffffff', 1.1, 2.6, 0.12, 0.03));
+      // RAN racks beside the hut: a DU pool, a CU, or both
+      [n.ran?.pool.length, n.ran?.cu.length].filter(Boolean).forEach((_, i) => {
+        g.add(box(0.6, 0.9, 0.5, '#cfd8dc', -1.25, -0.25, -0.4 + i * 0.75, 0.04));
+        g.add(box(0.45, 0.12, 0.04, layerColor, -1.25, 0.35, -0.13 + i * 0.75, 0));
+      });
       break;
     }
     case 'ixp': {
@@ -571,6 +576,11 @@ export function modelFor(n, layerColor) {
       light.material = new THREE.MeshBasicMaterial({ color: '#ff1744' });
       light.userData.blink = true;
       g.add(light);
+      // a D-RAN site keeps its DU in a cabinet at the foot of the mast
+      if (n.ran?.du === n.id) {
+        g.add(box(0.8, 1, 0.6, '#cfd8dc', 0.95, -0.25, 0, 0.04));
+        g.add(box(0.05, 0.6, 0.4, layerColor, 1.36, 0, 0, 0));
+      }
       break;
     }
     case 'office': {

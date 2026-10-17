@@ -400,17 +400,26 @@ const LINKS = [
 // Rings of customers: leave one site, pass each customer in turn, come back into
 // another site, so every customer has two ways home.
 
+// The 5G RAN split (3GPP / O-RAN): the radio unit (RU) is up the mast, the
+// distributed unit (DU) runs the real-time part of the radio stack, and the central
+// unit (CU) runs the rest. A D-RAN site keeps its DU at the foot of the mast and
+// sends midhaul to its CU; a C-RAN site has only the RU and sends fronthaul to a DU
+// pool at a hub. The CUs sit at the two hubs that uplink into the core, and send
+// backhaul on to the 5G core. Fronthaul runs RU→DU, midhaul DU→CU, backhaul CU→core.
+const CRAN = (du, cu) => ({ du, cu });
+const DRAN = (cu) => ({ cu });
+
 const ACCESS_RINGS = [
   // business access in Coreburg, between aggregation routers
   { layer: 'access', from: 'ag_n', to: 'ag_e', stops: [['office', 9, -9], ['bank', 14, -4]] },
   { layer: 'access', from: 'ag_s', to: 'ag_w', stops: [['hospital', -5, 12], ['school', -11, 4]] },
   { layer: 'access', from: 'ag_e', to: 'ag_s', stops: [['office', 14, 8], ['bank', 10, 13]] },
-  // the 5G ring: cell sites between pre-aggregation hubs
-  { layer: 'xhaul', from: 'xh_bright', to: 'xh_spine', stops: [['tower', -30, -28], ['tower', -4, -44]] },
-  { layer: 'xhaul', from: 'xh_spine', to: 'xh_east', stops: [['tower', 38, -40]] },
-  { layer: 'xhaul', from: 'xh_east', to: 'xh_south', stops: [['tower', 52, 14]] },
-  { layer: 'xhaul', from: 'xh_south', to: 'xh_leaf', stops: [['tower', 16, 40], ['tower', -6, 42]] },
-  { layer: 'xhaul', from: 'xh_leaf', to: 'xh_bright', stops: [['tower', -32, 12]] },
+  // the 5G ring: cell sites between pre-aggregation hubs, each with its RAN split (see RAN_SPLIT)
+  { layer: 'xhaul', from: 'xh_bright', to: 'xh_spine', stops: [['tower', -30, -28, CRAN('xh_bright', 'xh_bright')], ['tower', -4, -44, DRAN('xh_bright')]] },
+  { layer: 'xhaul', from: 'xh_spine', to: 'xh_east', stops: [['tower', 38, -40, DRAN('xh_east')]] },
+  { layer: 'xhaul', from: 'xh_east', to: 'xh_south', stops: [['tower', 52, 14, CRAN('xh_south', 'xh_east')]] },
+  { layer: 'xhaul', from: 'xh_south', to: 'xh_leaf', stops: [['tower', 16, 40, CRAN('xh_south', 'xh_east')], ['tower', -6, 42, DRAN('xh_east')]] },
+  { layer: 'xhaul', from: 'xh_leaf', to: 'xh_bright', stops: [['tower', -32, 12, CRAN('xh_bright', 'xh_bright')]] },
 ];
 
 export const ENDPOINT = {
@@ -418,7 +427,7 @@ export const ENDPOINT = {
   office: { label: 'Corporate office', gear: 'Ciena 3900 series NID, 10G business Ethernet' },
   hospital: { label: 'Hospital', gear: 'Ciena 5100 series router, protected dual-homed service' },
   school: { label: 'School', gear: 'Ciena 3900 series NID, 1G Ethernet' },
-  tower: { label: 'Cell tower', gear: 'Ciena 5164 cell-site router, 5G fronthaul and backhaul' },
+  tower: { label: 'Cell tower', gear: 'Ciena 5164 cell-site router, 5G fronthaul, midhaul and timing' },
   factory: { label: 'Factory', gear: 'Ciena 3900 series NID, private line' },
   hotel: { label: 'Resort hotel', gear: 'Ciena 3900 series NID, business Ethernet' },
 };
@@ -511,14 +520,24 @@ export function buildWorld() {
   };
   ACCESS_RINGS.forEach(({ layer, from, to, stops }, r) => {
     let prev = from;
-    stops.forEach(([type, x, z], i) => {
+    stops.forEach(([type, x, z, split], i) => {
       const e = NB(`end_${r}_${i}`, type, pick(type), x, z, [layer], { role: ENDPOINT[type].label, gear: ENDPOINT[type].gear });
+      if (split) e.ran = { du: split.du ?? e.id, cu: split.cu };
       nodes.push(e); byId[e.id] = e;
       links.push(L(layer, prev, e.id));
       prev = e.id;
     });
     links.push(L(layer, prev, to));
   });
+
+  // each hub's share of the RAN: the C-RAN sites whose DUs it pools, and the DUs its CU serves
+  for (const h of nodes) {
+    if (h.type !== 'xhub') continue;
+    const sites = nodes.filter((n) => n.ran);
+    const pool = sites.filter((n) => n.ran.du === h.id).map((n) => n.id);
+    const cu = [...new Set(sites.filter((n) => n.ran.cu === h.id).map((n) => n.ran.du))];
+    if (pool.length || cu.length) h.ran = { pool, cu };
+  }
 
   // RLS line amplifiers along the countrywide spans.
   for (const link of links) {

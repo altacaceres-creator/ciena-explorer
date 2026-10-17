@@ -33,6 +33,17 @@ export function ccm(fx, a, b, period = 1.4) {
   return ids;
 }
 
+// A tag on every cell site and hub naming the parts of the RAN it hosts.
+export function ranTags(fx, words = { ru: 'RU', du: 'DU', cu: 'CU', pool: 'DU pool' }) {
+  for (const n of Object.values(fx.byId)) {
+    if (!n.ran) continue;
+    const parts = n.type === 'tower'
+      ? [words.ru, ...(n.ran.du === n.id ? [words.du] : [])]
+      : [...(n.ran.pool.length ? [words.pool] : []), ...(n.ran.cu.length ? [words.cu] : [])];
+    fx.anchor(`<b>${parts.join(' + ')}</b>`, fx.nodePos(n.id, 6), 'mep');
+  }
+}
+
 export const TOPICS = {
   longhaul: [
     {
@@ -276,6 +287,32 @@ export const TOPICS = {
   ],
 
   xhaul: [
+    {
+      id: 'split', name: 'RAN split: RU, DU, CU', tag: '3GPP / O-RAN over the Ciena 5164 and 5166',
+      summary: 'One base station in three parts, and the fronthaul, midhaul and backhaul between them.',
+      steps: [
+        {
+          say: 'A 5G base station is split in three. The RU at the top of the mast does the radio. The DU runs the real-time layers (PHY, MAC, RLC) and the CU the rest (PDCP, RRC). Each site card shows where its three parts are.',
+          run: (fx) => { fx.focus(fx.linksOf()); ranTags(fx); },
+        },
+        {
+          say: 'C-RAN: Cell sites 1 and 7 keep only their RUs. Their eCPRI fronthaul runs to the DU pool at Labelbrook. It is the most demanding leg: about 100 µs one way, so the DU can be no more than about 20 km of fibre away.',
+          run: (fx) => { for (const t of ['end_3_0', 'end_7_0']) { const ids = glowPath(fx, fx.path(t, 'xh_bright')); fx.anchor('<b>RU</b>', fx.nodePos(t, 6), 'mep'); fx.packet(ids, { color: TC.voice, speed: 10, tag: 'eCPRI fronthaul' }); } fx.anchor('<b>DU pool</b>', fx.nodePos('xh_bright', 6), 'mep'); fx.spot('xh_bright', TC.voice); },
+        },
+        {
+          say: 'D-RAN: Cell site 3 has its own DU at the foot of the mast, so what leaves the site is F1 midhaul, already packetised. It runs to the CU at Edgewater and can take a few milliseconds.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('end_4_0', 'xh_east')); fx.anchor('<b>RU + DU</b>', fx.nodePos('end_4_0', 6), 'mep'); fx.anchor('<b>CU</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(ids, { color: TC.biz, speed: 12, tag: 'F1 midhaul' }); fx.spot('xh_east', TC.biz); },
+        },
+        {
+          say: 'A DU pool needs midhaul too: the Framefield DUs, serving Cell sites 4 and 5, send F1 up the ring to the same CU at Edgewater.',
+          run: (fx) => { for (const t of ['end_5_0', 'end_6_0']) { fx.anchor('<b>RU</b>', fx.nodePos(t, 6), 'mep'); fx.packet(glowPath(fx, fx.path(t, 'xh_south')), { color: TC.voice, speed: 10, size: 0.4 }); } const ids = glowPath(fx, fx.path('xh_south', 'xh_east')); fx.anchor('<b>DU pool</b>', fx.nodePos('xh_south', 6), 'mep'); fx.anchor('<b>CU</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(ids, { color: TC.biz, speed: 12, delay: 0.6, tag: 'F1 midhaul' }); },
+        },
+        {
+          say: 'Backhaul: each CU hands its users’ traffic (N3, to the UPF) and signalling (N2, to the AMF) to the IP core, at Gateway Bay and at Edgewater, and on to the 5G core in Coreburg.',
+          run: (fx) => { for (const [cu, cr] of [['xh_bright', 'cr_gw'], ['xh_east', 'cr_edge']]) { const ids = glowPath(fx, fx.path(cu, cr)); fx.anchor('<b>CU</b>', fx.nodePos(cu, 6), 'mep'); fx.packet(ids, { color: TC.best, speed: 12, tag: 'N3 backhaul' }); fx.packet(ids, { color: TC.ccm, speed: 12, delay: 0.8, size: 0.35, tag: 'N2' }); fx.spot(cr, TC.biz); } },
+        },
+      ],
+    },
     {
       id: 'qos', name: 'QoS for 5G xhaul', tag: 'Ciena 5164 cell-site router',
       summary: 'Radio traffic goes first; everything else waits.',

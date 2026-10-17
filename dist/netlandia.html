@@ -277,6 +277,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .card dl { margin: 0; padding: 8px 10px; background: var(--well); border-radius: var(--radius-s); }
 .card dt { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .card dd { margin: 2px 0 0; font-weight: 800; }
+.card dl + dl { margin-top: 6px; }
 .card h4 { margin: 12px 0 4px; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .card-links { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .card-links button {
@@ -479,6 +480,7 @@ try { const m = localStorage.getItem('netlandia.mode'); if (m === 'explorer' || 
     <div class="card-layers"></div>
     <p class="card-role"></p>
     <dl><dt class="card-gear-h">Equipment</dt><dd class="card-gear"></dd></dl>
+    <dl class="card-ran-dl"><dt class="card-ran-h">RAN split</dt><dd class="card-ran"></dd></dl>
     <h4 class="card-links-h">Connects to</h4>
     <ul class="card-links"></ul>
   </aside>
@@ -891,17 +893,26 @@ const LINKS = [
 // Rings of customers: leave one site, pass each customer in turn, come back into
 // another site, so every customer has two ways home.
 
+// The 5G RAN split (3GPP / O-RAN): the radio unit (RU) is up the mast, the
+// distributed unit (DU) runs the real-time part of the radio stack, and the central
+// unit (CU) runs the rest. A D-RAN site keeps its DU at the foot of the mast and
+// sends midhaul to its CU; a C-RAN site has only the RU and sends fronthaul to a DU
+// pool at a hub. The CUs sit at the two hubs that uplink into the core, and send
+// backhaul on to the 5G core. Fronthaul runs RU→DU, midhaul DU→CU, backhaul CU→core.
+const CRAN = (du, cu) => ({ du, cu });
+const DRAN = (cu) => ({ cu });
+
 const ACCESS_RINGS = [
   // business access in Coreburg, between aggregation routers
   { layer: 'access', from: 'ag_n', to: 'ag_e', stops: [['office', 9, -9], ['bank', 14, -4]] },
   { layer: 'access', from: 'ag_s', to: 'ag_w', stops: [['hospital', -5, 12], ['school', -11, 4]] },
   { layer: 'access', from: 'ag_e', to: 'ag_s', stops: [['office', 14, 8], ['bank', 10, 13]] },
-  // the 5G ring: cell sites between pre-aggregation hubs
-  { layer: 'xhaul', from: 'xh_bright', to: 'xh_spine', stops: [['tower', -30, -28], ['tower', -4, -44]] },
-  { layer: 'xhaul', from: 'xh_spine', to: 'xh_east', stops: [['tower', 38, -40]] },
-  { layer: 'xhaul', from: 'xh_east', to: 'xh_south', stops: [['tower', 52, 14]] },
-  { layer: 'xhaul', from: 'xh_south', to: 'xh_leaf', stops: [['tower', 16, 40], ['tower', -6, 42]] },
-  { layer: 'xhaul', from: 'xh_leaf', to: 'xh_bright', stops: [['tower', -32, 12]] },
+  // the 5G ring: cell sites between pre-aggregation hubs, each with its RAN split (see RAN_SPLIT)
+  { layer: 'xhaul', from: 'xh_bright', to: 'xh_spine', stops: [['tower', -30, -28, CRAN('xh_bright', 'xh_bright')], ['tower', -4, -44, DRAN('xh_bright')]] },
+  { layer: 'xhaul', from: 'xh_spine', to: 'xh_east', stops: [['tower', 38, -40, DRAN('xh_east')]] },
+  { layer: 'xhaul', from: 'xh_east', to: 'xh_south', stops: [['tower', 52, 14, CRAN('xh_south', 'xh_east')]] },
+  { layer: 'xhaul', from: 'xh_south', to: 'xh_leaf', stops: [['tower', 16, 40, CRAN('xh_south', 'xh_east')], ['tower', -6, 42, DRAN('xh_east')]] },
+  { layer: 'xhaul', from: 'xh_leaf', to: 'xh_bright', stops: [['tower', -32, 12, CRAN('xh_bright', 'xh_bright')]] },
 ];
 
 const ENDPOINT = {
@@ -909,7 +920,7 @@ const ENDPOINT = {
   office: { label: 'Corporate office', gear: 'Ciena 3900 series NID, 10G business Ethernet' },
   hospital: { label: 'Hospital', gear: 'Ciena 5100 series router, protected dual-homed service' },
   school: { label: 'School', gear: 'Ciena 3900 series NID, 1G Ethernet' },
-  tower: { label: 'Cell tower', gear: 'Ciena 5164 cell-site router, 5G fronthaul and backhaul' },
+  tower: { label: 'Cell tower', gear: 'Ciena 5164 cell-site router, 5G fronthaul, midhaul and timing' },
   factory: { label: 'Factory', gear: 'Ciena 3900 series NID, private line' },
   hotel: { label: 'Resort hotel', gear: 'Ciena 3900 series NID, business Ethernet' },
 };
@@ -1002,14 +1013,24 @@ function buildWorld() {
   };
   ACCESS_RINGS.forEach(({ layer, from, to, stops }, r) => {
     let prev = from;
-    stops.forEach(([type, x, z], i) => {
+    stops.forEach(([type, x, z, split], i) => {
       const e = NB(`end_${r}_${i}`, type, pick(type), x, z, [layer], { role: ENDPOINT[type].label, gear: ENDPOINT[type].gear });
+      if (split) e.ran = { du: split.du ?? e.id, cu: split.cu };
       nodes.push(e); byId[e.id] = e;
       links.push(L(layer, prev, e.id));
       prev = e.id;
     });
     links.push(L(layer, prev, to));
   });
+
+  // each hub's share of the RAN: the C-RAN sites whose DUs it pools, and the DUs its CU serves
+  for (const h of nodes) {
+    if (h.type !== 'xhub') continue;
+    const sites = nodes.filter((n) => n.ran);
+    const pool = sites.filter((n) => n.ran.du === h.id).map((n) => n.id);
+    const cu = [...new Set(sites.filter((n) => n.ran.cu === h.id).map((n) => n.ran.du))];
+    if (pool.length || cu.length) h.ran = { pool, cu };
+  }
 
   // RLS line amplifiers along the countrywide spans.
   for (const link of links) {
@@ -1727,6 +1748,11 @@ function modelFor(n, layerColor) {
       g.add(gable(1.8, 0.7, 1.5, layerColor, 0.9));
       g.add(cyl(0.08, 0.12, 3.2, '#adb5bd', 1.1, -0.2, 0, 6, 0.03));
       g.add(box(0.25, 0.7, 0.1, '#ffffff', 1.1, 2.6, 0.12, 0.03));
+      // RAN racks beside the hut: a DU pool, a CU, or both
+      [n.ran?.pool.length, n.ran?.cu.length].filter(Boolean).forEach((_, i) => {
+        g.add(box(0.6, 0.9, 0.5, '#cfd8dc', -1.25, -0.25, -0.4 + i * 0.75, 0.04));
+        g.add(box(0.45, 0.12, 0.04, layerColor, -1.25, 0.35, -0.13 + i * 0.75, 0));
+      });
       break;
     }
     case 'ixp': {
@@ -1770,6 +1796,11 @@ function modelFor(n, layerColor) {
       light.material = new THREE.MeshBasicMaterial({ color: '#ff1744' });
       light.userData.blink = true;
       g.add(light);
+      // a D-RAN site keeps its DU in a cabinet at the foot of the mast
+      if (n.ran?.du === n.id) {
+        g.add(box(0.8, 1, 0.6, '#cfd8dc', 0.95, -0.25, 0, 0.04));
+        g.add(box(0.05, 0.6, 0.4, layerColor, 1.36, 0, 0, 0));
+      }
       break;
     }
     case 'office': {
@@ -2298,6 +2329,17 @@ function ccm(fx, a, b, period = 1.4) {
   return ids;
 }
 
+// A tag on every cell site and hub naming the parts of the RAN it hosts.
+function ranTags(fx, words = { ru: 'RU', du: 'DU', cu: 'CU', pool: 'DU pool' }) {
+  for (const n of Object.values(fx.byId)) {
+    if (!n.ran) continue;
+    const parts = n.type === 'tower'
+      ? [words.ru, ...(n.ran.du === n.id ? [words.du] : [])]
+      : [...(n.ran.pool.length ? [words.pool] : []), ...(n.ran.cu.length ? [words.cu] : [])];
+    fx.anchor(`<b>${parts.join(' + ')}</b>`, fx.nodePos(n.id, 6), 'mep');
+  }
+}
+
 const TOPICS = {
   longhaul: [
     {
@@ -2541,6 +2583,32 @@ const TOPICS = {
   ],
 
   xhaul: [
+    {
+      id: 'split', name: 'RAN split: RU, DU, CU', tag: '3GPP / O-RAN over the Ciena 5164 and 5166',
+      summary: 'One base station in three parts, and the fronthaul, midhaul and backhaul between them.',
+      steps: [
+        {
+          say: 'A 5G base station is split in three. The RU at the top of the mast does the radio. The DU runs the real-time layers (PHY, MAC, RLC) and the CU the rest (PDCP, RRC). Each site card shows where its three parts are.',
+          run: (fx) => { fx.focus(fx.linksOf()); ranTags(fx); },
+        },
+        {
+          say: 'C-RAN: Cell sites 1 and 7 keep only their RUs. Their eCPRI fronthaul runs to the DU pool at Labelbrook. It is the most demanding leg: about 100 µs one way, so the DU can be no more than about 20 km of fibre away.',
+          run: (fx) => { for (const t of ['end_3_0', 'end_7_0']) { const ids = glowPath(fx, fx.path(t, 'xh_bright')); fx.anchor('<b>RU</b>', fx.nodePos(t, 6), 'mep'); fx.packet(ids, { color: TC.voice, speed: 10, tag: 'eCPRI fronthaul' }); } fx.anchor('<b>DU pool</b>', fx.nodePos('xh_bright', 6), 'mep'); fx.spot('xh_bright', TC.voice); },
+        },
+        {
+          say: 'D-RAN: Cell site 3 has its own DU at the foot of the mast, so what leaves the site is F1 midhaul, already packetised. It runs to the CU at Edgewater and can take a few milliseconds.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('end_4_0', 'xh_east')); fx.anchor('<b>RU + DU</b>', fx.nodePos('end_4_0', 6), 'mep'); fx.anchor('<b>CU</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(ids, { color: TC.biz, speed: 12, tag: 'F1 midhaul' }); fx.spot('xh_east', TC.biz); },
+        },
+        {
+          say: 'A DU pool needs midhaul too: the Framefield DUs, serving Cell sites 4 and 5, send F1 up the ring to the same CU at Edgewater.',
+          run: (fx) => { for (const t of ['end_5_0', 'end_6_0']) { fx.anchor('<b>RU</b>', fx.nodePos(t, 6), 'mep'); fx.packet(glowPath(fx, fx.path(t, 'xh_south')), { color: TC.voice, speed: 10, size: 0.4 }); } const ids = glowPath(fx, fx.path('xh_south', 'xh_east')); fx.anchor('<b>DU pool</b>', fx.nodePos('xh_south', 6), 'mep'); fx.anchor('<b>CU</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(ids, { color: TC.biz, speed: 12, delay: 0.6, tag: 'F1 midhaul' }); },
+        },
+        {
+          say: 'Backhaul: each CU hands its users’ traffic (N3, to the UPF) and signalling (N2, to the AMF) to the IP core, at Gateway Bay and at Edgewater, and on to the 5G core in Coreburg.',
+          run: (fx) => { for (const [cu, cr] of [['xh_bright', 'cr_gw'], ['xh_east', 'cr_edge']]) { const ids = glowPath(fx, fx.path(cu, cr)); fx.anchor('<b>CU</b>', fx.nodePos(cu, 6), 'mep'); fx.packet(ids, { color: TC.best, speed: 12, tag: 'N3 backhaul' }); fx.packet(ids, { color: TC.ccm, speed: 12, delay: 0.8, size: 0.35, tag: 'N2' }); fx.spot(cr, TC.biz); } },
+        },
+      ],
+    },
     {
       id: 'qos', name: 'QoS for 5G xhaul', tag: 'Ciena 5164 cell-site router',
       summary: 'Radio traffic goes first; everything else waits.',
@@ -2845,6 +2913,28 @@ const BASICS = {
       ],
     },
     {
+      id: 'parts', name: 'A phone mast in three pieces', tag: PACKETS,
+      summary: 'The radio, the signal computer and the organiser, and the three stretches of fibre between them.',
+      steps: [
+        {
+          say: 'The 5G equipment behind every phone call comes in three pieces. The radio sits up the mast. A signal computer turns the radio waves into data. An organiser keeps track of every phone and hands it from tower to tower as you move. Click a tower to see which pieces it has.',
+          run: (fx) => { fx.focus(fx.linksOf()); ranTags(fx, { ru: 'radio', du: 'signal computer', cu: 'organiser', pool: 'signal computers' }); },
+        },
+        {
+          say: 'Some towers keep only the radio. Its raw signal rushes down the fibre to a building where several towers share their signal computers. This first stretch is the strictest of all: the signal has about a ten-thousandth of a second to get there.',
+          run: (fx) => { for (const t of ['end_3_0', 'end_7_0']) { fx.anchor('<b>radio</b>', fx.nodePos(t, 6), 'mep'); fx.packet(glowPath(fx, fx.path(t, 'xh_bright')), { color: TC.voice, speed: 10, tag: 'raw radio signal' }); } fx.anchor('<b>signal computers</b>', fx.nodePos('xh_bright', 6), 'mep'); fx.spot('xh_bright', TC.voice); },
+        },
+        {
+          say: 'Other towers keep their signal computer at the foot of the mast. What leaves them is already tidy data, and it can take a little longer: a few thousandths of a second along the loop to the organiser at Edgewater.',
+          run: (fx) => { fx.anchor('<b>radio + signal computer</b>', fx.nodePos('end_4_0', 6), 'mep'); fx.anchor('<b>organiser</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(glowPath(fx, fx.path('end_4_0', 'xh_east')), { color: TC.biz, speed: 12, tag: 'tidy data' }); fx.spot('xh_east', TC.biz); },
+        },
+        {
+          say: 'From the organisers, everything joins the main routers at Gateway Bay and Edgewater and travels on to the mobile network’s control center and the rest of the internet.',
+          run: (fx) => { for (const [cu, cr] of [['xh_bright', 'cr_gw'], ['xh_east', 'cr_edge']]) { fx.anchor('<b>organiser</b>', fx.nodePos(cu, 6), 'mep'); fx.packet(glowPath(fx, fx.path(cu, cr)), { color: TC.best, speed: 12, tag: 'to the internet' }); fx.spot(cr, TC.biz); } },
+        },
+      ],
+    },
+    {
       id: 'twoways', name: 'Two ways out', tag: PACKETS,
       summary: 'The loop of towers joins the core in two places, so a cut never takes a tower off air.',
       steps: [
@@ -2980,6 +3070,40 @@ const NAME_PLAIN = [
   [/\bRepeater\b/, 'Booster'],
 ];
 
+// The 5G radio at a cell site or hub, split into its three parts (see RAN_SPLIT in
+// world.js). Explorer calls them the radio, the signal computer and the organiser.
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+function ranLine(n, byId, plain, nameOf) {
+  const r = n.ran;
+  if (!r) return '';
+  const at = (id) => (plain ? `the ${nameOf(byId[id])}` : nameOf(byId[id]));
+  if (n.type === 'tower') {
+    const own = r.du === n.id;
+    if (plain) {
+      return own
+        ? `The radio and its signal computer are both here. The signal computer sends finished data along the loop to the organiser at ${at(r.cu)}.`
+        : `Only the radio is here. Its raw signal rushes down the fibre to a signal computer at ${at(r.du)}, shared with other towers.`;
+    }
+    return own
+      ? `D-RAN: RU and DU on site · midhaul (F1) to the CU at ${at(r.cu)}`
+      : `C-RAN: RU only · eCPRI fronthaul to the DU pool at ${at(r.du)} · CU at ${at(r.cu)}`;
+  }
+  const pool = r.pool.map((id) => nameOf(byId[id]));
+  const cu = r.cu.map((id) => {
+    if (id === n.id) return plain ? 'its own signal computers' : 'its own DU pool';
+    if (byId[id].type === 'xhub') return plain ? `the signal computers at ${at(id)}` : `the DU pool at ${at(id)}`;
+    return nameOf(byId[id]);
+  });
+  if (plain) {
+    return [
+      pool.length && `Signal computers for ${andList(pool)}, which keep only their radios.`,
+      cu.length && `The organiser for ${andList(cu)}: it keeps track of every phone and hands it from tower to tower.`,
+    ].filter(Boolean).join(' ');
+  }
+  return [pool.length && `DU pool (C-RAN) for ${andList(pool)}`, cu.length && `CU for ${andList(cu)} · backhaul (N2/N3) to the 5G core`]
+    .filter(Boolean).join(' · ');
+}
+
 // ---------------------------------------------------------------- the vocabulary
 
 const ENGINEER_TYPES = {
@@ -3029,6 +3153,9 @@ function vocab(mode) {
     nodeRole: (n) => (plain ? TYPE_PLAIN[n.type]?.[1] ?? '' : n.role ?? ''),
     nodeGear: (n) => (plain ? GEAR_PLAIN[n.type] ?? (ENDPOINT[n.type] ? GEAR_PLAIN.endpoint : '') : n.gear ?? ''),
     gearHeading: plain ? 'What is inside' : 'Equipment',
+    // the 5G radio split at a cell site or hub; byId to name the sites it points at
+    ranHeading: plain ? 'The 5G radio here' : 'RAN split',
+    nodeRan(n, byId) { return ranLine(n, byId, plain, (m) => this.nodeName(m)); },
     techHeading: plain ? 'Learn how it works' : 'Explore the technology',
     hints: {
       globe: plain
@@ -3569,6 +3696,9 @@ function selectInDetail(id) {
   card.querySelector('.card-gear-h').textContent = V.gearHeading;
   card.querySelector('.card-gear').textContent = V.nodeGear(n);
   card.querySelector('dl').hidden = !V.nodeGear(n);
+  card.querySelector('.card-ran-h').textContent = V.ranHeading;
+  card.querySelector('.card-ran').textContent = V.nodeRan(n, world.byId);
+  card.querySelector('.card-ran-dl').hidden = !n.ran;
   card.querySelector('.card-layers').innerHTML = n.layers.map((lid) =>
     `<span class="chip" style="--c:${LAYER[lid].color}">${V.layerShort(lid)}</span>`).join('');
   card.querySelector('.card-links').innerHTML = neighbours.map((m) => `<li><button data-goto="${m.id}">${V.nodeName(m)}</button></li>`).join('');

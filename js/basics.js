@@ -1,7 +1,7 @@
 // Explorer-mode explainers: an introduction to networking told on the same six
 // networks. No acronyms unless the step is there to introduce one. Same shape as
 // TOPICS in tech.js, so the same player, the same effects and the same tests apply.
-import { TC, glowPath, ofType, ccm } from './tech.js';
+import { TC, glowPath, ofType, ccm, ranTags } from './tech.js';
 
 const OPTICAL = 'Optical transport';
 const PACKETS = 'Packet networking';
@@ -239,6 +239,28 @@ export const BASICS = {
         {
           say: 'The radio part of your call cannot wait even a thousandth of a second, so at every tower it jumps the queue ahead of everything else.',
           run: (fx) => { fx.queue('xh_bright', [{ name: 'Radio', color: TC.voice, fill: 0.1 }, { name: 'Clock', color: TC.video, fill: 0.05 }, { name: 'Calls', color: TC.biz, fill: 0.55 }, { name: 'Data', color: TC.best, fill: 0.95 }]); const ids = glowPath(fx, ['end_3_0', 'xh_bright']); [TC.voice, TC.voice, TC.voice, TC.best].forEach((c, i) => fx.packet(ids, { color: c, speed: 10, delay: i * 0.4, size: 0.45 })); },
+        },
+      ],
+    },
+    {
+      id: 'parts', name: 'A phone mast in three pieces', tag: PACKETS,
+      summary: 'The radio, the signal computer and the organiser, and the three stretches of fibre between them.',
+      steps: [
+        {
+          say: 'The 5G equipment behind every phone call comes in three pieces. The radio sits up the mast. A signal computer turns the radio waves into data. An organiser keeps track of every phone and hands it from tower to tower as you move. Click a tower to see which pieces it has.',
+          run: (fx) => { fx.focus(fx.linksOf()); ranTags(fx, { ru: 'radio', du: 'signal computer', cu: 'organiser', pool: 'signal computers' }); },
+        },
+        {
+          say: 'Some towers keep only the radio. Its raw signal rushes down the fibre to a building where several towers share their signal computers. This first stretch is the strictest of all: the signal has about a ten-thousandth of a second to get there.',
+          run: (fx) => { for (const t of ['end_3_0', 'end_7_0']) { fx.anchor('<b>radio</b>', fx.nodePos(t, 6), 'mep'); fx.packet(glowPath(fx, fx.path(t, 'xh_bright')), { color: TC.voice, speed: 10, tag: 'raw radio signal' }); } fx.anchor('<b>signal computers</b>', fx.nodePos('xh_bright', 6), 'mep'); fx.spot('xh_bright', TC.voice); },
+        },
+        {
+          say: 'Other towers keep their signal computer at the foot of the mast. What leaves them is already tidy data, and it can take a little longer: a few thousandths of a second along the loop to the organiser at Edgewater.',
+          run: (fx) => { fx.anchor('<b>radio + signal computer</b>', fx.nodePos('end_4_0', 6), 'mep'); fx.anchor('<b>organiser</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(glowPath(fx, fx.path('end_4_0', 'xh_east')), { color: TC.biz, speed: 12, tag: 'tidy data' }); fx.spot('xh_east', TC.biz); },
+        },
+        {
+          say: 'From the organisers, everything joins the main routers at Gateway Bay and Edgewater and travels on to the mobile network’s control center and the rest of the internet.',
+          run: (fx) => { for (const [cu, cr] of [['xh_bright', 'cr_gw'], ['xh_east', 'cr_edge']]) { fx.anchor('<b>organiser</b>', fx.nodePos(cu, 6), 'mep'); fx.packet(glowPath(fx, fx.path(cu, cr)), { color: TC.best, speed: 12, tag: 'to the internet' }); fx.spot(cr, TC.biz); } },
         },
       ],
     },

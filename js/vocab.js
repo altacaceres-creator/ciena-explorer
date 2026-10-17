@@ -118,6 +118,40 @@ const NAME_PLAIN = [
   [/\bRepeater\b/, 'Booster'],
 ];
 
+// The 5G radio at a cell site or hub, split into its three parts (see RAN_SPLIT in
+// world.js). Explorer calls them the radio, the signal computer and the organiser.
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+function ranLine(n, byId, plain, nameOf) {
+  const r = n.ran;
+  if (!r) return '';
+  const at = (id) => (plain ? `the ${nameOf(byId[id])}` : nameOf(byId[id]));
+  if (n.type === 'tower') {
+    const own = r.du === n.id;
+    if (plain) {
+      return own
+        ? `The radio and its signal computer are both here. The signal computer sends finished data along the loop to the organiser at ${at(r.cu)}.`
+        : `Only the radio is here. Its raw signal rushes down the fibre to a signal computer at ${at(r.du)}, shared with other towers.`;
+    }
+    return own
+      ? `D-RAN: RU and DU on site · midhaul (F1) to the CU at ${at(r.cu)}`
+      : `C-RAN: RU only · eCPRI fronthaul to the DU pool at ${at(r.du)} · CU at ${at(r.cu)}`;
+  }
+  const pool = r.pool.map((id) => nameOf(byId[id]));
+  const cu = r.cu.map((id) => {
+    if (id === n.id) return plain ? 'its own signal computers' : 'its own DU pool';
+    if (byId[id].type === 'xhub') return plain ? `the signal computers at ${at(id)}` : `the DU pool at ${at(id)}`;
+    return nameOf(byId[id]);
+  });
+  if (plain) {
+    return [
+      pool.length && `Signal computers for ${andList(pool)}, which keep only their radios.`,
+      cu.length && `The organiser for ${andList(cu)}: it keeps track of every phone and hands it from tower to tower.`,
+    ].filter(Boolean).join(' ');
+  }
+  return [pool.length && `DU pool (C-RAN) for ${andList(pool)}`, cu.length && `CU for ${andList(cu)} · backhaul (N2/N3) to the 5G core`]
+    .filter(Boolean).join(' · ');
+}
+
 // ---------------------------------------------------------------- the vocabulary
 
 const ENGINEER_TYPES = {
@@ -167,6 +201,9 @@ export function vocab(mode) {
     nodeRole: (n) => (plain ? TYPE_PLAIN[n.type]?.[1] ?? '' : n.role ?? ''),
     nodeGear: (n) => (plain ? GEAR_PLAIN[n.type] ?? (ENDPOINT[n.type] ? GEAR_PLAIN.endpoint : '') : n.gear ?? ''),
     gearHeading: plain ? 'What is inside' : 'Equipment',
+    // the 5G radio split at a cell site or hub; byId to name the sites it points at
+    ranHeading: plain ? 'The 5G radio here' : 'RAN split',
+    nodeRan(n, byId) { return ranLine(n, byId, plain, (m) => this.nodeName(m)); },
     techHeading: plain ? 'Learn how it works' : 'Explore the technology',
     hints: {
       globe: plain
