@@ -118,7 +118,7 @@ const NAME_PLAIN = [
   [/\bRepeater\b/, 'Booster'],
 ];
 
-// The 5G radio at a cell site or hub, split into its three parts (see RAN_SPLIT in
+// The 5G radio at a cell site or hub, split into its three parts (see CRAN and DRAN in
 // world.js). Explorer calls them the radio, the signal computer and the organiser.
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 function ranLine(n, byId, plain, nameOf) {

@@ -414,7 +414,7 @@ const ACCESS_RINGS = [
   { layer: 'access', from: 'ag_n', to: 'ag_e', stops: [['office', 9, -9], ['bank', 14, -4]] },
   { layer: 'access', from: 'ag_s', to: 'ag_w', stops: [['hospital', -5, 12], ['school', -11, 4]] },
   { layer: 'access', from: 'ag_e', to: 'ag_s', stops: [['office', 14, 8], ['bank', 10, 13]] },
-  // the 5G ring: cell sites between pre-aggregation hubs, each with its RAN split (see RAN_SPLIT)
+  // the 5G ring: cell sites between pre-aggregation hubs, each with its RAN split (CRAN or DRAN, above)
   { layer: 'xhaul', from: 'xh_bright', to: 'xh_spine', stops: [['tower', -30, -28, CRAN('xh_bright', 'xh_bright')], ['tower', -4, -44, DRAN('xh_bright')]] },
   { layer: 'xhaul', from: 'xh_spine', to: 'xh_east', stops: [['tower', 38, -40, DRAN('xh_east')]] },
   { layer: 'xhaul', from: 'xh_east', to: 'xh_south', stops: [['tower', 52, 14, CRAN('xh_south', 'xh_east')]] },
