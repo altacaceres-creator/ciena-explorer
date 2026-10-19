@@ -134,11 +134,12 @@ through the splitter and the OLT.
 Tidewell, a made-up company, has an office in Gateway Bay, Edgewater and
 Framefield, each on the core router of its town and all three on one L3VPN. The
 explainer plays out a video meeting between Gateway Bay and Edgewater: it takes
-the IGP path through the Coreburg pair until the morning backups fill that link
-and the picture starts to freeze, and then an SR-TE policy steers the meeting
-round the quiet way through Northport while the backups stay where they are.
-Explorer tells it as the company's private network, and the quiet road beating the
-short one. The offices are `BRANCH` nodes in `js/world.js`, on the `vpn` layer.
+the IGP path through the Coreburg pair, marked EF (Expedited Forwarding) so QoS
+puts it in the strict-priority queue on every hop. At 9 a.m. meetings start all
+over the country and the EF queue on the Coreburg pair hits its policer, so the
+picture starts to freeze, and then an SR-TE policy steers Tidewell's meeting round
+through Northport, where EF has headroom. Explorer tells it as the company's
+private network, a fast lane for video, and the quiet road beating the short one. The offices are `BRANCH` nodes in `js/world.js`, on the `vpn` layer.
 
 ## Explore the technology
 

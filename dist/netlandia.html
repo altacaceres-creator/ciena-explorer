@@ -2573,23 +2573,23 @@ const TOPICS = {
     },
     {
       id: 'vpn', name: 'Video between offices: L3VPN and SR-TE', tag: 'L3VPN over SR-MPLS on the Ciena 8100',
-      summary: 'A company’s private network over the shared core, and a quiet path for its video.',
+      summary: 'A company’s private network over the shared core, QoS for its video, and a quiet path when EF fills up.',
       steps: [
         {
           say: 'Tidewell has offices in Gateway Bay, Edgewater and Framefield. Each CE attaches to the nearest PE, and an L3VPN (VRF tidewell) joins them over the shared core. Their routes live only in that VRF: no other customer can see or reach them.',
           run: (fx) => { fx.focus(fx.linksOf('vpn')); for (const pe of ['cr_gw', 'cr_edge', 'cr_south']) fx.anchor('<b>PE</b> VRF tidewell', fx.nodePos(pe, 6.5), 'mep'); for (const b of ofType(fx, 'branch')) fx.spot(b, '#e76f51'); },
         },
         {
-          say: 'A video meeting starts between Gateway Bay and Edgewater. Marked EF, it follows the IGP shortest path through the Coreburg pair, wrapped in a VPN label under the SR transport labels: about 3 ms one way, with almost no jitter.',
-          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 EF · VPN 24001' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 EF' }); fx.anchor('<b>3 ms</b> · jitter 0.2 ms', fx.nodePos('cr_c2', 6.5), 'note'); },
+          say: 'A video meeting starts between Gateway Bay and Edgewater. This is where QoS comes in: the CE marks the video EF (Expedited Forwarding, DSCP 46), and every router puts EF in a strict-priority queue, policed to 20% of the link so it cannot starve the rest. The meeting follows the IGP shortest path through the Coreburg pair, a VPN label under the SR labels: about 3 ms one way, almost no jitter.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 EF (Expedited Forwarding) · VPN 24001' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 EF' }); fx.queue('cr_c1', [{ name: 'EF', color: '#e76f51', fill: 0.15 }, { name: 'AF', color: TC.biz, fill: 0.3 }, { name: 'BE', color: TC.best, fill: 0.4 }]); fx.anchor('<b>3 ms</b> · jitter 0.2 ms', fx.nodePos('cr_c2', 6.5), 'note'); },
         },
         {
-          say: '9 a.m.: the nightly backups overrun and fill the Coreburg 1 to Coreburg 2 link. Queues build, latency swings from 3 to 40 ms, and the video freezes even though no packet is lost yet.',
-          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'Video', color: '#e76f51', fill: 0.45 }, { name: 'Backup', color: TC.best, fill: 0.98 }]); [TC.best, '#e76f51', TC.best, TC.best].forEach((c, i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: c, speed: 7, delay: i * 0.35, size: c === TC.best ? 0.5 : 0.4 })); fx.anchor('<b>jitter 37 ms</b> · picture freezes', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
+          say: '9 a.m.: meetings start all over Packetland at once. Backups in best effort could never hurt EF, but now the EF queue itself on Coreburg 1 to Coreburg 2 hits its 20% policer. EF packets queue and drop, jitter climbs to 37 ms and the video freezes.',
+          run: (fx) => { glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'EF', color: '#e76f51', fill: 0.98 }, { name: 'AF', color: TC.biz, fill: 0.35 }, { name: 'BE', color: TC.best, fill: 0.5 }]); [0, 1, 2, 3, 4].forEach((i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: '#e76f51', speed: 7, delay: i * 0.3, size: 0.4, tag: i ? null : 'EF from every office' })); fx.anchor('<b>EF queue full</b> · jitter 37 ms · picture freezes', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
         },
         {
-          say: 'The PCE sees the congestion and installs an SR-TE policy at Gateway Bay for Tidewell’s EF traffic: segment list [16004, 16005], via Northport. It is a longer path, about 4 ms, but it is empty, so delay is steady again. The backups stay on the IGP path.',
-          run: (fx) => { const tePath = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(tePath), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); srPacket(fx, tePath.slice(1, -1), ['16004', '16005'], '#e76f51', 10); fx.packet(tePath, { color: '#e76f51', speed: 10, delay: 1.2, tag: '🎥 smooth' }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: TC.best, speed: 7, size: 0.5, tag: 'backups' }); fx.anchor('<b>4 ms</b> · jitter 0.3 ms', fx.nodePos('cr_north', 6.5), 'note'); },
+          say: 'The PCE sees the EF queue running hot and installs an SR-TE policy at Gateway Bay for Tidewell’s EF traffic: segment list [16004, 16005], via Northport, where the EF queue has headroom. A longer path, about 4 ms, but steady again. The other meetings stay on the Coreburg pair, which now has room for them.',
+          run: (fx) => { const tePath = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(tePath), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); srPacket(fx, tePath.slice(1, -1), ['16004', '16005'], '#e76f51', 10); fx.packet(tePath, { color: '#e76f51', speed: 10, delay: 1.2, tag: '🎥 EF (Expedited Forwarding) · smooth' }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: '#e76f51', speed: 9, size: 0.4, tag: 'other meetings' }); fx.queue('cr_north', [{ name: 'EF', color: '#e76f51', fill: 0.3 }, { name: 'AF', color: TC.biz, fill: 0.3 }, { name: 'BE', color: TC.best, fill: 0.4 }]); fx.anchor('<b>4 ms</b> · jitter 0.3 ms', fx.nodePos('cr_edge', 6.5), 'note'); },
         },
       ],
     },
@@ -2958,23 +2958,23 @@ const BASICS = {
     },
     {
       id: 'meeting', name: 'A video meeting between offices', tag: PACKETS,
-      summary: 'A company’s own private network, and why the quiet road beats the short one.',
+      summary: 'A company’s own private network, a fast lane for video, and why the quiet road beats the short one.',
       steps: [
         {
           say: 'Tidewell has offices in Gateway Bay, Edgewater and Framefield. The network gives the company its own private network: its packets share the same cables as everyone else’s, but nobody outside the company can see them or join in.',
           run: (fx) => { fx.focus(fx.linksOf('vpn')); for (const b of ofType(fx, 'branch')) { fx.spot(b, '#e76f51'); fx.anchor('<b>Tidewell</b>', fx.nodePos(b, 6), 'mep'); } },
         },
         {
-          say: 'A video meeting starts between Gateway Bay and Edgewater. The picture travels as a steady stream of packets along the shortest road, through the two main routers in Coreburg.',
+          say: 'A video meeting starts between Gateway Bay and Edgewater. Its packets are stamped “urgent”, so every router lets them through a fast lane ahead of downloads and backups. Engineers call these lanes quality of service. The meeting takes the shortest road, through the two main routers in Coreburg.',
           run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 hello!' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 hi!' }); },
         },
         {
-          say: 'Then the morning rush: big computer backups fill the road between the two Coreburg routers. The video packets wait in a queue and arrive in fits and starts, so the picture freezes and the voices stutter.',
-          run: (fx) => { glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'Video', color: '#e76f51', fill: 0.45 }, { name: 'Backups', color: TC.best, fill: 0.98 }]); [TC.best, '#e76f51', TC.best, TC.best].forEach((c, i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: c, speed: 7, delay: i * 0.35, size: c === TC.best ? 0.5 : 0.4 })); fx.anchor('<b>picture freezes</b>', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
+          say: 'Then nine o’clock: meetings start all over the country at once. Downloads could never slow the fast lane, but now the fast lane itself between the two Coreburg routers is full of other meetings. The video packets wait their turn, so the picture freezes and the voices stutter.',
+          run: (fx) => { glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'Fast lane', color: '#e76f51', fill: 0.98 }, { name: 'Everything else', color: TC.best, fill: 0.5 }]); [0, 1, 2, 3, 4].forEach((i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: '#e76f51', speed: 7, delay: i * 0.3, size: 0.4, tag: i ? null : 'everyone’s meetings' })); fx.anchor('<b>fast lane full</b> · picture freezes', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
         },
         {
-          say: 'The network notices and sends the meeting the other way, through Northport. That road is a little longer, but nothing is waiting on it, so the picture is smooth again. The backups carry on through Coreburg.',
-          run: (fx) => { const quiet = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(quiet), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); fx.packet(quiet, { color: '#e76f51', speed: 10, tag: '🎥 smooth again' }); fx.packet([...quiet].reverse(), { color: '#e76f51', speed: 10, delay: 0.8 }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: TC.best, speed: 7, size: 0.5, tag: 'backups' }); },
+          say: 'The network notices and sends Tidewell’s meeting the other way, through Northport. That road is a little longer, but its fast lane is free, so the picture is smooth again. The other meetings carry on through Coreburg, with more room now.',
+          run: (fx) => { const quiet = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(quiet), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); fx.packet(quiet, { color: '#e76f51', speed: 10, tag: '🎥 smooth again' }); fx.packet([...quiet].reverse(), { color: '#e76f51', speed: 10, delay: 0.8 }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: '#e76f51', speed: 9, size: 0.4, tag: 'other meetings' }); },
         },
       ],
     },
