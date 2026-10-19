@@ -145,6 +145,19 @@ test('home fibre: every home reaches the streaming cache through the splitter an
   assert.ok(link('spl_pop', 'olt_e') && link('olt_e', 'ag_e') && link('ag_e', 'cdn_e'));
 });
 
+// Tidewell: three offices, each on the core router of its own town, so a meeting between
+// two of them crosses the core and can take more than one road.
+test('the VPN offices sit on three different core routers', () => {
+  const pes = world.nodes.filter((n) => n.type === 'branch').map((n) => {
+    const l = world.links.filter((x) => x.layer === 'vpn' && (x.a === n.id || x.b === n.id));
+    assert.equal(l.length, 1, n.id);
+    const pe = world.byId[l[0].a === n.id ? l[0].b : l[0].a];
+    assert.equal(pe.type, 'core', `${n.id} attaches to ${pe.id}`);
+    return pe.id;
+  });
+  assert.equal(new Set(pes).size, 3);
+});
+
 test('on side A each network keeps to its own part of the country', () => {
   const at = (pred) => world.nodes.filter((n) => n.side === 0 && pred(n));
   for (const n of at((x) => x.id.startsWith('bb_'))) assert.ok(n.x > -66 && n.x < -10, `ROADM ${n.id} at x=${n.x}`);
@@ -180,7 +193,7 @@ test('the sites that define each network stand inside its region on the globe', 
   const own = {
     longhaul: (n) => n.id.startsWith('bb_'),
     metro: (n) => n.type === 'dc' && n.side === 0 && n.id !== 'dc_isla' || n.type === 'hub',
-    ipcore: (n) => n.type === 'core' || n.type === 'ixp',
+    ipcore: (n) => n.type === 'core' || n.type === 'ixp' || n.type === 'branch',
     aggregation: (n) => ['agg', 'olt', 'splitter', 'home', 'cache'].includes(n.type) || n.id.startsWith('end_') && n.layers[0] === 'access',
     xhaul: (n) => n.type === 'xhub' || n.type === 'tower',
   };

@@ -286,7 +286,7 @@ function majorStats(id) {
     submarine: [parts[id].links.length, c((n) => n.type === 'cls'), c((n) => n.type === 'repeater')],
     longhaul: [c((n) => n.id.startsWith('bb_')), c((n) => n.type === 'ila')],
     metro: [c((n) => n.type === 'hub'), c((n) => n.type === 'dc')],
-    ipcore: [c((n) => n.type === 'core'), c((n) => n.type === 'dc'), c((n) => n.type === 'ixp')],
+    ipcore: [c((n) => n.type === 'core'), c((n) => n.type === 'dc'), c((n) => n.type === 'ixp'), c((n) => n.type === 'branch')],
     aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_')), c((n) => n.type === 'home')],
     xhaul: [c((n) => n.type === 'xhub'), c((n) => n.type === 'tower')],
   }[id];

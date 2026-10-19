@@ -63,6 +63,8 @@ for (const [name, SET] of [['engineer', TOPICS], ['explorer', BASICS]]) {
 
 // Explorer mode is an introduction: the words the trade uses stay out of it unless a
 // step is there to introduce them (DWDM has its own topic).
+// ...and the words of the business VPN topic
+const VPN_JARGON = /\b(VPN|VRF|PCE|PE|CE|EF|SR-TE|IGP)\b/;
 const JARGON = /\b(ROADM|MPLS|DWDM|CDC|G\.8032|R-APS|RPL|MEP|CCM|CFM|QoS|SR|TI-LFA|IGP|VLAN|DSCP|eCPRI|RAN|RU|DU|CU|F1|UPF|AMF|PON|OLT|ONT|FTTH|CDN|HLS|OTN|DCI|ILA|NID|IXP|SLA|Tb\/s|λ|wavelength)\b/;
 test('explorer: the plain vocabulary covers everything the HUD prints, without jargon', () => {
   const V = vocab('explorer');
@@ -96,6 +98,9 @@ test('explorer: the plain vocabulary covers everything the HUD prints, without j
     assert.ok(!JARGON.test(V.nodeRan(n, world.byId)), `${n.id}: plain RAN line has jargon: ${V.nodeRan(n, world.byId)}`);
   }
   assert.ok(!JARGON.test(V.ranHeading));
+  for (const t of BASICS.ipcore) for (const x of [t.name, t.summary, ...t.steps.map((st) => st.say)]) assert.ok(!VPN_JARGON.test(x), `ipcore/${t.id}: "${x}" has jargon`);
+  for (const n of world.nodes.filter((x) => x.type === 'branch')) for (const x of [V.nodeName(n), V.nodeRole(n), V.nodeGear(n), V.typeLabel(n.type)]) assert.ok(!VPN_JARGON.test(x), `${n.id}: "${x}"`);
+  assert.ok(!VPN_JARGON.test(V.layerName('vpn')) && !VPN_JARGON.test(V.stats('ipcore', [1, 1, 1, 1])), 'plain VPN layer and stats');
   for (const k of Object.keys(ENDPOINT)) assert.ok(V.typeLabel(k) !== k, `endpoint ${k}`);
   assert.deepEqual(MODES.map((m) => m.id), ['explorer', 'engineer']);
 });
@@ -105,6 +110,7 @@ test('the technologies the brief asked for are where it asked for them', () => {
   assert.ok(ids('longhaul').includes('cdc'), 'national backbone: CDC ROADMs');
   assert.ok(ids('metro').includes('ring'), 'metro transport: plain ROADM ring');
   assert.ok(ids('ipcore').includes('sr'), 'data core: SR-MPLS');
+  assert.ok(ids('ipcore').includes('vpn') && BASICS.ipcore.some((t) => t.id === 'meeting'), 'video meetings between offices over a VPN, in both modes');
   assert.ok(ids('aggregation').includes('g8032') && ids('aggregation').includes('ethagg'), 'data metro: G.8032 and Ethernet aggregation');
   for (const m of ['aggregation', 'xhaul']) assert.ok(ids(m).includes('qos') && ids(m).includes('cfm'), `${m}: QoS and CFM at the edge`);
   assert.ok(ids('aggregation').includes('stream') && BASICS.aggregation.some((t) => t.id === 'movie'), 'home streaming over PON and a CDN cache, in both modes');

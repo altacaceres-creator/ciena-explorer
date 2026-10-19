@@ -666,6 +666,11 @@ const LAYERS = [
     gear: 'Ciena 8100 Coherent Routers',
   },
   {
+    id: 'vpn', side: 1, data: true, name: 'Business VPN', short: 'VPN', color: '#e76f51',
+    blurb: 'Company offices in different towns, joined by a private L3VPN over the core.',
+    gear: 'Ciena 3900 series NIDs as CE, L3VPN on the 8100 core routers',
+  },
+  {
     id: 'agg', side: 1, data: true, name: 'Metro aggregation', short: 'Aggregation', color: '#7b2cbf',
     blurb: 'Segment-routed aggregation rings that collect traffic from the edge.',
     gear: 'Ciena 5100 series aggregation routers',
@@ -741,6 +746,7 @@ const HUB = (id, name, x, z) => N(id, 'hub', name, x, z, ['metro', 'backbone'], 
 const HUT = (id, town, x, z, ring) => N(id, 'regional', `${CITY[town].name} hut`, x, z, ['regional'], { role: `Ring site on the ${ring} ring` });
 const CORE = (id, name, x, z, role) => NB(id, 'core', name, x, z, ['ipcore'], { role });
 const AGG = (id, name, x, z) => NB(id, 'agg', name, x, z, ['agg'], { role: 'Aggregation router on a segment-routed ring' });
+const BRANCH = (id, town, x, z) => NB(id, 'branch', `Tidewell ${town} office`, x, z, ['vpn'], { role: 'Company office on the Tidewell L3VPN, attached to the nearest core router' });
 const XHUB = (id, town, x, z) => NB(id, 'xhub', `${CITY[town].name} pre-aggregation`, x, z, ['xhaul'], { role: 'Collects the cell sites on its stretch of the 5G ring' });
 
 const PLACED = [
@@ -790,6 +796,10 @@ const PLACED = [
   NB('ixp_gw', 'ixp', 'Gateway Bay Internet Exchange', -58, 6, ['ipcore'], { role: 'Peering with content and cloud networks' }),
   NB('dc_cloud', 'dc', 'Coreburg Cloud DC', -16, 15, ['ipcore'], { role: 'Cloud region, dual-homed to both Coreburg core routers' }),
   NB('dc_5gc', 'dc', 'Coreburg 5G Core', 24, -10, ['ipcore'], { role: 'Mobile core: user plane and control plane for the 5G network' }),
+  // Tidewell, a company with an office in three towns on one private network
+  BRANCH('br_gw', 'Gateway Bay', -44, 20),
+  BRANCH('br_edge', 'Edgewater', 40, -26),
+  BRANCH('br_south', 'Framefield', 25, 35),
 
   AGG('ag_w', 'Coreburg West aggregation', -17, -8),
   AGG('ag_n', 'Coreburg North aggregation', 7, -18),
@@ -885,6 +895,10 @@ const LINKS = [
   L('ipcore', 'cr_c2', 'dc_cloud'),
   L('ipcore', 'cr_c2', 'dc_5gc'),
   L('ipcore', 'cr_edge', 'dc_5gc'),
+  // Tidewell's offices, each on the core router of its town
+  L('vpn', 'br_gw', 'cr_gw'),
+  L('vpn', 'br_edge', 'cr_edge'),
+  L('vpn', 'br_south', 'cr_south'),
 
   // aggregation: a ring around Coreburg, homed on both core routers
   L('agg', 'ag_w', 'ag_n'),
@@ -1136,6 +1150,7 @@ function gearFor(n) {
     case 'core': return 'Ciena 8100 Coherent Router';
     case 'agg': return 'Ciena 5170 aggregation router';
     case 'xhub': return 'Ciena 5166 pre-aggregation router';
+    case 'branch': return 'CE router on a Ciena 3900 series NID, video meeting room';
     case 'ixp': return 'Peering on Ciena 8100 Coherent Routers';
     case 'olt': return 'Ciena XGS-PON OLT, 10 Gb/s shared down each fibre';
     case 'splitter': return 'Passive optical splitter, 1:32';
@@ -1183,13 +1198,13 @@ const MAJORS = [
     owns: (l, w) => ['metro', 'dci'].includes(l.layer) && [l.a, l.b].every((id) => near(w, id, METRO, 36)),
   },
   {
-    id: 'ipcore', side: 1, name: 'IP/MPLS core', color: LAYER.ipcore.color, layers: ['ipcore'],
-    blurb: 'Six core routers in a mesh, every one with three or more neighbours: a redundant pair in Coreburg and one in each corner of Packetland, peering at the Gateway Bay internet exchange and serving the cloud and 5G core data centers.',
+    id: 'ipcore', side: 1, name: 'IP/MPLS core', color: LAYER.ipcore.color, layers: ['ipcore', 'vpn'],
+    blurb: 'Six core routers in a mesh, every one with three or more neighbours: a redundant pair in Coreburg and one in each corner of Packetland, peering at the Gateway Bay internet exchange, serving the cloud and 5G core data centers, and carrying the Tidewell VPN between its offices.',
     place: 'The Coreburg core pair and the four corner towns',
     // the core sits at the centre of Coreburg (a small circle that beats the metro's)
     // and at each corner of the country
     region: [[0, 0, 10.5], [-52, 12, 16], [-12, -34, 11], [46, -20, 14], [32, 30, 10]],
-    owns: (l) => l.layer === 'ipcore',
+    owns: (l) => l.layer === 'ipcore' || l.layer === 'vpn',
   },
   {
     id: 'aggregation', side: 1, name: 'Metro aggregation', color: LAYER.agg.color, layers: ['agg', 'access', 'pon'],
@@ -1864,6 +1879,14 @@ function modelFor(n, layerColor) {
       }
       break;
     }
+    case 'branch': {
+      // a company office: a glass block, with the meeting room's screen lit on the front
+      g.add(box(2.6, 3.6, 2.2, '#bde0fe', 0, -0.3));
+      for (let i = 0; i < 3; i++) g.add(box(2.65, 0.12, 2.25, '#ffffff', 0, 0.6 + i * 1, 0, 0));
+      g.add(box(2.8, 0.3, 2.4, layerColor, 0, 3.3, 0, 0.05));
+      g.add(box(1, 0.6, 0.04, '#2f80ed', 0, 0.9, 1.13, 0));
+      break;
+    }
     case 'office': {
       g.add(box(2.4, 6.5, 2.4, '#7cc6fe', 0, -0.3));
       for (let i = 0; i < 6; i++) g.add(box(2.45, 0.12, 2.45, '#ffffff', 0, 0.4 + i * 1, 0, 0));
@@ -1915,8 +1938,8 @@ function nodeY(world, n) {
 
 // ---------------------------------------------------------------- cables
 
-const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, agg: 0.45, access: 0.35, pon: 0.3, xhaul: 0.4 };
-const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, agg: 0.32, access: 0.2, pon: 0.18, xhaul: 0.26 };
+const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, vpn: 0.4, agg: 0.45, access: 0.35, pon: 0.3, xhaul: 0.4 };
+const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, vpn: 0.22, agg: 0.32, access: 0.2, pon: 0.18, xhaul: 0.26 };
 
 function groundY(x, z, side) {
   let h = -Infinity;
@@ -2004,7 +2027,7 @@ function routerPole(x, yTop, yBottom, z, color) {
 // laid out where they sit on the map but flat, and scaled so a far-flung network
 // (the submarine cables) reads as clearly as a compact one (the metro).
 
-const DETAIL_SPEED = { dci: 16, backbone: 20, regional: 13, metro: 15, submarine: 14, ipcore: 18, agg: 13, access: 8, pon: 8, xhaul: 10 };
+const DETAIL_SPEED = { dci: 16, backbone: 20, regional: 13, metro: 15, submarine: 14, ipcore: 18, vpn: 9, agg: 13, access: 8, pon: 8, xhaul: 10 };
 
 function buildDetail(world, part) {
   const scene = new THREE.Scene();
@@ -2141,11 +2164,11 @@ function buildDetail(world, part) {
   for (const layer of new Set(links.map((l) => l.layer))) {
     const runs = [];
     for (const l of links.filter((x) => x.layer === layer)) {
-      const n = Math.max(1, Math.round(linkObjs[l.id].len / (['access', 'pon'].includes(layer) ? 6 : 10)));
+      const n = Math.max(1, Math.round(linkObjs[l.id].len / (['access', 'pon', 'vpn'].includes(layer) ? 6 : 10)));
       for (let k = 0; k < n; k++) runs.push({ link: linkObjs[l.id], phase: (k + Math.random() * 0.5) / n, dir: k % 2 ? -1 : 1 });
     }
     const col = new THREE.Color(LAYER[layer].color).lerp(new THREE.Color('#ffffff'), 0.45);
-    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry((['access', 'pon'].includes(layer) ? 0.32 : 0.48) * space.k, 10, 8), new THREE.MeshBasicMaterial({ color: col }), runs.length);
+    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry((['access', 'pon', 'vpn'].includes(layer) ? 0.32 : 0.48) * space.k, 10, 8), new THREE.MeshBasicMaterial({ color: col }), runs.length);
     mesh.raycast = () => {};
     scene.add(mesh);
     packets.push({ layer, mesh, runs });
@@ -2549,6 +2572,28 @@ const TOPICS = {
       ],
     },
     {
+      id: 'vpn', name: 'Video between offices: L3VPN and SR-TE', tag: 'L3VPN over SR-MPLS on the Ciena 8100',
+      summary: 'A company’s private network over the shared core, and a quiet path for its video.',
+      steps: [
+        {
+          say: 'Tidewell has offices in Gateway Bay, Edgewater and Framefield. Each CE attaches to the nearest PE, and an L3VPN (VRF tidewell) joins them over the shared core. Their routes live only in that VRF: no other customer can see or reach them.',
+          run: (fx) => { fx.focus(fx.linksOf('vpn')); for (const pe of ['cr_gw', 'cr_edge', 'cr_south']) fx.anchor('<b>PE</b> VRF tidewell', fx.nodePos(pe, 6.5), 'mep'); for (const b of ofType(fx, 'branch')) fx.spot(b, '#e76f51'); },
+        },
+        {
+          say: 'A video meeting starts between Gateway Bay and Edgewater. Marked EF, it follows the IGP shortest path through the Coreburg pair, wrapped in a VPN label under the SR transport labels: about 3 ms one way, with almost no jitter.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 EF · VPN 24001' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 EF' }); fx.anchor('<b>3 ms</b> · jitter 0.2 ms', fx.nodePos('cr_c2', 6.5), 'note'); },
+        },
+        {
+          say: '9 a.m.: the nightly backups overrun and fill the Coreburg 1 to Coreburg 2 link. Queues build, latency swings from 3 to 40 ms, and the video freezes even though no packet is lost yet.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'Video', color: '#e76f51', fill: 0.45 }, { name: 'Backup', color: TC.best, fill: 0.98 }]); [TC.best, '#e76f51', TC.best, TC.best].forEach((c, i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: c, speed: 7, delay: i * 0.35, size: c === TC.best ? 0.5 : 0.4 })); fx.anchor('<b>jitter 37 ms</b> · picture freezes', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
+        },
+        {
+          say: 'The PCE sees the congestion and installs an SR-TE policy at Gateway Bay for Tidewell’s EF traffic: segment list [16004, 16005], via Northport. It is a longer path, about 4 ms, but it is empty, so delay is steady again. The backups stay on the IGP path.',
+          run: (fx) => { const tePath = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(tePath), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); srPacket(fx, tePath.slice(1, -1), ['16004', '16005'], '#e76f51', 10); fx.packet(tePath, { color: '#e76f51', speed: 10, delay: 1.2, tag: '🎥 smooth' }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: TC.best, speed: 7, size: 0.5, tag: 'backups' }); fx.anchor('<b>4 ms</b> · jitter 0.3 ms', fx.nodePos('cr_north', 6.5), 'note'); },
+        },
+      ],
+    },
+    {
       id: 'tilfa', name: 'TI-LFA fast reroute', tag: 'Ciena 8100, SR-MPLS',
       summary: 'A repair path computed before the failure, used in under 50 ms.',
       steps: [
@@ -2912,6 +2957,28 @@ const BASICS = {
       ],
     },
     {
+      id: 'meeting', name: 'A video meeting between offices', tag: PACKETS,
+      summary: 'A company’s own private network, and why the quiet road beats the short one.',
+      steps: [
+        {
+          say: 'Tidewell has offices in Gateway Bay, Edgewater and Framefield. The network gives the company its own private network: its packets share the same cables as everyone else’s, but nobody outside the company can see them or join in.',
+          run: (fx) => { fx.focus(fx.linksOf('vpn')); for (const b of ofType(fx, 'branch')) { fx.spot(b, '#e76f51'); fx.anchor('<b>Tidewell</b>', fx.nodePos(b, 6), 'mep'); } },
+        },
+        {
+          say: 'A video meeting starts between Gateway Bay and Edgewater. The picture travels as a steady stream of packets along the shortest road, through the two main routers in Coreburg.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 hello!' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 hi!' }); },
+        },
+        {
+          say: 'Then the morning rush: big computer backups fill the road between the two Coreburg routers. The video packets wait in a queue and arrive in fits and starts, so the picture freezes and the voices stutter.',
+          run: (fx) => { glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'Video', color: '#e76f51', fill: 0.45 }, { name: 'Backups', color: TC.best, fill: 0.98 }]); [TC.best, '#e76f51', TC.best, TC.best].forEach((c, i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: c, speed: 7, delay: i * 0.35, size: c === TC.best ? 0.5 : 0.4 })); fx.anchor('<b>picture freezes</b>', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
+        },
+        {
+          say: 'The network notices and sends the meeting the other way, through Northport. That road is a little longer, but nothing is waiting on it, so the picture is smooth again. The backups carry on through Coreburg.',
+          run: (fx) => { const quiet = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(quiet), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); fx.packet(quiet, { color: '#e76f51', speed: 10, tag: '🎥 smooth again' }); fx.packet([...quiet].reverse(), { color: '#e76f51', speed: 10, delay: 0.8 }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: TC.best, speed: 7, size: 0.5, tag: 'backups' }); },
+        },
+      ],
+    },
+    {
       id: 'reroute', name: 'Finding another way', tag: PACKETS,
       summary: 'A link fails and the routers send the packets round another road.',
       steps: [
@@ -3081,6 +3148,7 @@ const LAYER_PLAIN = {
   dci: { name: 'Data center links', short: 'DC links' },
   regional: { name: 'Town rings', short: 'Town rings' },
   ipcore: { name: 'Internet core', short: 'Core' },
+  vpn: { name: 'Company private network', short: 'Private network' },
   agg: { name: 'City collector ring', short: 'Collector ring' },
   access: { name: 'Business connections', short: 'Business' },
   pon: { name: 'Home fibre', short: 'Home fibre' },
@@ -3105,7 +3173,7 @@ const MAJOR_PLAIN = {
   },
   ipcore: {
     name: 'Internet core',
-    blurb: 'Six big routers pass packets across the country, each with several neighbours so there is always another road. One sits beside the place where other networks meet ours, and two serve the cloud and the mobile network.',
+    blurb: 'Six big routers pass packets across the country, each with several neighbours so there is always another road. One sits beside the place where other networks meet ours, two serve the cloud and the mobile network, and they carry a company’s private network between its offices in three towns.',
     place: 'The two main routers in Coreburg and the four corner towns',
   },
   aggregation: {
@@ -3133,6 +3201,7 @@ const TYPE_PLAIN = {
   agg: ['Collector router', 'Gathers packets from many customers and hands them to the main routers.'],
   xhub: ['Tower collector', 'Collects the packets from the phone towers on its stretch of the loop.'],
   ixp: ['Internet meeting point', 'Where this network plugs into other networks, so packets can reach the rest of the internet.'],
+  branch: ['Company office', 'One of the offices of Tidewell, a company with offices in three towns, joined by its own private network.'],
   access: ['Customer site', 'A place that connects to the network.'],
   olt: ['Neighbourhood fibre hub', 'Where the fibres from the homes meet and join the city network. It talks to every home in turn, so they never talk over each other.'],
   splitter: ['Fibre splitter', 'A tiny piece of glass in a street cabinet that shares one fibre between many homes, like a power strip for light.'],
@@ -3160,6 +3229,7 @@ const GEAR_PLAIN = {
   agg: 'A router that merges many customers’ packets onto one fibre',
   xhub: 'A router built for phone towers, with a very accurate clock',
   ixp: 'Routers belonging to many different networks, plugged into each other',
+  branch: 'A small router that joins the office to its company’s private network, and a video meeting room',
   tower: 'A small, tough router at the foot of the mast',
   olt: 'A box with a laser for each street, sending light down to every home',
   splitter: 'A sliver of glass that needs no electricity at all',
@@ -3225,7 +3295,7 @@ function ranLine(n, byId, plain, nameOf) {
 const ENGINEER_TYPES = {
   dc: 'Data center', pop: 'RLS ROADM site', hub: 'Metro hub', regional: 'Regional ring hut', ila: 'RLS amplifier hut',
   cls: 'Cable landing station', repeater: 'Undersea repeater', core: 'Core router', agg: 'Aggregation router',
-  xhub: '5G pre-aggregation hub', ixp: 'Internet exchange', access: 'Access node',
+  xhub: '5G pre-aggregation hub', ixp: 'Internet exchange', branch: 'Enterprise office (CE)', access: 'Access node',
   olt: 'PON OLT', splitter: 'Optical splitter', home: 'FTTH home', cache: 'CDN cache',
   ...Object.fromEntries(Object.entries(ENDPOINT).map(([k, v]) => [k, v.label])),
 };
@@ -3236,7 +3306,7 @@ const STAT_WORDS = {
     submarine: ['cables', 'landing stations', 'repeaters'],
     longhaul: ['ROADMs', 'amplifier huts'],
     metro: ['metro hubs', 'data centers'],
-    ipcore: ['core routers', 'data centers', 'internet exchange'],
+    ipcore: ['core routers', 'data centers', 'internet exchange', 'VPN offices'],
     aggregation: ['aggregation routers', 'business customers', 'FTTH homes'],
     xhaul: ['hubs', 'cell sites'],
   },
@@ -3244,7 +3314,7 @@ const STAT_WORDS = {
     submarine: ['cables', 'beach stations', 'undersea boosters'],
     longhaul: ['light junctions', 'booster huts'],
     metro: ['city hubs', 'data centers'],
-    ipcore: ['main routers', 'data centers', 'internet meeting point'],
+    ipcore: ['main routers', 'data centers', 'internet meeting point', 'company offices'],
     aggregation: ['collector routers', 'customers', 'homes'],
     xhaul: ['tower collectors', 'phone towers'],
   },
@@ -3567,7 +3637,7 @@ function majorStats(id) {
     submarine: [parts[id].links.length, c((n) => n.type === 'cls'), c((n) => n.type === 'repeater')],
     longhaul: [c((n) => n.id.startsWith('bb_')), c((n) => n.type === 'ila')],
     metro: [c((n) => n.type === 'hub'), c((n) => n.type === 'dc')],
-    ipcore: [c((n) => n.type === 'core'), c((n) => n.type === 'dc'), c((n) => n.type === 'ixp')],
+    ipcore: [c((n) => n.type === 'core'), c((n) => n.type === 'dc'), c((n) => n.type === 'ixp'), c((n) => n.type === 'branch')],
     aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_')), c((n) => n.type === 'home')],
     xhaul: [c((n) => n.type === 'xhub'), c((n) => n.type === 'tower')],
   }[id];

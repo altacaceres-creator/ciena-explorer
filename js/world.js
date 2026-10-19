@@ -173,6 +173,11 @@ export const LAYERS = [
     gear: 'Ciena 8100 Coherent Routers',
   },
   {
+    id: 'vpn', side: 1, data: true, name: 'Business VPN', short: 'VPN', color: '#e76f51',
+    blurb: 'Company offices in different towns, joined by a private L3VPN over the core.',
+    gear: 'Ciena 3900 series NIDs as CE, L3VPN on the 8100 core routers',
+  },
+  {
     id: 'agg', side: 1, data: true, name: 'Metro aggregation', short: 'Aggregation', color: '#7b2cbf',
     blurb: 'Segment-routed aggregation rings that collect traffic from the edge.',
     gear: 'Ciena 5100 series aggregation routers',
@@ -248,6 +253,7 @@ const HUB = (id, name, x, z) => N(id, 'hub', name, x, z, ['metro', 'backbone'], 
 const HUT = (id, town, x, z, ring) => N(id, 'regional', `${CITY[town].name} hut`, x, z, ['regional'], { role: `Ring site on the ${ring} ring` });
 const CORE = (id, name, x, z, role) => NB(id, 'core', name, x, z, ['ipcore'], { role });
 const AGG = (id, name, x, z) => NB(id, 'agg', name, x, z, ['agg'], { role: 'Aggregation router on a segment-routed ring' });
+const BRANCH = (id, town, x, z) => NB(id, 'branch', `Tidewell ${town} office`, x, z, ['vpn'], { role: 'Company office on the Tidewell L3VPN, attached to the nearest core router' });
 const XHUB = (id, town, x, z) => NB(id, 'xhub', `${CITY[town].name} pre-aggregation`, x, z, ['xhaul'], { role: 'Collects the cell sites on its stretch of the 5G ring' });
 
 const PLACED = [
@@ -297,6 +303,10 @@ const PLACED = [
   NB('ixp_gw', 'ixp', 'Gateway Bay Internet Exchange', -58, 6, ['ipcore'], { role: 'Peering with content and cloud networks' }),
   NB('dc_cloud', 'dc', 'Coreburg Cloud DC', -16, 15, ['ipcore'], { role: 'Cloud region, dual-homed to both Coreburg core routers' }),
   NB('dc_5gc', 'dc', 'Coreburg 5G Core', 24, -10, ['ipcore'], { role: 'Mobile core: user plane and control plane for the 5G network' }),
+  // Tidewell, a company with an office in three towns on one private network
+  BRANCH('br_gw', 'Gateway Bay', -44, 20),
+  BRANCH('br_edge', 'Edgewater', 40, -26),
+  BRANCH('br_south', 'Framefield', 25, 35),
 
   AGG('ag_w', 'Coreburg West aggregation', -17, -8),
   AGG('ag_n', 'Coreburg North aggregation', 7, -18),
@@ -392,6 +402,10 @@ const LINKS = [
   L('ipcore', 'cr_c2', 'dc_cloud'),
   L('ipcore', 'cr_c2', 'dc_5gc'),
   L('ipcore', 'cr_edge', 'dc_5gc'),
+  // Tidewell's offices, each on the core router of its town
+  L('vpn', 'br_gw', 'cr_gw'),
+  L('vpn', 'br_edge', 'cr_edge'),
+  L('vpn', 'br_south', 'cr_south'),
 
   // aggregation: a ring around Coreburg, homed on both core routers
   L('agg', 'ag_w', 'ag_n'),
@@ -643,6 +657,7 @@ function gearFor(n) {
     case 'core': return 'Ciena 8100 Coherent Router';
     case 'agg': return 'Ciena 5170 aggregation router';
     case 'xhub': return 'Ciena 5166 pre-aggregation router';
+    case 'branch': return 'CE router on a Ciena 3900 series NID, video meeting room';
     case 'ixp': return 'Peering on Ciena 8100 Coherent Routers';
     case 'olt': return 'Ciena XGS-PON OLT, 10 Gb/s shared down each fibre';
     case 'splitter': return 'Passive optical splitter, 1:32';
@@ -690,13 +705,13 @@ export const MAJORS = [
     owns: (l, w) => ['metro', 'dci'].includes(l.layer) && [l.a, l.b].every((id) => near(w, id, METRO, 36)),
   },
   {
-    id: 'ipcore', side: 1, name: 'IP/MPLS core', color: LAYER.ipcore.color, layers: ['ipcore'],
-    blurb: 'Six core routers in a mesh, every one with three or more neighbours: a redundant pair in Coreburg and one in each corner of Packetland, peering at the Gateway Bay internet exchange and serving the cloud and 5G core data centers.',
+    id: 'ipcore', side: 1, name: 'IP/MPLS core', color: LAYER.ipcore.color, layers: ['ipcore', 'vpn'],
+    blurb: 'Six core routers in a mesh, every one with three or more neighbours: a redundant pair in Coreburg and one in each corner of Packetland, peering at the Gateway Bay internet exchange, serving the cloud and 5G core data centers, and carrying the Tidewell VPN between its offices.',
     place: 'The Coreburg core pair and the four corner towns',
     // the core sits at the centre of Coreburg (a small circle that beats the metro's)
     // and at each corner of the country
     region: [[0, 0, 10.5], [-52, 12, 16], [-12, -34, 11], [46, -20, 14], [32, 30, 10]],
-    owns: (l) => l.layer === 'ipcore',
+    owns: (l) => l.layer === 'ipcore' || l.layer === 'vpn',
   },
   {
     id: 'aggregation', side: 1, name: 'Metro aggregation', color: LAYER.agg.color, layers: ['agg', 'access', 'pon'],

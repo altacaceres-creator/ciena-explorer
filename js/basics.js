@@ -159,6 +159,28 @@ export const BASICS = {
       ],
     },
     {
+      id: 'meeting', name: 'A video meeting between offices', tag: PACKETS,
+      summary: 'A company’s own private network, and why the quiet road beats the short one.',
+      steps: [
+        {
+          say: 'Tidewell has offices in Gateway Bay, Edgewater and Framefield. The network gives the company its own private network: its packets share the same cables as everyone else’s, but nobody outside the company can see them or join in.',
+          run: (fx) => { fx.focus(fx.linksOf('vpn')); for (const b of ofType(fx, 'branch')) { fx.spot(b, '#e76f51'); fx.anchor('<b>Tidewell</b>', fx.nodePos(b, 6), 'mep'); } },
+        },
+        {
+          say: 'A video meeting starts between Gateway Bay and Edgewater. The picture travels as a steady stream of packets along the shortest road, through the two main routers in Coreburg.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 hello!' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 hi!' }); },
+        },
+        {
+          say: 'Then the morning rush: big computer backups fill the road between the two Coreburg routers. The video packets wait in a queue and arrive in fits and starts, so the picture freezes and the voices stutter.',
+          run: (fx) => { glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'Video', color: '#e76f51', fill: 0.45 }, { name: 'Backups', color: TC.best, fill: 0.98 }]); [TC.best, '#e76f51', TC.best, TC.best].forEach((c, i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: c, speed: 7, delay: i * 0.35, size: c === TC.best ? 0.5 : 0.4 })); fx.anchor('<b>picture freezes</b>', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
+        },
+        {
+          say: 'The network notices and sends the meeting the other way, through Northport. That road is a little longer, but nothing is waiting on it, so the picture is smooth again. The backups carry on through Coreburg.',
+          run: (fx) => { const quiet = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(quiet), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); fx.packet(quiet, { color: '#e76f51', speed: 10, tag: '🎥 smooth again' }); fx.packet([...quiet].reverse(), { color: '#e76f51', speed: 10, delay: 0.8 }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: TC.best, speed: 7, size: 0.5, tag: 'backups' }); },
+        },
+      ],
+    },
+    {
       id: 'reroute', name: 'Finding another way', tag: PACKETS,
       summary: 'A link fails and the routers send the packets round another road.',
       steps: [

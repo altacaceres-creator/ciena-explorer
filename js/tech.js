@@ -192,6 +192,28 @@ export const TOPICS = {
       ],
     },
     {
+      id: 'vpn', name: 'Video between offices: L3VPN and SR-TE', tag: 'L3VPN over SR-MPLS on the Ciena 8100',
+      summary: 'A company’s private network over the shared core, and a quiet path for its video.',
+      steps: [
+        {
+          say: 'Tidewell has offices in Gateway Bay, Edgewater and Framefield. Each CE attaches to the nearest PE, and an L3VPN (VRF tidewell) joins them over the shared core. Their routes live only in that VRF: no other customer can see or reach them.',
+          run: (fx) => { fx.focus(fx.linksOf('vpn')); for (const pe of ['cr_gw', 'cr_edge', 'cr_south']) fx.anchor('<b>PE</b> VRF tidewell', fx.nodePos(pe, 6.5), 'mep'); for (const b of ofType(fx, 'branch')) fx.spot(b, '#e76f51'); },
+        },
+        {
+          say: 'A video meeting starts between Gateway Bay and Edgewater. Marked EF, it follows the IGP shortest path through the Coreburg pair, wrapped in a VPN label under the SR transport labels: about 3 ms one way, with almost no jitter.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 EF · VPN 24001' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 EF' }); fx.anchor('<b>3 ms</b> · jitter 0.2 ms', fx.nodePos('cr_c2', 6.5), 'note'); },
+        },
+        {
+          say: '9 a.m.: the nightly backups overrun and fill the Coreburg 1 to Coreburg 2 link. Queues build, latency swings from 3 to 40 ms, and the video freezes even though no packet is lost yet.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'Video', color: '#e76f51', fill: 0.45 }, { name: 'Backup', color: TC.best, fill: 0.98 }]); [TC.best, '#e76f51', TC.best, TC.best].forEach((c, i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: c, speed: 7, delay: i * 0.35, size: c === TC.best ? 0.5 : 0.4 })); fx.anchor('<b>jitter 37 ms</b> · picture freezes', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
+        },
+        {
+          say: 'The PCE sees the congestion and installs an SR-TE policy at Gateway Bay for Tidewell’s EF traffic: segment list [16004, 16005], via Northport. It is a longer path, about 4 ms, but it is empty, so delay is steady again. The backups stay on the IGP path.',
+          run: (fx) => { const tePath = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(tePath), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); srPacket(fx, tePath.slice(1, -1), ['16004', '16005'], '#e76f51', 10); fx.packet(tePath, { color: '#e76f51', speed: 10, delay: 1.2, tag: '🎥 smooth' }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: TC.best, speed: 7, size: 0.5, tag: 'backups' }); fx.anchor('<b>4 ms</b> · jitter 0.3 ms', fx.nodePos('cr_north', 6.5), 'note'); },
+        },
+      ],
+    },
+    {
       id: 'tilfa', name: 'TI-LFA fast reroute', tag: 'Ciena 8100, SR-MPLS',
       summary: 'A repair path computed before the failure, used in under 50 ms.',
       steps: [
