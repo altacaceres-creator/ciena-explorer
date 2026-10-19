@@ -704,6 +704,7 @@ export const MAJORS = [
     blurb: 'A segment-routed aggregation ring round Coreburg, homed on both core routers, with business Ethernet rings looping past banks, offices, a hospital and a school between its routers, and fibre to the homes of Popcorn Hill, streaming from a cache in the network.',
     place: 'The ring of downtown Coreburg round the core, and Popcorn Hill',
     region: [[0, 2, 24], [31, 12, 8]],
+    fit: 1.15,   // Popcorn Hill reaches out east, so stand back a little to keep it clear of the edge
     owns: (l) => l.layer === 'agg' || l.layer === 'access' || l.layer === 'pon',
   },
   {

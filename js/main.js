@@ -369,7 +369,8 @@ function openMajor(id, topicId = null) {
   emphasise(null);
   controls.enabled = false;
   detailControls.enabled = true;
-  const d = detail.extent * (detail.space.sphere ? 1.85 : 1.55) / Math.min(1, detailCam.aspect || 1);
+  // a network can ask to be framed from further back (`fit`) when it reaches out to one side
+  const d = detail.extent * (detail.space.sphere ? 1.85 : 1.55) * (MAJOR[id].fit ?? 1) / Math.min(1, detailCam.aspect || 1);
   detailControls.target.copy(detail.center);
   detailCam.position.copy(detail.center).addScaledVector(detail.viewDir, d);
   detailCam.up.set(0, 1, 0);
