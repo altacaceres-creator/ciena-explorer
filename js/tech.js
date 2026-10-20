@@ -192,6 +192,28 @@ export const TOPICS = {
       ],
     },
     {
+      id: 'vpn', name: 'Video between offices: L3VPN and SR-TE', tag: 'L3VPN over SR-MPLS on the Ciena 8100',
+      summary: 'A company’s private network over the shared core, QoS for its video, and a quiet path when EF fills up.',
+      steps: [
+        {
+          say: 'Tidewell has offices in Gateway Bay, Edgewater and Framefield. Each CE attaches to the nearest PE, and an L3VPN (VRF tidewell) joins them over the shared core. Their routes live only in that VRF: no other customer can see or reach them.',
+          run: (fx) => { fx.focus(fx.linksOf('vpn')); for (const pe of ['cr_gw', 'cr_edge', 'cr_south']) fx.anchor('<b>PE</b> VRF tidewell', fx.nodePos(pe, 6.5), 'mep'); for (const b of ofType(fx, 'branch')) fx.spot(b, '#e76f51'); },
+        },
+        {
+          say: 'A video meeting starts between Gateway Bay and Edgewater. This is where QoS comes in: the CE marks the video EF (Expedited Forwarding, DSCP 46), and every router puts EF in a strict-priority queue, policed to 20% of the link so it cannot starve the rest. The meeting follows the IGP shortest path through the Coreburg pair, a VPN label under the SR labels: about 3 ms one way, almost no jitter.',
+          run: (fx) => { const ids = glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.packet(ids, { color: '#e76f51', speed: 12, tag: '🎥 EF (Expedited Forwarding) · VPN 24001' }); fx.packet([...ids].reverse(), { color: '#e76f51', speed: 12, delay: 0.8, tag: '🎥 EF' }); fx.queue('cr_c1', [{ name: 'EF', color: '#e76f51', fill: 0.15 }, { name: 'AF', color: TC.biz, fill: 0.3 }, { name: 'BE', color: TC.best, fill: 0.4 }]); fx.anchor('<b>3 ms</b> · jitter 0.2 ms', fx.nodePos('cr_c2', 6.5), 'note'); },
+        },
+        {
+          say: '9 a.m.: meetings start all over Packetland at once. Backups in best effort could never hurt EF, but now the EF queue itself on Coreburg 1 to Coreburg 2 hits its 20% policer. EF packets queue and drop, jitter climbs to 37 ms and the video freezes.',
+          run: (fx) => { glowPath(fx, ['br_gw', 'cr_gw', 'cr_c1', 'cr_c2', 'cr_edge', 'br_edge']); fx.queue('cr_c1', [{ name: 'EF', color: '#e76f51', fill: 0.98 }, { name: 'AF', color: TC.biz, fill: 0.35 }, { name: 'BE', color: TC.best, fill: 0.5 }]); [0, 1, 2, 3, 4].forEach((i) => fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: '#e76f51', speed: 7, delay: i * 0.3, size: 0.4, tag: i ? null : 'EF from every office' })); fx.anchor('<b>EF queue full</b> · jitter 37 ms · picture freezes', fx.nodePos('cr_c1', 3.5), 'note warn'); fx.spot('cr_c1', TC.red); },
+        },
+        {
+          say: 'The PCE sees the EF queue running hot and installs an SR-TE policy at Gateway Bay for Tidewell’s EF traffic: segment list [16004, 16005], via Northport, where the EF queue has headroom. A longer path, about 4 ms, but steady again. The other meetings stay on the Coreburg pair, which now has room for them.',
+          run: (fx) => { const tePath = ['br_gw', 'cr_gw', 'cr_north', 'cr_edge', 'br_edge']; fx.focus([...fx.pathLinks(tePath), ...fx.pathLinks(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'])]); srPacket(fx, tePath.slice(1, -1), ['16004', '16005'], '#e76f51', 10); fx.packet(tePath, { color: '#e76f51', speed: 10, delay: 1.2, tag: '🎥 EF (Expedited Forwarding) · smooth' }); fx.packet(['cr_gw', 'cr_c1', 'cr_c2', 'cr_edge'], { color: '#e76f51', speed: 9, size: 0.4, tag: 'other meetings' }); fx.queue('cr_north', [{ name: 'EF', color: '#e76f51', fill: 0.3 }, { name: 'AF', color: TC.biz, fill: 0.3 }, { name: 'BE', color: TC.best, fill: 0.4 }]); fx.anchor('<b>4 ms</b> · jitter 0.3 ms', fx.nodePos('cr_edge', 6.5), 'note'); },
+        },
+      ],
+    },
+    {
       id: 'tilfa', name: 'TI-LFA fast reroute', tag: 'Ciena 8100, SR-MPLS',
       summary: 'A repair path computed before the failure, used in under 50 ms.',
       steps: [

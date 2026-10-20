@@ -615,6 +615,14 @@ export function modelFor(n, layerColor) {
       }
       break;
     }
+    case 'branch': {
+      // a company office: a glass block, with the meeting room's screen lit on the front
+      g.add(box(2.6, 3.6, 2.2, '#bde0fe', 0, -0.3));
+      for (let i = 0; i < 3; i++) g.add(box(2.65, 0.12, 2.25, '#ffffff', 0, 0.6 + i * 1, 0, 0));
+      g.add(box(2.8, 0.3, 2.4, layerColor, 0, 3.3, 0, 0.05));
+      g.add(box(1, 0.6, 0.04, '#2f80ed', 0, 0.9, 1.13, 0));
+      break;
+    }
     case 'office': {
       g.add(box(2.4, 6.5, 2.4, '#7cc6fe', 0, -0.3));
       for (let i = 0; i < 6; i++) g.add(box(2.45, 0.12, 2.45, '#ffffff', 0, 0.4 + i * 1, 0, 0));
@@ -666,8 +674,8 @@ export function nodeY(world, n) {
 
 // ---------------------------------------------------------------- cables
 
-const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, agg: 0.45, access: 0.35, pon: 0.3, xhaul: 0.4 };
-const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, agg: 0.32, access: 0.2, pon: 0.18, xhaul: 0.26 };
+const LIFT = { backbone: 0.55, regional: 0.45, dci: 0.45, metro: 0.5, submarine: 0.35, ipcore: 0.55, vpn: 0.4, agg: 0.45, access: 0.35, pon: 0.3, xhaul: 0.4 };
+const RADIUS = { backbone: 0.42, regional: 0.32, dci: 0.34, metro: 0.36, submarine: 0.36, ipcore: 0.4, vpn: 0.22, agg: 0.32, access: 0.2, pon: 0.18, xhaul: 0.26 };
 
 function groundY(x, z, side) {
   let h = -Infinity;
