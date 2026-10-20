@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { buildWorld, MAJORS, majorParts } from '../js/world.js';
 import { TOPICS, TechPlayer } from '../js/tech.js';
 import { BASICS } from '../js/basics.js';
+import { STORY } from '../js/story.js';
+import { MINIGAMES } from '../js/minigames.js';
 import { vocab, MODES } from '../js/vocab.js';
 import { LAYER, ENDPOINT } from '../js/world.js';
 
@@ -115,4 +117,23 @@ test('the technologies the brief asked for are where it asked for them', () => {
   for (const m of ['aggregation', 'xhaul']) assert.ok(ids(m).includes('qos') && ids(m).includes('cfm'), `${m}: QoS and CFM at the edge`);
   assert.ok(ids('aggregation').includes('stream') && BASICS.aggregation.some((t) => t.id === 'movie'), 'home streaming over PON and a CDN cache, in both modes');
   assert.ok(ids('xhaul').includes('split') && BASICS.xhaul.some((t) => t.id === 'parts'), '5G: the RU / DU / CU split, in both modes');
+});
+
+// Netlandia Quest speaks Explorer's plain words too: no trade terms in its plain lines.
+test('explorer: the Quest\'s plain lines have no jargon', () => {
+  for (const [id, ch] of Object.entries(STORY)) {
+    const lines = [ch.taunt.plain, ch.lose.plain, ch.win.plain, ch.why.plain, ch.recap.plain, ...ch.questions.flatMap((q) => [q.plain.q, ...q.plain.a])];
+    for (const x of lines) {
+      assert.ok(!JARGON.test(x), `${id}: "${x}" has jargon`);
+      assert.ok(!VPN_JARGON.test(x), `${id}: "${x}" has VPN jargon`);
+    }
+  }
+});
+
+test('explorer: the mini-games explain themselves without jargon', () => {
+  for (const [id, g] of Object.entries(MINIGAMES)) {
+    for (const x of [g.name.plain, g.how.plain, g.goal.plain, ...g.laneNames.plain]) {
+      assert.ok(!JARGON.test(x) && !VPN_JARGON.test(x), `${id}: "${x}" has jargon`);
+    }
+  }
 });

@@ -85,6 +85,11 @@ try { const m = localStorage.getItem('netlandia.mode'); if (m === 'explorer' || 
     <ul class="card-links"></ul>
   </aside>
 
+  <!-- Netlandia Quest: the score bar, the challenge card and the start screen (js/game.js) -->
+  <div id="quest" class="quest" aria-live="polite"></div>
+  <section id="qcard" class="qcard" hidden aria-live="polite"></section>
+  <div id="intro" class="intro" hidden></div>
+
   <p class="hint">Drag to spin the planet · Scroll or pinch to zoom · Click a part of the country to open its network</p>
 </div>
 <!--/HUD-->

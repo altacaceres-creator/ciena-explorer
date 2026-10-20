@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { buildWorld, LAYER, heightAt, heightDir, PLANET_R, flatToDir, dirToFlat, linkDirs, MAJORS, MAJOR, majorParts, regionAt, SIDES, BAND } from './world.js';
 import {
-  buildPlanet, buildTowns, buildTrees, buildLife, modelFor, nodeY, place, sph, frameAt, cableShip,
+  buildPlanet, buildTowns, buildTrees, buildLife, modelFor, nodeY, place, sph, frameAt, cableShip, toon,
 } from './scene.js';
 import { buildDetail } from './detail.js';
 import { TOPICS, TechPlayer } from './tech.js';
 import { BASICS } from './basics.js';
 import { MODES, DEFAULT_MODE, vocab } from './vocab.js';
+import { initQuest } from './game.js';
 
 const world = buildWorld();
 const parts = majorParts(world);
@@ -167,9 +168,11 @@ for (const n of world.nodes) {
 
 // Each network is a region of its country. Hovering it tints the ground there and
 // lifts its landmarks a touch; nothing else on the globe changes.
-const halos = {};
+const halos = {}, shades = {};
 {
-  const hex = new THREE.CircleGeometry(1.7, 6);   // overlapping, so the tint reads as a wash, not dots
+  const hex = new THREE.CircleGeometry(1.7, 6);
+  const puff = new THREE.IcosahedronGeometry(1, 1).toNonIndexed();
+  puff.computeVertexNormals();   // overlapping, so the tint reads as a wash, not dots
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), qx = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
   const one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
   for (const m of MAJORS) {
@@ -210,9 +213,39 @@ const halos = {};
     mesh.raycast = () => {};
     scene.add(mesh);
     halos[m.id] = { mesh, mat, target: 0 };
+    // a blanket of cloud over the same ground, for while story mode keeps it locked
+    const cmat = toon('#ffffff', { transparent: true, opacity: 0 });
+    const puffs = spots.filter(() => Math.random() < 0.5);
+    const cover = new THREE.InstancedMesh(puff, cmat, puffs.length);
+    puffs.forEach(([x, z, cs], i) => {
+      const h = Math.max(0, heightAt(x, z, cs)) + 3 + Math.random() * 2.5;
+      cover.setMatrixAt(i, m4.compose(sph(x, h, z, cs, p), q.identity(), one.clone().setScalar(2.2 + Math.random() * 1.6)));
+    });
+    cover.raycast = () => {};
+    cover.visible = false;
+    scene.add(cover);
+    shades[m.id] = { mesh: cover, mat: cmat, target: 0 };
   }
 }
 const landmarksOf = Object.fromEntries(MAJORS.map((m) => [m.id, parts[m.id].nodes.filter((id) => nodeObjs[id] && majorOfNode[id] === m.id)]));
+
+// Story mode keeps a network locked until it is won back: its region under cloud and its
+// landmarks gone. Unlocking lifts the clouds, flashes the region and pops them back up.
+const lockedMajors = new Set();
+const CLOUD_COVER = 0.97;
+let popping = null;
+function setLocked(id, on, animate = false) {
+  if (on === lockedMajors.has(id)) return;
+  if (on) lockedMajors.add(id); else lockedMajors.delete(id);
+  shades[id].target = on ? CLOUD_COVER : 0;
+  if (!animate) shades[id].mat.opacity = shades[id].target;
+  for (const nid of landmarksOf[id]) nodeObjs[nid].visible = !on;
+  if (id === 'submarine') for (const sh of ships) sh.ship.visible = !on;
+  if (!on && animate) {
+    halos[id].mat.opacity = 0.75;
+    popping = { id, t0: performance.now() };
+  }
+}
 
 let lit = null;
 function emphasise(majorId) {
@@ -227,6 +260,18 @@ function tweenHalos(dt, t) {
     const h = halos[id];
     h.mat.opacity += (h.target - h.mat.opacity) * Math.min(1, dt * 9);
     h.mesh.visible = h.mat.opacity > 0.01;
+    // the clouds over a network won back lift off as they thin out
+    const s = shades[id];
+    s.mat.opacity += (s.target - s.mat.opacity) * Math.min(1, dt * 1.6);
+    s.mesh.visible = s.mat.opacity > 0.01;
+    s.mesh.scale.setScalar(s.target ? 1 : 1 + 0.07 * (1 - s.mat.opacity / CLOUD_COVER));
+  }
+  // a network just won back: its landmarks spring up out of the ground
+  if (popping) {
+    const k = Math.min(1, (performance.now() - popping.t0) / 900);
+    const e = k === 1 ? 1 : 1 - Math.pow(2, -10 * k) * Math.cos(k * 14);
+    for (const id of landmarksOf[popping.id]) nodeObjs[id].scale.setScalar(Math.max(0.01, e));
+    if (k === 1) popping = null;
   }
   if (lit) {
     const k = 1 + 0.08 * (0.5 + 0.5 * Math.sin(t * 5));
@@ -297,16 +342,21 @@ function majorStats(id) {
 // the switch above it spins the globe round to the other side.
 const list = $('#majors');
 let listedSide = null;
+let quest = null;          // Netlandia Quest, set up once the map is built
 function listSide(side, force = false) {
   if (side === listedSide && !force) return;
   listedSide = side;
   list.replaceChildren(...MAJORS.filter((m) => m.side === side || m.both).map((m) => {
     const row = document.createElement('li');
+    // in the Quest, the next network shows its name and the rest are still in the clouds
+    const st = quest?.status(m.id) ?? 'open';
+    const name = st === 'hidden' ? '???' : V.majorName(m.id);
+    const sub = st === 'next' ? 'Locked · next in the Quest' : st === 'hidden' ? 'Hidden in the clouds' : majorStats(m.id);
     row.innerHTML = `
-      <button class="major" data-major="${m.id}" style="--c:${m.color}">
+      <button class="major${st !== 'open' ? ' locked' : ''}" data-major="${m.id}" style="--c:${m.color}">
         <span class="wire${LAYER[m.layers[0]].data ? ' dashed' : ''}" aria-hidden="true"></span>
-        <span class="txt"><span class="nm">${V.majorName(m.id)}</span><span class="st">${majorStats(m.id)}</span></span>
-        <span class="go" aria-hidden="true">Open</span>
+        <span class="txt"><span class="nm">${name}</span><span class="st">${sub}</span></span>
+        <span class="go" aria-hidden="true">${st === 'next' ? '🔒' : st === 'hidden' ? '☁' : 'Open'}</span>
       </button>`;
     return row;
   }));
@@ -358,6 +408,12 @@ const detailLabels = $('#detail-labels');
 const hint = $('.hint');
 
 function openMajor(id, topicId = null) {
+  if (quest?.isLocked(id)) {
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    if (mode === 'detail') closeMajor();
+    quest.blocked(id);
+    return;
+  }
   const want = topicId ? `${id}.${topicId}` : id;
   if (location.hash.slice(1) !== want) { location.hash = want; return; }   // hashchange comes back here
   const already = mode === 'detail' && detail === details[id];
@@ -651,7 +707,10 @@ function hover() {
     const m = pickMajor(lastMove);
     emphasise(m);
     canvas.style.cursor = m ? 'pointer' : '';
-    if (m) showTip(lastMove, MAJOR[m].color, V.majorName(m), V.majorPlace(m) + ' · click to open'); else tip.hidden = true;
+    const st = m && (quest?.status(m) ?? 'open');
+    if (st === 'hidden') showTip(lastMove, '#c9d3e3', '???', '☁ Hidden in the clouds');
+    else if (m) showTip(lastMove, MAJOR[m].color, V.majorName(m), st === 'next' ? '🔒 Locked · click to win it back' : V.majorPlace(m) + ' · click to open');
+    else tip.hidden = true;
   } else {
     const id = pickSite(lastMove);
     canvas.style.cursor = id ? 'pointer' : '';
@@ -680,6 +739,7 @@ function applyMode(id) {
   plane.visible = V.plain;
   for (const k in details) dressDetail(details[k]);
   listSide(listedSide, true);
+  quest?.relabel();
   if (mode === 'detail') {
     // the explainers differ between modes, so an open one closes
     if (player) { player.close(); player = null; }
@@ -709,8 +769,10 @@ function resize() {
 
 const clock = new THREE.Clock();
 let t = 0;
+let globePaused = false;    // a Quest mini-game has the screen: the planet holds still
 function frame(now) {
   const dt = Math.min(clock.getDelta(), 0.1);
+  if (globePaused) { requestAnimationFrame(frame); return; }
   if (!reduceMotion) t += dt;
   resize();
   if (mode === 'globe') {
@@ -747,7 +809,26 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
+// ---------------------------------------------------------------- Netlandia Quest
+
+const toGlobe = () => { if (mode === 'detail') { history.pushState(null, '', location.pathname + location.search); route(); } };
+quest = initQuest({
+  plain: () => V.plain,
+  majorName: (id) => V.majorName(id),
+  majorColor: (id) => MAJOR[id].color,
+  setLocked,
+  focusMajor(id) {
+    const [x, z, , cs = MAJOR[id].side] = MAJOR[id].region[0];
+    flyToDir(dirOf(x, z, cs), 150);
+    listSide(cs, true);
+  },
+  openMajor: (id) => openMajor(id),
+  toGlobe,
+  refresh: () => listSide(listedSide, true),
+  pause: (on) => { globePaused = on; },
+});
+
 route();
 requestAnimationFrame(frame);
-window.netlandia = { world, openMajor, closeMajor, selectInDetail, emphasise, flyTo, camera, controls, nodeObjs, get player() { return player; } };
+window.netlandia = { world, openMajor, closeMajor, selectInDetail, emphasise, flyTo, camera, controls, nodeObjs, setLocked, get quest() { return quest; }, get player() { return player; } };
 window.netlandiaFlat = (x, z, side = 0) => flatToDir(x, z, side);

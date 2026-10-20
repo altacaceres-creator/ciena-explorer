@@ -289,6 +289,105 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ------------------------------------------------ Netlandia Quest (js/game.js) */
+.major.locked { background: var(--well); }
+.major.locked .nm { color: var(--muted); }
+.major.locked .wire { opacity: 0.35; }
+.major.locked .go { background: var(--paper); }
+
+/* the score bar, top right */
+.quest {
+  position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px;
+  display: flex; align-items: center; gap: 8px; max-width: calc(100% - 32px);
+}
+.quest button, .qcard button, .intro button {
+  border: var(--rule); border-radius: var(--radius-s); background: var(--paper);
+  box-shadow: var(--lift-s); font-weight: 800; padding: 8px 14px; min-height: 40px;
+}
+.quest button:active, .qcard button:active, .intro button:active { transform: var(--press); box-shadow: none; }
+.q-play { display: grid; text-align: left; gap: 0; border: var(--line) !important; box-shadow: var(--lift) !important; }
+.q-play b { font: 400 17px/1.1 var(--display); letter-spacing: 0.02em; }
+.q-play span { font-size: 11.5px; color: var(--muted); }
+.q-stats {
+  display: grid; justify-items: end; padding: 4px 12px; gap: 0;
+  background: var(--paper); border: var(--line); border-radius: var(--radius-s); box-shadow: var(--lift-s);
+  font-variant-numeric: tabular-nums;
+}
+.q-rank { font: 400 14px/1.1 var(--display); letter-spacing: 0.02em; color: var(--accent); }
+.q-score { font-size: 12px; font-weight: 800; }
+.q-score b { font: 400 17px/1 var(--display); }
+.q-prog { font-size: 11px; color: var(--muted); font-weight: 800; }
+.q-next { background: var(--c) !important; color: #fff; }
+.q-menu { width: 40px; padding: 0 !important; font-size: 18px; }
+
+/* the challenge card, bottom centre: taunt, question, win, you died */
+.qcard {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+  width: min(600px, calc(100% - 32px)); max-height: calc(100% - 140px); overflow: auto;
+  padding: 14px 18px 16px; z-index: 4;
+  background: var(--paper); border: var(--line); border-radius: var(--radius); box-shadow: var(--lift);
+  border-top: 10px solid var(--c);
+  display: grid; gap: 8px;
+}
+.qcard h3 { margin: 0; font: 400 26px/1.05 var(--display); letter-spacing: 0.01em; text-wrap: balance; }
+.qcard p { margin: 0; }
+.q-k { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.q-villain { display: flex; align-items: center; gap: 12px; }
+.q-face { font-size: 46px; line-height: 1; filter: drop-shadow(0 3px 0 rgb(0 0 0 / 0.15)); }
+.q-say { font-size: 15px; max-width: 62ch; }
+.qcard[data-kind="taunt"] .q-say { font-style: italic; }
+.qcard dl { margin: 0; padding: 8px 10px; background: var(--well); border-radius: var(--radius-s); }
+.qcard dt { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.qcard dd { margin: 2px 0 0; }
+.q-sum { font-size: 13px; font-weight: 800; color: var(--muted); }
+.q-sum b { color: var(--accent); }
+.q-btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
+.qcard .primary, .intro .primary { background: var(--c, var(--accent)); color: #fff; }
+.q-head { display: flex; align-items: center; gap: 10px; }
+.q-head .q-k { flex: 1; min-width: 0; }
+.q-hearts i { font-style: normal; font-size: 18px; color: var(--muted); opacity: 0.3; }
+.q-hearts i.on { color: #e63946; opacity: 1; }
+.q-pts { font: 400 16px/1 var(--display); font-variant-numeric: tabular-nums; }
+.q-time { height: 8px; border: var(--rule); border-radius: 999px; overflow: hidden; background: var(--well); }
+.q-time i { display: block; height: 100%; width: 100%; background: var(--c); transition: width 0.1s linear; }
+.q-q { font-size: 21px !important; }
+.q-answers { display: grid; gap: 8px; }
+.q-answers button { display: flex; align-items: center; gap: 10px; text-align: left; min-height: 48px; font-weight: 700; }
+.q-answers button:hover { background: color-mix(in srgb, var(--c) 16%, var(--paper)); }
+.q-answers kbd { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border: var(--rule); border-radius: 6px; font: 800 12px/1 var(--body); }
+.q-flash { font-weight: 800; }
+.q-flash.ok { color: #12825a; }
+.q-flash.bad { color: #c2263a; }
+.q-level-tag { justify-self: start; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--well); border: var(--rule); color: var(--muted); }
+.q-levelup { display: grid; gap: 2px; padding: 10px 12px; border: var(--line); border-radius: var(--radius-s); background: color-mix(in srgb, #ffc43d 26%, var(--paper)); }
+.q-levelup b { font-weight: 800; }
+.q-levelup > b:first-child { font: 400 19px/1.1 var(--display); letter-spacing: 0.01em; }
+.qcard dl dt:not(:first-child) { margin-top: 6px; }
+.q-lanes button:disabled { opacity: 0.35; box-shadow: none; }
+.q-news { padding: 8px 10px; border: var(--rule); border-radius: var(--radius-s); background: color-mix(in srgb, #2f80ed 12%, var(--paper)); font-weight: 800; }
+
+.qcard[data-kind="game"] { width: min(760px, calc(100% - 32px)); }
+.q-canvas { display: block; width: 100%; height: clamp(240px, 46vh, 400px); border: var(--rule); border-radius: var(--radius-s); background: var(--paper); touch-action: none; }
+.q-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.q-lanes button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; font-weight: 800; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.q-lanes button.hit { background: color-mix(in srgb, var(--c) 30%, var(--paper)); transform: var(--press); box-shadow: none; }
+.q-lanes kbd { display: grid; place-items: center; width: 22px; height: 22px; border: var(--rule); border-radius: 6px; font: 800 11px/1 var(--body); }
+.q-quit { min-height: 32px !important; width: 32px; padding: 0 !important; border-radius: 50% !important; }
+
+/* the start screen */
+.intro { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; background: rgb(15 22 40 / 0.45); }
+.i-box {
+  width: min(460px, 100%); display: grid; gap: 10px; justify-items: center; text-align: center;
+  padding: 22px 22px 20px; background: var(--paper); border: var(--line); border-radius: var(--radius); box-shadow: var(--lift);
+}
+.i-face { font-size: 56px; line-height: 1; }
+.i-box h2 { margin: 0; font: 400 36px/1 var(--display); letter-spacing: 0.02em; color: var(--accent); -webkit-text-stroke: var(--title-stroke); paint-order: stroke fill; }
+.i-box p { margin: 0; max-width: 40ch; }
+.i-best { font-weight: 800; color: var(--muted); }
+.i-btns { display: grid; gap: 8px; width: 100%; margin-top: 6px; }
+.i-btns button { min-height: 46px; font-size: 15px; }
+
 @media (max-width: 760px) {
   .title { padding: 6px 12px 8px; }
   .title h1 { font-size: 26px; }
@@ -314,6 +413,17 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .tech p { min-height: 0; font-size: 13px; }
   .hint { display: none; }
   .card { top: auto; left: 16px; right: 16px; width: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-height: 55%; z-index: 2; }
+  .quest { top: auto; bottom: calc(42% + 28px + env(safe-area-inset-bottom, 0px)); left: 16px; right: 16px; justify-content: flex-end; }
+  .q-prog, .q-play span { display: none; }
+  .q-stats { padding: 3px 10px; }
+  .qcard { left: 0; right: 0; transform: none; width: auto; bottom: 0; max-height: 72%; border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .qcard h3 { font-size: 22px; }
+  .q-q { font-size: 18px !important; }
+  .q-face { font-size: 38px; }
+  .q-canvas { height: 38vh; }
+  .q-lanes button { min-height: 58px; font-size: 13px; padding: 6px !important; }
+  .q-lanes kbd { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
@@ -404,3 +514,20 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 [data-mode="engineer"] .hint { color: #e6ebf2; border: 1px solid var(--edge); }
 [data-mode="engineer"] .x { color: #e6ebf2; }
 [data-mode="engineer"] .t-btns button:disabled { opacity: 0.35; }
+
+/* Engineer reads the Quest as a console too */
+[data-mode="engineer"] .quest button, [data-mode="engineer"] .qcard button, [data-mode="engineer"] .intro button { background: var(--well); font-weight: 500; }
+[data-mode="engineer"] .qcard, [data-mode="engineer"] .i-box, [data-mode="engineer"] .q-stats { color: #e6ebf2; }
+[data-mode="engineer"] .qcard { border-top-width: 3px; }
+[data-mode="engineer"] .qcard h3, [data-mode="engineer"] .i-box h2 { font-weight: 600; font-size: 21px; letter-spacing: -0.01em; color: #e6ebf2; }
+[data-mode="engineer"] .i-box h2 { font-size: 26px; }
+[data-mode="engineer"] .q-k, [data-mode="engineer"] .qcard dt { font: 500 11px/1 var(--mono); letter-spacing: var(--label-space); }
+[data-mode="engineer"] .q-rank, [data-mode="engineer"] .q-score b, [data-mode="engineer"] .q-pts, [data-mode="engineer"] .q-play b { font-family: var(--mono); font-weight: 500; }
+[data-mode="engineer"] .qcard .primary, [data-mode="engineer"] .intro .primary, [data-mode="engineer"] .q-next { background: var(--accent) !important; color: #0b1017; border-color: transparent; }
+[data-mode="engineer"] .q-answers button:hover { background: color-mix(in srgb, var(--c) 22%, var(--well)); }
+[data-mode="engineer"] .q-flash.ok { color: #4fd59a; }
+[data-mode="engineer"] .q-flash.bad { color: #ff8a94; }
+[data-mode="engineer"] .intro { background: rgb(0 0 0 / 0.55); }
+[data-mode="engineer"] .major.locked .go { background: transparent; }
+[data-mode="engineer"] .q-levelup { background: #2a2210; border-color: #7a6020; color: #ffe2a0; }
+[data-mode="engineer"] .q-levelup > b:first-child { font: 600 16px/1.2 var(--body); }
