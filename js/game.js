@@ -3,8 +3,9 @@
 // so this file never touches the 3D scene itself.
 import {
   STORY, STORY_ORDER, STORY_SECONDS, STORY_LIVES, loadStory, nextChapter, isUnlocked, rankOf, storyDone,
-  startChallenge, answer, winChapter, restartStory,
+  startChallenge, answer, winChapter, restartStory, FLAWLESS_BONUS,
 } from './story.js';
+import { MINIGAMES } from './minigames.js';
 
 const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play';
 
@@ -21,7 +22,8 @@ const DISCOVERY = {
 };
 
 // hooks: plain(), majorName(id), majorColor(id), setLocked(id, locked, animate),
-// focusMajor(id), openMajor(id), toGlobe(), refresh()
+// focusMajor(id), openMajor(id), toGlobe(), refresh(), pause(on) (stop drawing the globe
+// while a mini-game has the screen)
 export function initQuest(hooks) {
   const el = (s) => document.querySelector(s);
   const intro = el('#intro'), bar = el('#quest'), card = el('#qcard');
@@ -33,6 +35,7 @@ export function initQuest(hooks) {
   let playing = store.get(PLAY_KEY) === 'story';
   let view = null;            // what the card shows: { kind, id, challenge, ... }
   let timer = null, asked = 0;
+  let play = null;            // a mini-game running: { game, state, raf, canvas }
 
   const save = () => store.set(QUEST_KEY, JSON.stringify(story));
   const say = (pair) => (hooks.plain() ? pair.plain : pair.eng);
@@ -94,12 +97,14 @@ export function initQuest(hooks) {
   // ------------------------------------------------ the challenge card
   function openCard(v) {
     stopTimer();
+    stopGame();
     view = v;
     renderCard();
     card.hidden = false;
   }
   function closeCard() {
     stopTimer();
+    stopGame();
     view = null;
     card.hidden = true;
   }
@@ -110,8 +115,10 @@ export function initQuest(hooks) {
     hooks.focusMajor(id);
     openCard({ kind: 'taunt', id });
   }
+  // a chapter with a mini-game plays it; the others still ask their three questions
   function begin(id) {
-    openCard({ kind: 'question', id, c: startChallenge(id), last: null });
+    if (MINIGAMES[id]) openCard({ kind: 'how', id });
+    else openCard({ kind: 'question', id, c: startChallenge(id), last: null });
   }
   function renderCard() {
     const v = view, ch = STORY[v.id], name = esc(hooks.majorName(v.id));
@@ -134,6 +141,21 @@ export function initQuest(hooks) {
         <div class="q-answers">${c.order[c.i].map((k, pos) => `<button data-answer="${pos}"><kbd>${pos + 1}</kbd>${esc(q.a[k])}</button>`).join('')}</div>
         ${v.last ? `<p class="q-flash ${v.last.right ? 'ok' : 'bad'}">${v.last.right ? `Right! +${v.last.points}` : v.last.timeout ? 'Too slow!' : 'Not quite.'}</p>` : ''}`;
       startTimer();
+    } else if (v.kind === 'how') {
+      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      card.innerHTML = `
+        <span class="q-k">Win back ${name} · mini-game</span>
+        <h3>🎮 ${esc(game.name[words])}</h3>
+        <p class="q-say">${esc(game.how[words])}</p>
+        <p class="q-sum">Goal: <b>${esc(game.goal[words])}</b></p>
+        <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="go">Start ▶</button></div>`;
+    } else if (v.kind === 'game') {
+      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      card.innerHTML = `
+        <div class="q-head"><span class="q-k">Win back ${name} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
+        <canvas class="q-canvas"></canvas>
+        <div class="q-lanes">${game.laneNames[words].map((l, i) => `<button data-lane="${i}"><kbd>${i + 1}</kbd>${esc(l)}</button>`).join('')}</div>`;
+      startGame(v.id);
     } else if (v.kind === 'won') {
       const next = nextChapter(story);
       const news = DISCOVERY[next];
@@ -169,6 +191,67 @@ export function initQuest(hooks) {
         <p class="q-sum">Score <b>${story.score.toLocaleString('en')}</b> · best <b>${story.best.toLocaleString('en')}</b></p>
         <div class="q-btns"><button data-q="replay">Play again</button><button class="primary" data-q="free">Explore the map ▶</button></div>`;
     }
+  }
+
+  // ------------------------------------------------ a mini-game on the card's canvas
+  function startGame(id) {
+    const game = MINIGAMES[id], canvas = card.querySelector('.q-canvas'), g = canvas.getContext('2d');
+    play = { id, game, state: game.start(), raf: 0, canvas, last: performance.now() };
+    const size = () => {
+      const w = canvas.clientWidth, h = canvas.clientHeight, r = Math.min(devicePixelRatio || 1, 2);
+      if (canvas.width !== Math.round(w * r)) { canvas.width = Math.round(w * r); canvas.height = Math.round(h * r); }
+      g.setTransform(r, 0, 0, r, 0, 0);
+      return [w, h];
+    };
+    const css = getComputedStyle(card), v = (k) => css.getPropertyValue(k).trim();
+    const c = hooks.majorColor(id);
+    const theme = {
+      ink: css.color, paper: v('--paper'), well: v('--well'), muted: v('--muted'), font: css.fontFamily,
+      accent: c, accentSoft: `${c}40`, gold: '#ffc43d', good: hooks.plain() ? '#12825a' : '#4fd59a', bad: '#e63946',
+      lane: ['#e76f51', '#7b2cbf', '#8a94a6'],
+    };
+    const loop = (now) => {
+      if (!play) return;
+      // real time, in small steps, so a slow device plays the same game, only less smoothly
+      let left = Math.min(0.25, (now - play.last) / 1000);
+      play.last = now;
+      while (left > 0 && !play.state.over) { const dt = Math.min(1 / 60, left); game.tick(play.state, dt); left -= dt; }
+      const [w, h] = size();
+      game.draw(g, play.state, w, h, hooks.plain() ? 'plain' : 'eng', theme);
+      const res = game.result(play.state);
+      if (res) { setTimeout(() => endGame(id, res), 600); play.raf = 0; return; }
+      play.raf = requestAnimationFrame(loop);
+    };
+    canvas.addEventListener('pointerdown', (e) => {
+      const r = canvas.getBoundingClientRect();
+      const lane = game.laneAt(e.clientX - r.left, e.clientY - r.top, r.width, r.height);
+      if (lane != null) press(lane);
+    });
+    hooks.pause(true);
+    play.raf = requestAnimationFrame(loop);
+  }
+  function press(lane) {
+    if (!play) return;
+    play.game.press(play.state, lane);
+    const b = card.querySelector(`[data-lane="${lane}"]`);
+    if (b) { b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 120); }
+  }
+  function stopGame() {
+    if (!play) return;
+    if (play.raf) cancelAnimationFrame(play.raf);
+    play = null;
+    hooks.pause(false);
+  }
+  function endGame(id, res) {
+    if (!view || view.kind !== 'game' || view.id !== id) return;
+    stopGame();
+    if (!res.won) { openCard({ kind: 'lost', id }); return; }
+    const points = res.points + (res.flawless ? FLAWLESS_BONUS : 0);
+    winChapter(story, { id, over: 'won', points });
+    save();
+    applyLocks(id);
+    renderBar();
+    openCard({ kind: 'won', id, points, flawless: res.flawless });
   }
 
   function startTimer() {
@@ -209,11 +292,18 @@ export function initQuest(hooks) {
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
     else if (what === 'next') { if (next) taunt(next); }
     else if (what === 'begin' && view) begin(view.id);
+    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id });
+    else if (what === 'quit' && view) openCard({ kind: 'lost', id: view.id });
     else if (what === 'later') closeCard();
     else if (what === 'enter' && view) { const id = view.id; closeCard(); hooks.openMajor(id); }
     else if (what === 'done') openCard({ kind: 'done', id: STORY_ORDER.at(-1) });
     else if (what === 'replay') { restartStory(story); save(); applyLocks(); renderBar(); taunt(nextChapter(story)); }
   }
+  // the lane buttons react on touch-down, the way a game should
+  card.addEventListener('pointerdown', (e) => {
+    const l = e.target.closest('[data-lane]');
+    if (l) { e.preventDefault(); press(+l.dataset.lane); }
+  });
   for (const root of [intro, bar, card]) {
     root.addEventListener('click', (e) => {
       const a = e.target.closest('[data-answer]');
@@ -223,7 +313,9 @@ export function initQuest(hooks) {
     });
   }
   addEventListener('keydown', (e) => {
-    if (view?.kind === 'question' && ['1', '2', '3'].includes(e.key)) { pick(+e.key - 1); e.stopPropagation(); }
+    if (!['1', '2', '3'].includes(e.key)) return;
+    if (view?.kind === 'question') { pick(+e.key - 1); e.stopPropagation(); }
+    else if (view?.kind === 'game' && !e.repeat) { press(+e.key - 1); e.stopPropagation(); }
   }, true);
 
   // ------------------------------------------------ start
@@ -234,6 +326,8 @@ export function initQuest(hooks) {
   return {
     isLocked: locked,
     status,
+    // for test scripts: the running mini-game's state
+    get playing() { return play?.state ?? null; },
     // a click on a locked network: the next one starts its challenge, the others say why not
     blocked(id) {
       hooks.toGlobe();
@@ -243,8 +337,12 @@ export function initQuest(hooks) {
     relabel() {
       renderBar();
       if (!intro.hidden) showIntro();
-      // a question starts its clock again, now that it reads differently
-      if (view) { stopTimer(); renderCard(); }
+      // a question starts its clock again, now that it reads differently; a game keeps
+      // running and only its lane buttons change words (the board redraws itself)
+      if (view?.kind === 'game') {
+        const names = MINIGAMES[view.id].laneNames[hooks.plain() ? 'plain' : 'eng'];
+        card.querySelectorAll('[data-lane]').forEach((b, i) => { b.lastChild.textContent = names[i]; });
+      } else if (view) { stopTimer(); renderCard(); }
     },
   };
 }

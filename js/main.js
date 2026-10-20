@@ -769,8 +769,10 @@ function resize() {
 
 const clock = new THREE.Clock();
 let t = 0;
+let globePaused = false;    // a Quest mini-game has the screen: the planet holds still
 function frame(now) {
   const dt = Math.min(clock.getDelta(), 0.1);
+  if (globePaused) { requestAnimationFrame(frame); return; }
   if (!reduceMotion) t += dt;
   resize();
   if (mode === 'globe') {
@@ -823,6 +825,7 @@ quest = initQuest({
   openMajor: (id) => openMajor(id),
   toGlobe,
   refresh: () => listSide(listedSide, true),
+  pause: (on) => { globePaused = on; },
 });
 
 route();

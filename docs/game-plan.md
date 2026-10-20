@@ -236,8 +236,19 @@ win or lose, so the levels can be built and reviewed one PR at a time.
   back, and the clouds lift one network at a time.
 - **Phone and touch** for every game.
 - **Score**, so people at a booth can compete.
-- **First, the scene-by-scene unlocks** (step 1, the shell). Each network's challenge is three quick
-  questions for now, and the mini-games replace them one at a time, starting with **Packet Tetris**.
+- **First, the scene-by-scene unlocks** (step 1, the shell), then the mini-games one at a time in the
+  order they are played.
+
+## Built so far
+
+| Network | Challenge |
+|---|---|
+| 5G mobile xhaul | **Keep the Beat** (mini-game) |
+| Metro aggregation | **Packet Tetris** (mini-game) |
+| IP/MPLS core | three questions, until **Packet Race** |
+| Submarine | three questions, until **The Deep Boss** |
+| Metro optical | three questions, until **Rainbow Packing** |
+| Long-haul | three questions, until **Mesh Rescue** |
 
 ## Later
 
