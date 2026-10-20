@@ -7,7 +7,7 @@ import { LAYER } from './world.js';
 import { modelFor, buildCable, routerPole, place, sph, toon, whale } from './scene.js';
 import { PLANET_R } from './world.js';
 
-const DETAIL_SPEED = { dci: 16, backbone: 20, regional: 13, metro: 15, submarine: 14, ipcore: 18, agg: 13, access: 8, xhaul: 10 };
+const DETAIL_SPEED = { dci: 16, backbone: 20, regional: 13, metro: 15, submarine: 14, ipcore: 18, agg: 13, access: 8, pon: 8, xhaul: 10 };
 
 export function buildDetail(world, part) {
   const scene = new THREE.Scene();
@@ -144,11 +144,11 @@ export function buildDetail(world, part) {
   for (const layer of new Set(links.map((l) => l.layer))) {
     const runs = [];
     for (const l of links.filter((x) => x.layer === layer)) {
-      const n = Math.max(1, Math.round(linkObjs[l.id].len / (layer === 'access' ? 6 : 10)));
+      const n = Math.max(1, Math.round(linkObjs[l.id].len / (['access', 'pon'].includes(layer) ? 6 : 10)));
       for (let k = 0; k < n; k++) runs.push({ link: linkObjs[l.id], phase: (k + Math.random() * 0.5) / n, dir: k % 2 ? -1 : 1 });
     }
     const col = new THREE.Color(LAYER[layer].color).lerp(new THREE.Color('#ffffff'), 0.45);
-    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry((layer === 'access' ? 0.32 : 0.48) * space.k, 10, 8), new THREE.MeshBasicMaterial({ color: col }), runs.length);
+    const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry((['access', 'pon'].includes(layer) ? 0.32 : 0.48) * space.k, 10, 8), new THREE.MeshBasicMaterial({ color: col }), runs.length);
     mesh.raycast = () => {};
     scene.add(mesh);
     packets.push({ layer, mesh, runs });

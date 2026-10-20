@@ -33,6 +33,17 @@ export function ccm(fx, a, b, period = 1.4) {
   return ids;
 }
 
+// A tag on every cell site and hub naming the parts of the RAN it hosts.
+export function ranTags(fx, words = { ru: 'RU', du: 'DU', cu: 'CU', pool: 'DU pool' }) {
+  for (const n of Object.values(fx.byId)) {
+    if (!n.ran) continue;
+    const parts = n.type === 'tower'
+      ? [words.ru, ...(n.ran.du === n.id ? [words.du] : [])]
+      : [...(n.ran.pool.length ? [words.pool] : []), ...(n.ran.cu.length ? [words.cu] : [])];
+    fx.anchor(`<b>${parts.join(' + ')}</b>`, fx.nodePos(n.id, 6), 'mep');
+  }
+}
+
 export const TOPICS = {
   longhaul: [
     {
@@ -256,6 +267,28 @@ export const TOPICS = {
       ],
     },
     {
+      id: 'stream', name: 'FTTH and the streaming CDN', tag: 'XGS-PON · Couchwave cache on the 5170',
+      summary: 'A PON to the home, and why a film is served from inside the network.',
+      steps: [
+        {
+          say: 'Popcorn Hill is fibre to the home on a PON. Each home has an ONT; their fibres meet at a passive 1:32 splitter in a street cabinet, and one fibre runs on to the OLT, which hands off to the East aggregation router.',
+          run: (fx) => { fx.focus(fx.linksOf('pon')); for (const h of ofType(fx, 'home')) fx.anchor('<b>ONT</b>', fx.nodePos(h, 5), 'mep'); fx.anchor('<b>1:32</b>', fx.nodePos('spl_pop', 4), 'mep'); fx.anchor('<b>OLT</b>', fx.nodePos('olt_e', 5), 'mep'); fx.spot('olt_e', '#43aa8b'); },
+        },
+        {
+          say: 'Downstream, the OLT broadcasts one 10 Gb/s wavelength through the splitter to every ONT, and each keeps only its own encrypted frames. Upstream, the OLT grants each ONT its own time slots so they never collide.',
+          run: (fx) => { const homes = ofType(fx, 'home'); fx.focus(fx.linksOf('pon')); homes.forEach((h, i) => fx.packet(['olt_e', 'spl_pop', h], { color: '#43aa8b', speed: 8, delay: 0.1 * i, size: 0.4, tag: i ? null : '10G down, shared' })); homes.forEach((h, i) => fx.packet([h, 'spl_pop', 'olt_e'], { color: TC.video, speed: 8, delay: 1.6 + 0.5 * i, size: 0.3, tag: i ? null : `slot ${i + 1}` })); },
+        },
+        {
+          say: 'Press play on Couchwave. The request reaches the Couchwave cache embedded next to the East aggregation router, and the video comes back as a stream of short HLS segments over just a few hops: a cache hit.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('home_1', 'cdn_e')); fx.anchor('<b>CDN</b> cache hit', fx.nodePos('cdn_e', 5), 'note'); fx.spot('cdn_e', TC.red); fx.packet(ids, { color: TC.best, speed: 9, size: 0.3, tag: 'GET episode 4' }); [0, 1, 2, 3].forEach((i) => fx.packet([...ids].reverse(), { color: TC.red, speed: 10, delay: 0.9 + i * 0.7, size: 0.45, tag: i ? null : '4K segment' })); },
+        },
+        {
+          say: 'A title that is not cached yet is a miss: the cache fetches it once from the origin, through the core and the peering at Gateway Bay, stores it, and serves every later viewer from inside the network.',
+          run: (fx) => { const up = glowPath(fx, fx.path('cdn_e', 'cr_c2')); fx.focus([...fx.pathLinks(up), ...fx.pathLinks(fx.path('cdn_e', 'home_1'))]); fx.anchor('<b>CDN</b> cache miss', fx.nodePos('cdn_e', 5), 'note warn'); fx.packet([...up].reverse(), { color: TC.biz, speed: 10, tag: 'fill from origin' }); fx.packet(fx.path('cdn_e', 'home_1'), { color: TC.red, speed: 10, delay: 1.6, size: 0.45, tag: 'now cached' }); },
+        },
+      ],
+    },
+    {
       id: 'cfm', name: 'Connectivity fault management', tag: '802.1ag / Y.1731 on 3900 NIDs',
       summary: 'Heartbeats that prove a service is up, and measure how well.',
       steps: [
@@ -276,6 +309,32 @@ export const TOPICS = {
   ],
 
   xhaul: [
+    {
+      id: 'split', name: 'RAN split: RU, DU, CU', tag: '3GPP / O-RAN over the Ciena 5164 and 5166',
+      summary: 'One base station in three parts, and the fronthaul, midhaul and backhaul between them.',
+      steps: [
+        {
+          say: 'A 5G base station is split in three. The RU at the top of the mast does the radio. The DU runs the real-time layers (PHY, MAC, RLC) and the CU the rest (PDCP, RRC). Each site card shows where its three parts are.',
+          run: (fx) => { fx.focus(fx.linksOf()); ranTags(fx); },
+        },
+        {
+          say: 'C-RAN: Cell sites 1 and 7 keep only their RUs. Their eCPRI fronthaul runs to the DU pool at Labelbrook. It is the most demanding leg: about 100 µs one way, so the DU can be no more than about 20 km of fibre away.',
+          run: (fx) => { for (const t of ['end_3_0', 'end_7_0']) { const ids = glowPath(fx, fx.path(t, 'xh_bright')); fx.anchor('<b>RU</b>', fx.nodePos(t, 6), 'mep'); fx.packet(ids, { color: TC.voice, speed: 10, tag: 'eCPRI fronthaul' }); } fx.anchor('<b>DU pool</b>', fx.nodePos('xh_bright', 6), 'mep'); fx.spot('xh_bright', TC.voice); },
+        },
+        {
+          say: 'D-RAN: Cell site 3 has its own DU at the foot of the mast, so what leaves the site is F1 midhaul, already packetised. It runs to the CU at Edgewater and can take a few milliseconds.',
+          run: (fx) => { const ids = glowPath(fx, fx.path('end_4_0', 'xh_east')); fx.anchor('<b>RU + DU</b>', fx.nodePos('end_4_0', 6), 'mep'); fx.anchor('<b>CU</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(ids, { color: TC.biz, speed: 12, tag: 'F1 midhaul' }); fx.spot('xh_east', TC.biz); },
+        },
+        {
+          say: 'A DU pool needs midhaul too: the Framefield DUs, serving Cell sites 4 and 5, send F1 up the ring to the same CU at Edgewater.',
+          run: (fx) => { for (const t of ['end_5_0', 'end_6_0']) { fx.anchor('<b>RU</b>', fx.nodePos(t, 6), 'mep'); fx.packet(glowPath(fx, fx.path(t, 'xh_south')), { color: TC.voice, speed: 10, size: 0.4 }); } const ids = glowPath(fx, fx.path('xh_south', 'xh_east')); fx.anchor('<b>DU pool</b>', fx.nodePos('xh_south', 6), 'mep'); fx.anchor('<b>CU</b>', fx.nodePos('xh_east', 6), 'mep'); fx.packet(ids, { color: TC.biz, speed: 12, delay: 0.6, tag: 'F1 midhaul' }); },
+        },
+        {
+          say: 'Backhaul: each CU hands its users’ traffic (N3, to the UPF) and signalling (N2, to the AMF) to the IP core, at Gateway Bay and at Edgewater, and on to the 5G core in Coreburg.',
+          run: (fx) => { for (const [cu, cr] of [['xh_bright', 'cr_gw'], ['xh_east', 'cr_edge']]) { const ids = glowPath(fx, fx.path(cu, cr)); fx.anchor('<b>CU</b>', fx.nodePos(cu, 6), 'mep'); fx.packet(ids, { color: TC.best, speed: 12, tag: 'N3 backhaul' }); fx.packet(ids, { color: TC.ccm, speed: 12, delay: 0.8, size: 0.35, tag: 'N2' }); fx.spot(cr, TC.biz); } },
+        },
+      ],
+    },
     {
       id: 'qos', name: 'QoS for 5G xhaul', tag: 'Ciena 5164 cell-site router',
       summary: 'Radio traffic goes first; everything else waits.',

@@ -287,7 +287,7 @@ function majorStats(id) {
     longhaul: [c((n) => n.id.startsWith('bb_')), c((n) => n.type === 'ila')],
     metro: [c((n) => n.type === 'hub'), c((n) => n.type === 'dc')],
     ipcore: [c((n) => n.type === 'core'), c((n) => n.type === 'dc'), c((n) => n.type === 'ixp')],
-    aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_'))],
+    aggregation: [c((n) => n.type === 'agg'), c((n) => n.id.startsWith('end_')), c((n) => n.type === 'home')],
     xhaul: [c((n) => n.type === 'xhub'), c((n) => n.type === 'tower')],
   }[id];
   return counts ? V.stats(id, counts) : '';
@@ -369,7 +369,8 @@ function openMajor(id, topicId = null) {
   emphasise(null);
   controls.enabled = false;
   detailControls.enabled = true;
-  const d = detail.extent * (detail.space.sphere ? 1.85 : 1.55) / Math.min(1, detailCam.aspect || 1);
+  // a network can ask to be framed from further back (`fit`) when it reaches out to one side
+  const d = detail.extent * (detail.space.sphere ? 1.85 : 1.55) * (MAJOR[id].fit ?? 1) / Math.min(1, detailCam.aspect || 1);
   detailControls.target.copy(detail.center);
   detailCam.position.copy(detail.center).addScaledVector(detail.viewDir, d);
   detailCam.up.set(0, 1, 0);
@@ -532,6 +533,9 @@ function selectInDetail(id) {
   card.querySelector('.card-gear-h').textContent = V.gearHeading;
   card.querySelector('.card-gear').textContent = V.nodeGear(n);
   card.querySelector('dl').hidden = !V.nodeGear(n);
+  card.querySelector('.card-ran-h').textContent = V.ranHeading;
+  card.querySelector('.card-ran').textContent = V.nodeRan(n, world.byId);
+  card.querySelector('.card-ran-dl').hidden = !n.ran;
   card.querySelector('.card-layers').innerHTML = n.layers.map((lid) =>
     `<span class="chip" style="--c:${LAYER[lid].color}">${V.layerShort(lid)}</span>`).join('');
   card.querySelector('.card-links').innerHTML = neighbours.map((m) => `<li><button data-goto="${m.id}">${V.nodeName(m)}</button></li>`).join('');

@@ -183,6 +183,11 @@ export const LAYERS = [
     gear: 'Ciena 3900 series NIDs and 5100 series routers',
   },
   {
+    id: 'pon', side: 1, data: true, name: 'Home fibre (PON)', short: 'Home fibre', color: '#43aa8b',
+    blurb: 'Fibre to the home: one fibre from the OLT, split on the street between many houses.',
+    gear: 'Ciena XGS-PON OLT, passive splitters and ONTs',
+  },
+  {
     id: 'xhaul', side: 1, data: true, name: '5G mobile xhaul', short: '5G xhaul', color: '#00a6d6',
     blurb: 'Cell sites on rings back to pre-aggregation hubs and the 5G core.',
     gear: 'Ciena 5164 and 5166 cell-site and pre-aggregation routers',
@@ -231,6 +236,7 @@ export const CITIES = [
   C('leafdale', 'Leafdale', -26, 36, 3, { side: 1, town: true }),
   C('spinehill', 'Spinehill', 20, -42, 3, { side: 1, town: true }),
   C('brightwater', 'Labelbrook', -38, -16, 3, { side: 1, town: true }),
+  C('popcorn', 'Popcorn Hill', 32, 13, 3, { side: 1, town: true }),
 ];
 export const CITY = Object.fromEntries(CITIES.map((c) => [c.id, c]));
 
@@ -296,6 +302,11 @@ const PLACED = [
   AGG('ag_n', 'Coreburg North aggregation', 7, -18),
   AGG('ag_e', 'Coreburg East aggregation', 19, 5),
   AGG('ag_s', 'Coreburg South aggregation', 4, 19),
+
+  // Popcorn Hill: homes on fibre, and a streaming cache next to the East aggregation router
+  NB('olt_e', 'olt', 'Coreburg East OLT', 27, 9, ['pon'], { role: 'PON head-end: one port serves up to 32 homes through a splitter' }),
+  NB('spl_pop', 'splitter', 'Popcorn Hill splitter', 31, 13, ['pon'], { role: 'Passive 1:32 splitter in a street cabinet, no power needed' }),
+  NB('cdn_e', 'cache', 'Couchwave cache', 23, 0, ['agg'], { role: 'Streaming cache (CDN) inside the network: popular titles are served from here, not from across the internet' }),
 
   XHUB('xh_bright', 'brightwater', -38, -16),
   XHUB('xh_spine', 'spinehill', 20, -42),
@@ -389,6 +400,9 @@ const LINKS = [
   L('agg', 'ag_s', 'ag_w'),
   L('agg', 'ag_w', 'cr_c1'),
   L('agg', 'ag_e', 'cr_c2'),
+  L('agg', 'ag_e', 'olt_e'),
+  L('agg', 'ag_e', 'cdn_e'),
+  L('pon', 'olt_e', 'spl_pop'),
 
   // 5G xhaul: hubs on a ring round the countryside, uplinked into the core at two points
   L('xhaul', 'xh_bright', 'cr_gw', { via: [[-50, -4]] }),
@@ -400,25 +414,37 @@ const LINKS = [
 // Rings of customers: leave one site, pass each customer in turn, come back into
 // another site, so every customer has two ways home.
 
+// The 5G RAN split (3GPP / O-RAN): the radio unit (RU) is up the mast, the
+// distributed unit (DU) runs the real-time part of the radio stack, and the central
+// unit (CU) runs the rest. A D-RAN site keeps its DU at the foot of the mast and
+// sends midhaul to its CU; a C-RAN site has only the RU and sends fronthaul to a DU
+// pool at a hub. The CUs sit at the two hubs that uplink into the core, and send
+// backhaul on to the 5G core. Fronthaul runs RU→DU, midhaul DU→CU, backhaul CU→core.
+const CRAN = (du, cu) => ({ du, cu });
+const DRAN = (cu) => ({ cu });
+
 const ACCESS_RINGS = [
   // business access in Coreburg, between aggregation routers
   { layer: 'access', from: 'ag_n', to: 'ag_e', stops: [['office', 9, -9], ['bank', 14, -4]] },
   { layer: 'access', from: 'ag_s', to: 'ag_w', stops: [['hospital', -5, 12], ['school', -11, 4]] },
   { layer: 'access', from: 'ag_e', to: 'ag_s', stops: [['office', 14, 8], ['bank', 10, 13]] },
-  // the 5G ring: cell sites between pre-aggregation hubs
-  { layer: 'xhaul', from: 'xh_bright', to: 'xh_spine', stops: [['tower', -30, -28], ['tower', -4, -44]] },
-  { layer: 'xhaul', from: 'xh_spine', to: 'xh_east', stops: [['tower', 38, -40]] },
-  { layer: 'xhaul', from: 'xh_east', to: 'xh_south', stops: [['tower', 52, 14]] },
-  { layer: 'xhaul', from: 'xh_south', to: 'xh_leaf', stops: [['tower', 16, 40], ['tower', -6, 42]] },
-  { layer: 'xhaul', from: 'xh_leaf', to: 'xh_bright', stops: [['tower', -32, 12]] },
+  // the 5G ring: cell sites between pre-aggregation hubs, each with its RAN split (CRAN or DRAN, above)
+  { layer: 'xhaul', from: 'xh_bright', to: 'xh_spine', stops: [['tower', -30, -28, CRAN('xh_bright', 'xh_bright')], ['tower', -4, -44, DRAN('xh_bright')]] },
+  { layer: 'xhaul', from: 'xh_spine', to: 'xh_east', stops: [['tower', 38, -40, DRAN('xh_east')]] },
+  { layer: 'xhaul', from: 'xh_east', to: 'xh_south', stops: [['tower', 52, 14, CRAN('xh_south', 'xh_east')]] },
+  { layer: 'xhaul', from: 'xh_south', to: 'xh_leaf', stops: [['tower', 16, 40, CRAN('xh_south', 'xh_east')], ['tower', -6, 42, DRAN('xh_east')]] },
+  { layer: 'xhaul', from: 'xh_leaf', to: 'xh_bright', stops: [['tower', -32, 12, CRAN('xh_bright', 'xh_bright')]] },
 ];
+
+// Homes on Popcorn Hill, round the splitter.
+const SOFA_STREET = [[35, 10], [36, 14], [34, 17], [30, 17.5], [27, 15.5]];
 
 export const ENDPOINT = {
   bank: { label: 'Bank branch', gear: 'Ciena 3900 series NID, Ethernet business service' },
   office: { label: 'Corporate office', gear: 'Ciena 3900 series NID, 10G business Ethernet' },
   hospital: { label: 'Hospital', gear: 'Ciena 5100 series router, protected dual-homed service' },
   school: { label: 'School', gear: 'Ciena 3900 series NID, 1G Ethernet' },
-  tower: { label: 'Cell tower', gear: 'Ciena 5164 cell-site router, 5G fronthaul and backhaul' },
+  tower: { label: 'Cell tower', gear: 'Ciena 5164 cell-site router, 5G fronthaul, midhaul and timing' },
   factory: { label: 'Factory', gear: 'Ciena 3900 series NID, private line' },
   hotel: { label: 'Resort hotel', gear: 'Ciena 3900 series NID, business Ethernet' },
 };
@@ -511,14 +537,31 @@ export function buildWorld() {
   };
   ACCESS_RINGS.forEach(({ layer, from, to, stops }, r) => {
     let prev = from;
-    stops.forEach(([type, x, z], i) => {
+    stops.forEach(([type, x, z, split], i) => {
       const e = NB(`end_${r}_${i}`, type, pick(type), x, z, [layer], { role: ENDPOINT[type].label, gear: ENDPOINT[type].gear });
+      if (split) e.ran = { du: split.du ?? e.id, cu: split.cu };
       nodes.push(e); byId[e.id] = e;
       links.push(L(layer, prev, e.id));
       prev = e.id;
     });
     links.push(L(layer, prev, to));
   });
+
+  // homes on Popcorn Hill, each on its own fibre from the street splitter
+  SOFA_STREET.forEach(([x, z], i) => {
+    const h = NB(`home_${i}`, 'home', `${i + 1} Sofa Street`, x, z, ['pon'], { role: 'Fibre-to-the-home subscriber' });
+    nodes.push(h); byId[h.id] = h;
+    links.push(L('pon', 'spl_pop', h.id));
+  });
+
+  // each hub's share of the RAN: the C-RAN sites whose DUs it pools, and the DUs its CU serves
+  for (const h of nodes) {
+    if (h.type !== 'xhub') continue;
+    const sites = nodes.filter((n) => n.ran);
+    const pool = sites.filter((n) => n.ran.du === h.id).map((n) => n.id);
+    const cu = [...new Set(sites.filter((n) => n.ran.cu === h.id).map((n) => n.ran.du))];
+    if (pool.length || cu.length) h.ran = { pool, cu };
+  }
 
   // RLS line amplifiers along the countrywide spans.
   for (const link of links) {
@@ -601,6 +644,10 @@ function gearFor(n) {
     case 'agg': return 'Ciena 5170 aggregation router';
     case 'xhub': return 'Ciena 5166 pre-aggregation router';
     case 'ixp': return 'Peering on Ciena 8100 Coherent Routers';
+    case 'olt': return 'Ciena XGS-PON OLT, 10 Gb/s shared down each fibre';
+    case 'splitter': return 'Passive optical splitter, 1:32';
+    case 'home': return 'ONT, Wi-Fi router and a smart TV streaming Couchwave';
+    case 'cache': return 'Couchwave CDN cache servers, embedded in the network';
     default: return '';
   }
 }
@@ -652,12 +699,13 @@ export const MAJORS = [
     owns: (l) => l.layer === 'ipcore',
   },
   {
-    id: 'aggregation', side: 1, name: 'Metro aggregation', color: LAYER.agg.color, layers: ['agg', 'access'],
+    id: 'aggregation', side: 1, name: 'Metro aggregation', color: LAYER.agg.color, layers: ['agg', 'access', 'pon'],
     area: { ...COREBURG, r: 20 },
-    blurb: 'A segment-routed aggregation ring round Coreburg, homed on both core routers, with business Ethernet rings looping past banks, offices, a hospital and a school between its routers.',
-    place: 'The ring of downtown Coreburg round the core',
-    region: [[0, 2, 24]],
-    owns: (l) => l.layer === 'agg' || l.layer === 'access',
+    blurb: 'A segment-routed aggregation ring round Coreburg, homed on both core routers, with business Ethernet rings looping past banks, offices, a hospital and a school between its routers, and fibre to the homes of Popcorn Hill, streaming from a cache in the network.',
+    place: 'The ring of downtown Coreburg round the core, and Popcorn Hill',
+    region: [[0, 2, 24], [31, 12, 8]],
+    fit: 1.15,   // Popcorn Hill reaches out east, so stand back a little to keep it clear of the edge
+    owns: (l) => l.layer === 'agg' || l.layer === 'access' || l.layer === 'pon',
   },
   {
     id: 'xhaul', side: 1, name: '5G mobile xhaul', color: LAYER.xhaul.color, layers: ['xhaul'],

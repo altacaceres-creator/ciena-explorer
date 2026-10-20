@@ -118,6 +118,33 @@ test('no customer, cell site or ring site hangs off a single link', () => {
   for (const n of world.nodes.filter((x) => x.type === 'xhub')) assert.ok(degree(n.id, 'xhaul') >= 2, n.id);
 });
 
+// Fronthaul RU→DU, midhaul DU→CU, backhaul CU→core: every cell site has all three parts.
+test('5G RAN split: every cell site has an RU, a DU and a CU, and every CU uplinks to the core', () => {
+  const towers = world.nodes.filter((n) => n.type === 'tower');
+  assert.ok(towers.some((n) => n.ran.du === n.id) && towers.some((n) => n.ran.du !== n.id), 'both D-RAN and C-RAN sites');
+  for (const t of towers) {
+    assert.ok(t.ran, `${t.id} has no RAN split`);
+    const du = world.byId[t.ran.du], cu = world.byId[t.ran.cu];
+    assert.ok(du === t || (du?.type === 'xhub' && du.ran.pool.includes(t.id)), `${t.id}: DU at ${t.ran.du}`);
+    assert.ok(cu?.type === 'xhub' && cu.ran.cu.includes(t.ran.du), `${t.id}: CU at ${t.ran.cu}`);
+    assert.ok(world.links.some((l) => l.layer === 'xhaul' && [l.a, l.b].includes(cu.id) && world.byId[l.a === cu.id ? l.b : l.a].type === 'core'),
+      `${t.id}: CU ${cu.id} has no backhaul uplink to the core`);
+  }
+  for (const h of world.nodes.filter((n) => n.ran?.pool)) {
+    const cus = new Set(h.ran.pool.map((id) => world.byId[id].ran.cu));
+    assert.equal(cus.size, h.ran.pool.length ? 1 : 0, `${h.id}: one DU pool, one CU`);
+  }
+});
+
+// Popcorn Hill: home → splitter → OLT → aggregation, with the streaming cache a hop away.
+test('home fibre: every home reaches the streaming cache through the splitter and the OLT', () => {
+  const homes = world.nodes.filter((n) => n.type === 'home');
+  assert.ok(homes.length >= 4);
+  const link = (a, b) => world.links.some((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+  for (const h of homes) assert.ok(link(h.id, 'spl_pop') && h.links.length === 1, `${h.id} hangs off the splitter`);
+  assert.ok(link('spl_pop', 'olt_e') && link('olt_e', 'ag_e') && link('ag_e', 'cdn_e'));
+});
+
 test('on side A each network keeps to its own part of the country', () => {
   const at = (pred) => world.nodes.filter((n) => n.side === 0 && pred(n));
   for (const n of at((x) => x.id.startsWith('bb_'))) assert.ok(n.x > -66 && n.x < -10, `ROADM ${n.id} at x=${n.x}`);
@@ -154,7 +181,7 @@ test('the sites that define each network stand inside its region on the globe', 
     longhaul: (n) => n.id.startsWith('bb_'),
     metro: (n) => n.type === 'dc' && n.side === 0 && n.id !== 'dc_isla' || n.type === 'hub',
     ipcore: (n) => n.type === 'core' || n.type === 'ixp',
-    aggregation: (n) => n.type === 'agg' || n.id.startsWith('end_') && n.layers[0] === 'access',
+    aggregation: (n) => ['agg', 'olt', 'splitter', 'home', 'cache'].includes(n.type) || n.id.startsWith('end_') && n.layers[0] === 'access',
     xhaul: (n) => n.type === 'xhub' || n.type === 'tower',
   };
   const bad = [];
