@@ -107,3 +107,21 @@ test('the whole story, then saved progress is checked and a restart keeps the be
   restartStory(s);
   assert.deepEqual([s.unlocked, s.score, s.best], [[], 0, best]);
 });
+
+test('two levels: the packet world closes with a final exam at the core, then across the ocean', async () => {
+  const { STORY_LEVELS, levelOf, examAt } = await import('../js/story.js');
+  assert.deepEqual(STORY_LEVELS.flatMap((l) => l.chapters), STORY_ORDER);
+  assert.equal(levelOf('xhaul').n, 1);
+  assert.equal(levelOf('submarine').n, 2);
+  for (const l of STORY_LEVELS) assert.ok(l.name.plain && l.name.eng);
+  const exam = examAt('ipcore');
+  assert.equal(exam.length, 5, 'the core\'s three, plus one from the towers and one from the city');
+  assert.ok(STORY.ipcore.questions.every((q) => exam.includes(q)));
+  assert.equal(examAt('aggregation'), null);
+  assert.equal(examAt('longhaul'), null, 'level 2 has no exam yet');
+  // an exam is a challenge like any other, just longer
+  const c = startChallenge('ipcore', () => 0.999, exam);
+  for (let i = 0; i < exam.length; i++) answer(c, c.order[c.i].indexOf(0), 0);
+  assert.equal(c.over, 'won');
+  for (const id of STORY_ORDER) assert.ok(STORY[id].recap.plain.length > 150 && STORY[id].recap.eng.length > 150, `${id} has a longer recap`);
+});

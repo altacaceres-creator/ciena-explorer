@@ -188,6 +188,16 @@ in the card, played by touch, click or the keys 1, 2 and 3:
   queue you drop them in: calls and clocks in the fast lane (EF), work in business
   (AF), the web and the elephant flows in best effort. The uplink serves EF first; a
   call behind a backup, or an elephant in the fast lane, is a dropped call.
+- **Packet Race** (core): your video packet races Lord Lag's from Gateway Bay to
+  Edgewater three times. At each router you pick the next hop; the elephants jam a
+  different road each race, while Lord Lag always takes the shortest one. In the last
+  race a fibre is cut in front of you. Win two of the three.
+
+The networks come in two levels. **Level 1, the packet world** (towers, city, core)
+closes with a **final exam** after Packet Race: the core's three questions and one
+from each earlier stop. Then **Level 2, across the ocean**, starts with the undersea
+cables. Every win card tells the story of your game in numbers, why you won, and a
+longer paragraph on what that means in a real network.
 
 The networks without a game yet ask three quick questions instead (a 20-second clock,
 two lives), until theirs is built. Losing is **You died**, with what that would mean in
@@ -231,14 +241,14 @@ inlined, so it can be shared as one file.
 | `js/basics.js` | the introduction-to-networking topics for each network (Explorer mode) |
 | `js/vocab.js` | the two reading modes: every name, label and sentence the HUD prints, in plain words and in the trade's |
 | `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, each chapter's villain, taunt, questions, win and loss in both readings, and the rules (points, lives, ranks, saved progress) |
-| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result) plus a 2D-canvas draw: Keep the Beat and Packet Tetris |
+| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Keep the Beat, Packet Tetris and Packet Race |
 | `js/game.js` | the Quest on screen: the start screen, the score bar and the challenge card; reaches the globe only through the hooks main.js hands it |
 | `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos and the Quest's cloud cover, the airliner, switching views, labels, picking, the site card |
 | `css/net.css` | the HUD, and the Engineer theme as a second set of tokens |
 | `test/tech.test.mjs` | every topic's steps, in both modes, touch only that network's sites and links; Explorer's vocabulary covers every site and network without jargon; the brief's technologies are where it asked |
 | `test/world.test.mjs` | data checks: links resolve, transport on side A and data on side B, gear and fibre on land, subsea cables at sea, no two cables run alongside each other, every ROADM and core router has 3+ routes, no customer or cell site on a spur, the VPN offices on three different core routers, every cell site has an RU, DU and CU and every CU an uplink, every home reaches the streaming cache, the six networks own their own links, each network's sites stand inside its region |
 | `test/story.test.mjs` | the Quest covers every network once (side B, then the ocean, then side A), every line has both readings, and the rules score, lose, win, unlock in order and reload saved progress safely |
-| `test/minigames.test.mjs` | robots play the mini-games: a perfect player wins, an idle one loses, calls in best effort or elephants in the fast lane lose Packet Tetris |
+| `test/minigames.test.mjs` | robots play the mini-games: a perfect player wins, an idle one loses, calls in best effort or elephants in the fast lane lose Packet Tetris, and following Lord Lag's shortest road loses Packet Race |
 | `build.mjs` | bundles everything into `dist/netlandia.html`, and fails if two modules declare the same top-level name |
 | `vendor/` | three.js r160 and OrbitControls (MIT) |
 

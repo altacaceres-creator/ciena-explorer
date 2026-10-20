@@ -245,12 +245,15 @@ win or lose, so the levels can be built and reviewed one PR at a time.
 |---|---|
 | 5G mobile xhaul | **Keep the Beat** (mini-game) |
 | Metro aggregation | **Packet Tetris** (mini-game) |
-| IP/MPLS core | three questions, until **Packet Race** |
+| IP/MPLS core | **Packet Race** (mini-game), then the **Level 1 final exam** |
 | Submarine | three questions, until **The Deep Boss** |
 | Metro optical | three questions, until **Rainbow Packing** |
 | Long-haul | three questions, until **Mesh Rescue** |
 
-## Later
+## Levels
 
-- Group the scenes into bigger levels: **Level 1** the packet world (side B), then a **submarine phase**
-  that crosses the ocean, then **Level 2** the optical side.
+- **Level 1, the packet world**: cell towers, city, core. Its last stop plays Packet Race and then a
+  **final exam** (the core's questions plus one from each earlier stop) that closes the level.
+- **Level 2, across the ocean**: the undersea cables first, then the metro optical ring and the long haul.
+- Every win card has a longer summary: your game in numbers, why you won, and what it means in a real
+  network.

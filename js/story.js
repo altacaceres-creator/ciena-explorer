@@ -12,6 +12,23 @@
 // optical networks of side A.
 export const STORY_ORDER = ['xhaul', 'aggregation', 'ipcore', 'submarine', 'metro', 'longhaul'];
 
+// The networks are played in two levels. The first ends with a final exam at its last
+// stop: the core's questions and one from each earlier stop, on the whole packet world.
+export const STORY_LEVELS = [
+  {
+    n: 1, chapters: ['xhaul', 'aggregation', 'ipcore'],
+    name: { plain: 'The packet world', eng: 'Side B: the packet network' },
+    exam: () => [...STORY.ipcore.questions, STORY.xhaul.questions[1], STORY.aggregation.questions[1]],
+  },
+  {
+    n: 2, chapters: ['submarine', 'metro', 'longhaul'],
+    name: { plain: 'Across the ocean', eng: 'Subsea and optical transport' },
+  },
+];
+export const levelOf = (id) => STORY_LEVELS.find((l) => l.chapters.includes(id));
+// the questions that close a level, asked after the game at its last stop
+export const examAt = (id) => { const l = levelOf(id); return l?.exam && l.chapters.at(-1) === id ? l.exam() : null; };
+
 // One rank per network won back; the first is where everyone starts.
 export const STORY_RANKS = ['Apprentice', 'Technician', 'Engineer', 'Senior engineer', 'Architect', 'Principal architect', 'Chief of the NOC'];
 
@@ -52,6 +69,11 @@ export const STORY = {
       plain: 'A copy close to home, a fast lane for calls and a ring that can turn round: that is how real city networks keep films and calls smooth.',
       eng: 'CDN caching keeps the hits off the core, strict-priority EF protects voice from elephant flows, and G.8032 with CFM switches the ring in under 50 ms.',
     },
+    // the longer summary on the win card: what you just did, in a real network
+    recap: {
+      plain: 'Every home in Popcorn Hill got the premiere from a copy a few hops away, so the show started at once and the main routers carried each film only once. On the road out of the city, calls and clock messages got the fast lane, work had its own lane, and the giant backups waited in "everything else", where waiting hurts nobody. Real city networks sort every packet like this, all day, so a backup never freezes a phone call.',
+      eng: 'Hits came from the Couchwave cache beside the East aggregation router, so the core carried each title once. On the 5170 uplink, voice and PTP sat in EF with strict priority, business in AF, and the elephant flows in best effort, where a little delay costs nothing. The scheduler drains EF first, which is why voice survives a full uplink: that is hierarchical QoS doing its job on every aggregation router.',
+    },
   },
 
   xhaul: {
@@ -85,6 +107,11 @@ export const STORY = {
     why: {
       plain: 'Phone towers share the air, so they must keep perfect time, and the signal computers must sit close to their radios.',
       eng: 'TDD radio needs tight phase sync, and eCPRI fronthaul has a latency budget of about 100 µs, which limits how far a DU can sit from its RU.',
+    },
+    // the longer summary on the win card: what you just did, in a real network
+    recap: {
+      plain: 'Phone towers share the same air, so they take turns to talk, and that only works if they all agree on the time to a millionth of a second. You kept their clock messages moving on the beat even with the Jitterbugs shoving them. In a real network those messages ride the very first lane, and the computer that turns radio into data sits close to the mast so it can answer in time.',
+      eng: 'TDD cells transmit in turns, so every cell site needs phase alignment within about a microsecond. PTP carries that time over the xhaul ring, and delay variation (the Jitterbugs) is what breaks it, so PTP and eCPRI fronthaul ride the top strict-priority queue. The same budget limits where the DU can sit: on the mast in D-RAN, or pooled at a hub in C-RAN.',
     },
   },
 
@@ -120,6 +147,11 @@ export const STORY = {
       plain: 'Real core routers can pick the road for each kind of traffic and keep a spare road ready, so one jam or break does not stop everyone.',
       eng: 'Segment routing puts the path in the packet: SR-TE steers one flow off a hot link, and TI-LFA keeps a loop-free backup ready before anything fails.',
     },
+    // the longer summary on the win card: what you just did, in a real network
+    recap: {
+      plain: 'The morning backups jammed the short road through Coreburg, so you sent the video call round another way, and when a fibre was cut you found a way round it too. Real core routers do this: the first router writes the route into the packet as a list of stops, so one important call can skip a jam without moving everything else, and every router keeps a spare road ready before anything breaks.',
+      eng: 'You were the SR-TE head end: the segment list in the packet steered the EF video round congestion while the IGP kept the bulk on the shortest path. When the link failed, the right move was a precomputed alternative, which is what TI-LFA installs on every node so traffic moves in under 50 ms instead of waiting for the IGP to reconverge.',
+    },
   },
 
   submarine: {
@@ -153,6 +185,11 @@ export const STORY = {
     why: {
       plain: 'Real undersea cables have boosters along the sea floor, and islands land more than one cable, so one break does not cut them off.',
       eng: 'Powered repeater chains keep the optical signal up for thousands of kilometres, and diverse cables and landings turn a cut into a repair job, not an outage.',
+    },
+    // the longer summary on the win card: what you just did, in a real network
+    recap: {
+      plain: 'Undersea cables carry almost everything that crosses an ocean. Every so often along the sea floor a booster lifts the light again, powered through the cable itself from the shore. Because anchors and earthquakes do cut cables, islands land more than one, so their traffic can move to the other while a repair ship sails out.',
+      eng: 'Subsea systems are chains of powered optical repeaters between landing stations, with the line terminals on shore. Cuts from anchors and trawling are routine, so operators plan diverse cables and landings and restore traffic onto a surviving system while the repair ship works. Capacity is planned with that restoration in mind.',
     },
   },
 
@@ -188,6 +225,11 @@ export const STORY = {
       plain: 'Many colours of light share one fibre, and each stop only touches the colours it needs, so one fibre carries a whole city.',
       eng: 'DWDM puts many waves on one fibre pair, and ROADMs add, drop or express each one optically, so capacity grows without new glass.',
     },
+    // the longer summary on the win card: what you just did, in a real network
+    recap: {
+      plain: 'One glass fibre in Lumen City carries many conversations at once, each in its own colour of light. At every stop, a few colours get on or off and the rest pass straight through, never slowing down. The two data centers got their own very fast colours between them, so copying huge amounts of data never gets in anyone\'s way.',
+      eng: 'DWDM puts dozens of waves on one fibre pair, and the ROADM at each node adds, drops or expresses each wave optically. Planning the spectrum well, without stranding gaps, is what lets the ring take new services without new glass, like the 400G coherent DCI waves between the two data centers.',
+    },
   },
 
   longhaul: {
@@ -222,6 +264,11 @@ export const STORY = {
       plain: 'The light highway is a web of roads with smart crossroads, so the network can always find another way.',
       eng: 'A CDC ROADM mesh lets the control plane re-route any wave after one cut after another, as long as the capacity was planned for it.',
     },
+    // the longer summary on the win card: what you just did, in a real network
+    recap: {
+      plain: 'The country\'s light highway is a web of long fibres between towns, with small huts that boost the light along the way. Because it is a web and not a single line, the network found a new road after every cut, and the smart crossroads let any colour of light turn any way. That is how a whole country stays connected through a storm.',
+      eng: 'The long-haul RLS network is a mesh of CDC ROADMs with in-line amplifier huts along each span. Because any wave can be switched in any direction, the control plane restores services after one cut after another, as long as capacity was planned for it. That is the difference between a storm and an outage.',
+    },
   },
 };
 
@@ -254,13 +301,12 @@ export const isUnlocked = (s, id) => s.unlocked.includes(id);
 export const rankOf = (s) => STORY_RANKS[Math.min(s.unlocked.length, STORY_RANKS.length - 1)];
 export const storyDone = (s) => s.unlocked.length === STORY_ORDER.length;
 
-// One attempt at a chapter's challenge: questions in a shuffled order of answers,
+// One attempt at a chapter's questions (or a level's exam): answers shuffled,
 // lives, and the points earned so far (which only count if it is won).
-export function startChallenge(id, random = Math.random) {
-  const ch = STORY[id];
+export function startChallenge(id, random = Math.random, questions = STORY[id].questions) {
   return {
-    id, i: 0, lives: STORY_LIVES, points: 0, mistakes: 0, over: null,
-    order: ch.questions.map(() => shuffle([0, 1, 2], random)),
+    id, questions, i: 0, lives: STORY_LIVES, points: 0, mistakes: 0, over: null,
+    order: questions.map(() => shuffle([0, 1, 2], random)),
   };
 }
 // Answer the current question with the answer at screen position `pick` (or null when
@@ -272,7 +318,7 @@ export function answer(c, pick, seconds) {
   c.points += points;
   if (!right) { c.mistakes++; c.lives--; }
   if (c.lives <= 0) c.over = 'lost';
-  else if (++c.i >= STORY[c.id].questions.length) {
+  else if (++c.i >= c.questions.length) {
     c.over = 'won';
     if (!c.mistakes) c.points += FLAWLESS_BONUS;
   }

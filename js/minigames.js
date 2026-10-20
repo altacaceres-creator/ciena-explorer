@@ -27,7 +27,7 @@ const KeepTheBeat = {
   goal: { plain: 'Keep the towers in time for 35 seconds', eng: 'Hold phase sync for 35 s' },
   laneNames: { plain: ['Tower 1', 'Tower 2', 'Tower 3'], eng: ['Cell site 1', 'Cell site 2', 'Cell site 3'] },
   start(random = Math.random) {
-    return { t: 0, random, packets: [], next: 0.6, sync: 100, score: 0, combo: 0, hits: 0, misses: 0, fx: [], over: null, bugs: false };
+    return { t: 0, random, packets: [], next: 0.6, sync: 100, score: 0, combo: 0, best: 0, hits: 0, perfects: 0, misses: 0, bugged: 0, fx: [], over: null, bugs: false };
   },
   tick(s, dt) {
     if (s.over) return;
@@ -61,7 +61,9 @@ const KeepTheBeat = {
     const p = inZone.sort((a, b) => b.x - a.x)[0];
     s.packets.splice(s.packets.indexOf(p), 1);
     const perfect = Math.abs(p.x - BEAT.center) <= BEAT.perfect + 0.02;
-    s.combo++; s.hits++;
+    s.combo++; s.hits++; s.best = Math.max(s.best, s.combo);
+    if (perfect) s.perfects++;
+    if (p.bug) s.bugged++;
     s.score += Math.round((perfect ? 30 : 15) * (1 + Math.min(s.combo, 10) / 10));
     s.sync = Math.min(100, s.sync + 4);
     float(s, lane, perfect ? 'Perfect!' : 'In sync', true);
@@ -69,6 +71,11 @@ const KeepTheBeat = {
   result(s) {
     if (!s.over) return null;
     return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.sync * 2 : 0, flawless: s.misses === 0 };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You caught ${s.hits} of ${s.hits + s.misses} clock messages, ${s.perfects} of them dead on time, with a longest streak of ${s.best}. ${s.bugged} had a Jitterbug riding them and still got there on the beat. The towers ended ${Math.round(s.sync)}% in step.`
+      : `${s.hits}/${s.hits + s.misses} PTP packets delivered in the window (${s.perfects} centred, best run ${s.best}); ${s.bugged} survived Jitterbug delay variation. Final phase sync ${Math.round(s.sync)}%.`;
   },
   draw(g, s, w, h, words, theme) {
     g.clearRect(0, 0, w, h);
@@ -129,6 +136,7 @@ const PacketTetris = {
   start(random = Math.random) {
     return {
       t: 0, random, lives: SORT.lives, sorted: 0, score: 0, fx: [], over: null, elephants: false, lostLife: false,
+      right: 0, calls: 0, parked: 0, dropped: 0, full: 0,
       queues: [{ cap: 5, fill: 0, items: [] }, { cap: 6, fill: 0, items: [] }, { cap: 12, fill: 0, items: [] }],
       falling: null, wait: 0.5,
     };
@@ -173,13 +181,19 @@ const PacketTetris = {
     const quick = Math.round(10 * (1 - f.y));
     if (q.fill + k.size > q.cap) {
       // no room: the packet is dropped; for a call that is a dropped call
+      s.full++;
       if (k.home === 0) strike(s, lane, 'Queue full · call dropped!');
       else { s.score -= 5; float(s, lane, 'Queue full · dropped', false); }
       return;
     }
     q.fill += k.size;
     q.items.push({ kind: f.kind, size: k.size, left: k.size });
-    if (k.home === lane) { s.score += 20 + quick; float(s, lane, `+${20 + quick}`, true); return; }
+    if (k.home === lane) {
+      s.right++;
+      if (k.home === 0) s.calls++;
+      if (f.kind === 'elephant') s.parked++;
+      s.score += 20 + quick; float(s, lane, `+${20 + quick}`, true); return;
+    }
     if (k.home === 0) strike(s, lane, f.kind === 'sync' ? 'Clock late · out of sync!' : 'Call stuck behind the backups!');
     else if (f.kind === 'elephant' && lane === 0) strike(s, lane, 'Elephant in the fast lane!');
     else { s.score += 5; float(s, lane, 'OK, not ideal', false); }
@@ -187,6 +201,11 @@ const PacketTetris = {
   result(s) {
     if (!s.over) return null;
     return { won: s.over === 'won', points: s.over === 'won' ? Math.max(0, s.score) + s.lives * 50 : 0, flawless: !s.lostLife };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You sorted ${s.sorted} packets, ${s.right} of them into exactly the right lane. ${s.calls} calls and clocks rode the fast lane, ${s.parked} giant backup${s.parked === 1 ? '' : 's'} waited politely in "everything else", and ${s.dropped ? `${s.dropped} call${s.dropped === 1 ? ' was' : 's were'} dropped` : 'not a single call was dropped'}.`
+      : `${s.sorted} packets queued, ${s.right} correctly classified: ${s.calls} voice/PTP in EF, ${s.parked} elephant flow${s.parked === 1 ? '' : 's'} in BE, ${s.full} tail drop${s.full === 1 ? '' : 's'}, ${s.dropped} voice loss${s.dropped === 1 ? '' : 'es'}.`;
   },
   draw(g, s, w, h, words, theme) {
     g.clearRect(0, 0, w, h);
@@ -227,12 +246,223 @@ const PacketTetris = {
   },
   laneAt(x, y, w) { return Math.min(2, Math.floor((x / w) * 3)); },
 };
-function strike(s, lane, text) { s.lives--; s.lostLife = true; s.score -= 10; float(s, lane, text, false); }
+function strike(s, lane, text) { s.lives--; s.dropped++; s.lostLife = true; s.score -= 10; float(s, lane, text, false); }
 function miss(s, f) {
   s.sorted++;
   if (KINDS[f.kind].home === 0) strike(s, 1, 'Nobody queued it · call dropped!');
   else { s.score -= 5; float(s, 1, 'Dropped', false); }
 }
+
+// ---------------------------------------------------------------- Packet Race (IP/MPLS core)
+// Your video packet races Lord Lag's from Gateway Bay to Edgewater, three times. At each
+// router you pick the next hop; elephants jam different links each race, so read the
+// map before you go. Lord Lag always takes the shortest way (the IGP path). In the last
+// race a fibre is cut in front of you, and you have to find another way round.
+const RACE = { races: 3, need: 2, speed: 0.55, reconverge: 1.2 };
+const RNODES = {
+  gw: { x: 0.08, y: 0.55, plain: 'Gateway Bay', sid: 16001 },
+  c1: { x: 0.36, y: 0.78, plain: 'Coreburg 1', sid: 16002 },
+  c2: { x: 0.64, y: 0.78, plain: 'Coreburg 2', sid: 16003 },
+  np: { x: 0.5, y: 0.2, plain: 'Northport', sid: 16004 },
+  ed: { x: 0.92, y: 0.55, plain: 'Edgewater', sid: 16005 },
+};
+const RLINKS = [['gw', 'c1'], ['c1', 'c2'], ['c2', 'ed'], ['gw', 'np'], ['np', 'ed'], ['c1', 'np'], ['np', 'c2']];
+const rkey = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+const rlen = (a, b) => Math.hypot((RNODES[a].x - RNODES[b].x) * 1.6, RNODES[a].y - RNODES[b].y);
+// the morning's jams, one per race: where the elephants sit
+const JAMS = [
+  { 'c1-c2': 0.95 },                               // the backups fill the Coreburg pair: go round by Northport
+  { 'c2-ed': 0.95, 'gw-np': 0.9 },                 // now both obvious ways are jammed: Coreburg 1, then up to Northport
+  { 'c1-c2': 0.85 },                               // and in the last race a fibre is cut in front of you
+];
+function raceNeighbours(s, n) {
+  return RLINKS.filter(([a, b]) => (a === n || b === n) && !s.cut.has(rkey(a, b))).map(([a, b]) => (a === n ? b : a));
+}
+// Lord Lag's way: fewest kilometres, whatever is on the links (the plain IGP shortest path)
+function igpPath(s, from) {
+  const dist = { [from]: 0 }, prev = {}, todo = new Set(Object.keys(RNODES));
+  while (todo.size) {
+    let u = null;
+    for (const n of todo) if (dist[n] != null && (u == null || dist[n] < dist[u])) u = n;
+    if (u == null) break;
+    todo.delete(u);
+    for (const v of raceNeighbours(s, u)) { const d = dist[u] + rlen(u, v); if (dist[v] == null || d < dist[v]) { dist[v] = d; prev[v] = u; } }
+  }
+  const path = [];
+  for (let n = 'ed'; n && n !== from; n = prev[n]) path.unshift(n);
+  return path;
+}
+const racer = (at) => ({ at, to: null, p: 0, done: false, visited: new Set([at]) });
+function raceSetup(s) {
+  s.jam = JAMS[s.race] ?? {};
+  s.cut = new Set();
+  s.you = racer('gw'); s.lag = racer('gw');
+  s.lagPath = igpPath(s, 'gw'); s.lagWait = 0;
+  s.rt = 0; s.hitJam = false; s.cutDone = s.race !== 2;
+}
+// how far Lord Lag still has to go when you arrive, in seconds on clear links
+function raceLead(s) {
+  const r = s.lag;
+  if (r.done) return 0;
+  let d = r.to ? (1 - r.p) * rlen(r.at, r.to) : 0, n = r.to ?? r.at;
+  for (const m of igpPath(s, n)) { d += rlen(n, m); n = m; }
+  return d / RACE.speed;
+}
+function raceMove(s, r, dt) {
+  if (r.done || !r.to) return;
+  const jam = s.jam[rkey(r.at, r.to)] ?? 0;
+  r.p += (RACE.speed / (1 + 3 * jam)) * dt / rlen(r.at, r.to);
+  if (r.p >= 1) { r.at = r.to; r.to = null; r.p = 0; r.visited.add(r.at); if (r.at === 'ed') r.done = true; }
+}
+const PacketRace = {
+  id: 'race',
+  name: { plain: 'Packet Race', eng: 'Packet Race' },
+  how: {
+    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3). Elephants 🐘 jam different roads each race, so look before you go. Lord Lag always takes the shortest road. Win two of the three races!',
+    eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path. In race 3 a link fails: reroute. Win two of three.',
+  },
+  goal: { plain: 'Three races: beat Lord Lag in at least two', eng: 'Three races to Edgewater: win at least two' },
+  laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
+  start(random = Math.random) {
+    const s = { t: 0, random, race: 0, wins: 0, losses: 0, fx: [], over: null, margins: [], reroutes: 0, dodged: 0, between: 0, rt: 0 };
+    raceSetup(s);
+    return s;
+  },
+  // the choices at the router your packet is waiting at
+  options(s) {
+    if (s.between > 0 || s.you.done || s.you.to) return [];
+    return raceNeighbours(s, s.you.at).filter((n) => !s.you.visited.has(n)).sort((a, b) => RNODES[a].y - RNODES[b].y || RNODES[a].x - RNODES[b].x).slice(0, 3);
+  },
+  // Lord Lag's next hop from where your packet is (the IGP shortest path)
+  lagNext: (s) => igpPath(s, s.you.at)[0] ?? null,
+  // seconds to Edgewater going first to `n`, with the elephants where they are
+  timeVia(s, from, n) {
+    const cost = (a, b) => rlen(a, b) * (1 + 3 * (s.jam[rkey(a, b)] ?? 0)) / RACE.speed;
+    const dist = { [n]: 0 }, todo = new Set(Object.keys(RNODES).filter((x) => x !== from));
+    while (todo.size) {
+      let u = null;
+      for (const x of todo) if (dist[x] != null && (u == null || dist[x] < dist[u])) u = x;
+      if (u == null) break;
+      todo.delete(u);
+      for (const v of raceNeighbours(s, u)) if (todo.has(v) && (dist[v] == null || dist[u] + cost(u, v) < dist[v])) dist[v] = dist[u] + cost(u, v);
+    }
+    return cost(from, n) + (dist.ed ?? Infinity);
+  },
+  lanes(s, words) {
+    const o = PacketRace.options(s);
+    return [0, 1, 2].map((i) => (o[i] ? (words === 'plain' ? `→ ${RNODES[o[i]].plain}` : `${RNODES[o[i]].plain} · ${RNODES[o[i]].sid}`) : '—'));
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.between > 0) {
+      if ((s.between -= dt) <= 0) {
+        // all three races are run (the last one has the cut fibre), unless it is already lost
+        if (s.race === RACE.races - 1) s.over = s.wins >= RACE.need ? 'won' : 'lost';
+        else if (s.losses > RACE.races - RACE.need) s.over = 'lost';
+        else { s.race++; raceSetup(s); float(s, 1, `Race ${s.race + 1}!`, true); }
+      }
+      return;
+    }
+    s.rt += dt;
+    // race 3: a fibre fails right in front of you
+    if (!s.cutDone && s.rt > 1.2 && s.you.at !== 'gw') {
+      const ahead = s.you.to ?? s.you.at;
+      const victim = RLINKS.map(([a, b]) => rkey(a, b)).find((k) => k.includes(ahead) && k.includes('ed')) ?? 'c2-ed';
+      s.cut.add(victim); s.cutDone = true;
+      float(s, 1, '✂ Fibre cut!', false);
+      // a packet on the cut link turns back to where it came from
+      if (s.you.to && rkey(s.you.at, s.you.to) === victim) { s.you.to = null; s.you.p = 0; }
+      if (s.lag.to && rkey(s.lag.at, s.lag.to) === victim) { s.lag.to = null; s.lag.p = 0; }
+      // if the cut is on Lord Lag's way, his IGP has to reconverge before he moves on
+      const onHisWay = [s.lag.at, ...s.lagPath].some((n, i, a) => i && rkey(a[i - 1], n) === victim);
+      if (onHisWay) { s.lagPath = igpPath(s, s.lag.to ?? s.lag.at); s.lagWait = RACE.reconverge; }
+      s.reroutes++;
+    }
+    if (!s.lag.to && !s.lag.done && (s.lagWait -= dt) <= 0) {
+      s.lagPath = igpPath(s, s.lag.at);
+      s.lag.to = s.lagPath[0] ?? null;
+    }
+    raceMove(s, s.you, dt);
+    raceMove(s, s.lag, dt);
+    // first to Edgewater wins the race; a dead heat goes to you
+    if (s.you.done) {
+      s.margins.push(raceLead(s)); s.wins++;
+      if (!s.hitJam) s.dodged++;
+      float(s, 1, 'You beat Lord Lag!', true);
+      s.between = 1.6;
+    } else if (s.lag.done) {
+      s.losses++;
+      float(s, 1, 'Lord Lag got there first', false);
+      s.between = 1.6;
+    }
+  },
+  press(s, lane) {
+    if (s.over) return;
+    const o = PacketRace.options(s);
+    if (!o[lane]) return;
+    if ((s.jam[rkey(s.you.at, o[lane])] ?? 0) > 0.5) s.hitJam = true;
+    s.you.to = o[lane]; s.you.p = 0;
+  },
+  result(s) {
+    if (!s.over) return null;
+    const points = s.margins.reduce((p, m) => p + 150 + Math.round(Math.min(m, 4) * 40), 0);
+    return { won: s.over === 'won', points: s.over === 'won' ? points : 0, flawless: s.losses === 0 };
+  },
+  summary(s, words) {
+    const best = s.margins.length ? Math.max(...s.margins).toFixed(1) : null;
+    return words === 'plain'
+      ? `You won ${s.wins} of ${s.wins + s.losses} races${best ? `, and your best beat Lord Lag by ${best} seconds` : ''}. You went round the jams ${s.dodged} time${s.dodged === 1 ? '' : 's'}${s.reroutes ? ' and found a way round the cut fibre' : ''}.`
+      : `${s.wins}–${s.losses} against the IGP path${best ? `, best margin ${best} s` : ''}. Congested segments avoided ${s.dodged}×${s.reroutes ? '; rerouted after the link failure while the IGP was still reconverging' : ''}.`;
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    hud(g, w, theme, `Race ${Math.min(s.race + 1, RACE.races)} / ${RACE.races} · You ${s.wins} – ${s.losses} Lord Lag`, s.wins / RACE.need, PacketRace.result({ ...s, over: 'won' }).points, null);
+    const top = 34, P = (n) => [24 + (w - 48) * RNODES[n].x, top + 10 + (h - top - 30) * RNODES[n].y];
+    const opts = PacketRace.options(s);
+    for (const [a, b] of RLINKS) {
+      const [ax, ay] = P(a), [bx, by] = P(b), k = rkey(a, b), jam = s.jam[k] ?? 0, cut = s.cut.has(k);
+      g.strokeStyle = cut ? theme.muted : jam > 0.5 ? theme.bad : theme.muted;
+      g.lineWidth = cut ? 2 : jam > 0.5 ? 6 : 4;
+      g.setLineDash(cut ? [6, 6] : []);
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+      g.setLineDash([]);
+      const mx = (ax + bx) / 2, my = (ay + by) / 2;
+      if (cut) emoji(g, '✂', mx, my, 20);
+      else for (let e = 0; e < Math.round(jam * 3); e++) emoji(g, '🐘', mx + (e - 1) * 22, my - 14, 20);
+    }
+    // the numbers for your next hop, on the links you can take
+    opts.forEach((n, i) => {
+      const [ax, ay] = P(s.you.at), [bx, by] = P(n);
+      const x = ax + (bx - ax) * 0.42, y = ay + (by - ay) * 0.42;
+      g.fillStyle = theme.accent; g.beginPath(); g.arc(x, y, 13, 0, 7); g.fill();
+      g.fillStyle = '#ffffff'; g.font = `800 13px ${theme.font}`; g.textAlign = 'center'; g.fillText(String(i + 1), x, y + 5);
+    });
+    for (const n of Object.keys(RNODES)) {
+      const [x, y] = P(n), lbl = words === 'plain' ? RNODES[n].plain : `${RNODES[n].plain} · ${RNODES[n].sid}`;
+      g.font = `800 12px ${theme.font}`; const tw = g.measureText(lbl).width;
+      g.fillStyle = theme.paper; roundRect(g, x - tw / 2 - 8, y - 12, tw + 16, 24, 8); g.fill();
+      g.strokeStyle = n === 'ed' || n === 'gw' ? theme.accent : theme.ink; g.lineWidth = 2; g.stroke();
+      g.fillStyle = theme.ink; g.textAlign = 'center'; g.fillText(lbl, x, y + 4);
+    }
+    const dot = (r, icon, off) => {
+      const [ax, ay] = P(r.at), [bx, by] = r.to ? P(r.to) : [ax, ay];
+      emoji(g, icon, ax + (bx - ax) * r.p + off, ay + (by - ay) * r.p - 22, 24);
+    };
+    dot(s.lag, '😈', 10); dot(s.you, '🎥', -10);
+    floats(g, s, () => [w / 2, top + 30], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    // a tap near one of the next routers picks it
+    if (!s) return null;
+    const top = 34, opts = PacketRace.options(s);
+    let best = null, bd = 70;
+    opts.forEach((n, i) => { const d = Math.hypot(24 + (w - 48) * RNODES[n].x - x, top + 10 + (h - top - 30) * RNODES[n].y - y); if (d < bd) { bd = d; best = i; } });
+    return best;
+  },
+};
 
 // ---------------------------------------------------------------- drawing helpers
 function roundRect(g, x, y, w, h, r) {
@@ -263,4 +493,4 @@ function floats(g, s, at, theme) {
 }
 
 // Which chapter plays which game; the rest keep their questions for now.
-export const MINIGAMES = { xhaul: KeepTheBeat, aggregation: PacketTetris };
+export const MINIGAMES = { xhaul: KeepTheBeat, aggregation: PacketTetris, ipcore: PacketRace };

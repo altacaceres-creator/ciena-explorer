@@ -53,3 +53,44 @@ test('Packet Tetris: every packet in its own queue wins; calls in best effort or
   run(G, idle, 300);
   assert.equal(G.result(idle).won, false, 'a call nobody queues is dropped');
 });
+
+test('Packet Race: reading the jams beats Lord Lag, following his shortest road does not, and the cut needs a reroute', () => {
+  const G = MINIGAMES.ipcore;
+  // a smart player: the quickest way given the elephants, decided after a human-ish pause
+  const smart = G.start(seeded(5));
+  let wait = 0;
+  run(G, smart, 120, (s) => {
+    const o = G.options(s);
+    if (!o.length) { wait = 0; return; }
+    if ((wait += 1 / 60) < 0.5) return;
+    const lane = bestHop(s, o);
+    G.press(s, lane);
+  });
+  const r = G.result(smart);
+  assert.equal(r.won, true, `wins ${smart.wins} losses ${smart.losses}`);
+  assert.equal(smart.reroutes, 1, 'the fibre was cut in the last race');
+
+  // a sheep: always the hop Lord Lag would take, a moment late
+  const sheep = G.start(seeded(5));
+  wait = 0;
+  run(G, sheep, 120, (s) => {
+    const o = G.options(s);
+    if (!o.length) { wait = 0; return; }
+    if ((wait += 1 / 60) < 0.5) return;
+    const lane = o.indexOf(G.lagNext(s));
+    G.press(s, lane >= 0 ? lane : 0);
+  });
+  assert.equal(G.result(sheep).won, false, 'the shortest road is the jammed one');
+
+  const idle = G.start(seeded(5));
+  run(G, idle, 120);
+  assert.equal(G.result(idle).won, false);
+});
+
+// the hop that starts the quickest way to Edgewater, elephants included
+function bestHop(s, options) {
+  const G = MINIGAMES.ipcore;
+  let best = 0, bt = Infinity;
+  options.forEach((n, i) => { const t = G.timeVia(s, s.you.at, n); if (t < bt) { bt = t; best = i; } });
+  return best;
+}
