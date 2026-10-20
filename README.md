@@ -167,7 +167,29 @@ describes the scene using a small set of effects (`focus`, `marker`, `packet`,
 `spot`, `queue`, `anchor`); the tests run every step against the network's data to
 make sure it only touches sites and links that exist there.
 
-## Controls
+## Netlandia Quest: the story mode
+
+The first visit offers a choice: **Play the story** or **Explore freely**. In the
+story the planet starts under cloud. Lord Lag has switched Netlandia off, and each
+network is won back from one of his minions, in the order a phone's packets travel:
+the **cell towers** (the Jitterbugs), the **city's businesses and homes** (the Buffer
+Gremlin), the **core** (the Elephant Flows). That finishes the packet world on side B,
+and the **undersea cables** appear as a new discovery (the Anchor Dragger). Across the
+ocean wait the **metro optical ring** (the Spectrum Hog) and the **long-haul mesh**,
+where Lord Lag himself waits.
+
+Each network's challenge opens with the villain's taunt. For now it is three quick
+questions with a 20-second clock and two lives, and each one will be replaced by its
+mini-game (Packet Tetris, Storm Chaser, Stop the Fiber Cut…) one at a time. A wrong
+second answer is **You died**, with what that would mean in a real network. A win
+lifts the clouds, pops the landmarks back up and shows **You unlocked …** with why
+you won, and the scene can then be opened like any other. Points are 100 a right
+answer plus up to 50 for speed, with 200 more for a flawless round, and every
+network won is a rank, from Apprentice to Chief of the NOC. Progress and the best
+score stay in the browser, the ☰ menu starts over or switches to free exploring,
+and both reading modes tell the story in their own words. The full plan, with every
+mini-game, is in [`docs/game-plan.md`](docs/game-plan.md).
+
 
 - Globe: drag (one finger on a phone) spins the planet in any direction; scroll or
   pinch zooms. **Side A / Side B** in the panel spins it round to the other country;
@@ -181,7 +203,7 @@ page works offline.
 
 ```sh
 python3 -m http.server 8765     # then open http://localhost:8765/
-node --test test/world.test.mjs
+node --test                     # every test in test/
 node build.mjs                  # single-file page -> dist/netlandia.html
 ```
 
@@ -198,10 +220,13 @@ inlined, so it can be shared as one file.
 | `js/tech.js` | the technology topics for each network (Engineer mode) and the step player |
 | `js/basics.js` | the introduction-to-networking topics for each network (Explorer mode) |
 | `js/vocab.js` | the two reading modes: every name, label and sentence the HUD prints, in plain words and in the trade's |
-| `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos, the airliner, switching views, labels, picking, the site card |
+| `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, each chapter's villain, taunt, questions, win and loss in both readings, and the rules (points, lives, ranks, saved progress) |
+| `js/game.js` | the Quest on screen: the start screen, the score bar and the challenge card; reaches the globe only through the hooks main.js hands it |
+| `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos and the Quest's cloud cover, the airliner, switching views, labels, picking, the site card |
 | `css/net.css` | the HUD, and the Engineer theme as a second set of tokens |
 | `test/tech.test.mjs` | every topic's steps, in both modes, touch only that network's sites and links; Explorer's vocabulary covers every site and network without jargon; the brief's technologies are where it asked |
 | `test/world.test.mjs` | data checks: links resolve, transport on side A and data on side B, gear and fibre on land, subsea cables at sea, no two cables run alongside each other, every ROADM and core router has 3+ routes, no customer or cell site on a spur, the VPN offices on three different core routers, every cell site has an RU, DU and CU and every CU an uplink, every home reaches the streaming cache, the six networks own their own links, each network's sites stand inside its region |
+| `test/story.test.mjs` | the Quest covers every network once (side B, then the ocean, then side A), every line has both readings, and the rules score, lose, win, unlock in order and reload saved progress safely |
 | `build.mjs` | bundles everything into `dist/netlandia.html`, and fails if two modules declare the same top-level name |
 | `vendor/` | three.js r160 and OrbitControls (MIT) |
 

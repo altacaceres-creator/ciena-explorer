@@ -226,11 +226,20 @@ Example cards:
 Each level is a module of its own in `js/games/` that gets the scene and the explainer helpers and reports
 win or lose, so the levels can be built and reviewed one PR at a time.
 
-## To decide together
+## Decided
 
-- Is Lord Lag the right nemesis, or would a name from inside the company land better?
-- Does the outward order (home first, sea last) work, or should the optical side come earlier for a
-  transport audience?
-- Phone and touch support for every game, or desktop first?
-- Should the games keep score, so people at a booth can compete?
-- Which level do we build first after the shell? Packet Tetris shows the most for the least work.
+- **Lord Lag** stays the nemesis.
+- **The outward order works.** Played the way a phone's packets travel: the cell towers, the city's
+  businesses and homes, then the core. Finishing that packet world makes the undersea cables a new
+  discovery, and across the ocean wait the optical networks.
+- **The world starts under clouds.** You can't see what Netlandia looks like until you win each area
+  back, and the clouds lift one network at a time.
+- **Phone and touch** for every game.
+- **Score**, so people at a booth can compete.
+- **First, the scene-by-scene unlocks** (step 1, the shell). Each network's challenge is three quick
+  questions for now, and the mini-games replace them one at a time, starting with **Packet Tetris**.
+
+## Later
+
+- Group the scenes into bigger levels: **Level 1** the packet world (side B), then a **submarine phase**
+  that crosses the ocean, then **Level 2** the optical side.
