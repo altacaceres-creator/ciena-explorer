@@ -3505,8 +3505,9 @@ const PLAIN = { SIDE_PLAIN, LAYER_PLAIN, MAJOR_PLAIN, TYPE_PLAIN, GEAR_PLAIN };
 // optical networks of side A.
 const STORY_ORDER = ['xhaul', 'aggregation', 'ipcore', 'submarine', 'metro', 'longhaul'];
 
-// The networks are played in two levels. The first ends with a final exam at its last
-// stop: the core's questions and one from each earlier stop, on the whole packet world.
+// The networks are played in two levels. Each ends with a final exam at its last stop:
+// that stop's questions and one from each earlier stop. The second then has the fight
+// with Lord Lag.
 const STORY_LEVELS = [
   {
     n: 1, chapters: ['xhaul', 'aggregation', 'ipcore'],
@@ -3516,6 +3517,8 @@ const STORY_LEVELS = [
   {
     n: 2, chapters: ['submarine', 'metro', 'longhaul'],
     name: { plain: 'Across the ocean', eng: 'Subsea and optical transport' },
+    exam: () => [...STORY.longhaul.questions, STORY.submarine.questions[1], STORY.metro.questions[1]],
+    boss: true,     // after its exam, the fight with Lord Lag ends the story
   },
 ];
 const levelOf = (id) => STORY_LEVELS.find((l) => l.chapters.includes(id));
@@ -3866,13 +3869,13 @@ const KeepTheBeat = {
   },
   goal: { plain: `Keep the towers in time for ${BEAT.seconds} seconds`, eng: `Hold phase sync for ${BEAT.seconds} s` },
   laneNames: { plain: ['Tower 1', 'Tower 2', 'Tower 3'], eng: ['Cell site 1', 'Cell site 2', 'Cell site 3'] },
-  start(random = Math.random) {
-    return { t: 0, random, packets: [], next: 0.6, sync: 100, score: 0, combo: 0, best: 0, hits: 0, perfects: 0, misses: 0, bugged: 0, fx: [], over: null, bugs: false };
+  start(random = Math.random, opts = {}) {
+    return { len: opts.seconds ?? BEAT.seconds, t: 0, random, packets: [], next: 0.6, sync: 100, score: 0, combo: 0, best: 0, hits: 0, perfects: 0, misses: 0, bugged: 0, fx: [], over: null, bugs: false };
   },
   tick(s, dt) {
     if (s.over) return;
     s.t += dt;
-    const k = Math.min(1, s.t / BEAT.seconds);
+    const k = Math.min(1, s.t / s.len);
     if (!s.bugs && s.t > BEAT.bugsAt) { s.bugs = true; float(s, 1, '🐞 Jitterbugs!', false); }
     // a packet on the beat, coming faster as the song goes on
     if ((s.next -= dt) <= 0) {
@@ -3892,7 +3895,7 @@ const KeepTheBeat = {
     }
     for (const f of s.fx) f.t += dt;
     s.fx = s.fx.filter((f) => f.t < 1);
-    if (s.sync <= 0) { s.sync = 0; s.over = 'lost'; } else if (s.t >= BEAT.seconds) s.over = 'won';
+    if (s.sync <= 0) { s.sync = 0; s.over = 'lost'; } else if (s.t >= s.len) s.over = 'won';
   },
   press(s, lane) {
     if (s.over) return;
@@ -3920,7 +3923,7 @@ const KeepTheBeat = {
   draw(g, s, w, h, words, theme) {
     g.clearRect(0, 0, w, h);
     const top = 34, rowH = (h - top - 8) / BEAT.lanes, x0 = 64, x1 = w - 54;
-    hud(g, w, theme, `${words === 'plain' ? 'Time in step' : 'Phase sync'}`, s.sync / 100, s.score, Math.max(0, BEAT.seconds - s.t));
+    hud(g, w, theme, `${words === 'plain' ? 'Time in step' : 'Phase sync'}`, s.sync / 100, s.score, Math.max(0, s.len - s.t));
     // the hub on the left
     g.fillStyle = theme.well; roundRect(g, 8, top + 6, 44, h - top - 20, 8); g.fill();
     g.fillStyle = theme.ink; g.font = `700 11px ${theme.font}`; g.textAlign = 'center';
@@ -3973,9 +3976,9 @@ const PacketTetris = {
   },
   goal: { plain: `Sort ${SORT.goal} packets without losing three calls`, eng: `Queue ${SORT.goal} packets, three strikes and you're out` },
   laneNames: { plain: ['Fast lane', 'Business', 'Everything else'], eng: ['EF · priority', 'AF · business', 'BE · best effort'] },
-  start(random = Math.random) {
+  start(random = Math.random, opts = {}) {
     return {
-      t: 0, random, lives: SORT.lives, sorted: 0, score: 0, fx: [], over: null, elephants: false, lostLife: false,
+      goal: opts.goal ?? SORT.goal, t: 0, random, lives: SORT.lives, sorted: 0, score: 0, fx: [], over: null, elephants: false, lostLife: false,
       right: 0, calls: 0, parked: 0, dropped: 0, full: 0,
       queues: [{ cap: 5, fill: 0, items: [] }, { cap: 6, fill: 0, items: [] }, { cap: 12, fill: 0, items: [] }],
       falling: null, wait: 0.5,
@@ -4011,7 +4014,7 @@ const PacketTetris = {
     }
     for (const f of s.fx) f.t += dt;
     s.fx = s.fx.filter((f) => f.t < 1.2);
-    if (s.lives <= 0) s.over = 'lost'; else if (s.sorted >= SORT.goal) s.over = 'won';
+    if (s.lives <= 0) s.over = 'lost'; else if (s.sorted >= s.goal) s.over = 'won';
   },
   press(s, lane) {
     if (s.over || !s.falling) return;
@@ -4050,7 +4053,7 @@ const PacketTetris = {
   draw(g, s, w, h, words, theme) {
     g.clearRect(0, 0, w, h);
     const top = 34, colW = w / 3, binTop = h * 0.56, binH = h - binTop - 26;
-    hud(g, w, theme, `${s.sorted} / ${SORT.goal} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(SORT.lives - Math.max(0, s.lives))}`, s.sorted / SORT.goal, Math.max(0, s.score), null);
+    hud(g, w, theme, `${s.sorted} / ${s.goal} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(SORT.lives - Math.max(0, s.lives))}`, s.sorted / s.goal, Math.max(0, s.score), null);
     for (let i = 0; i < 3; i++) {
       const x = colW * i + 8, q = s.queues[i];
       g.fillStyle = theme.well; roundRect(g, x, binTop, colW - 16, binH, 10); g.fill();
@@ -4163,8 +4166,9 @@ const PacketRace = {
   },
   goal: { plain: 'Three races: beat Lord Lag in at least two', eng: 'Three races to Edgewater: win at least two' },
   laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
-  start(random = Math.random) {
-    const s = { t: 0, random, race: 0, wins: 0, losses: 0, fx: [], over: null, margins: [], reroutes: 0, dodged: 0, between: 0, rt: 0 };
+  start(random = Math.random, opts = {}) {
+    const first = opts.first ?? 0, races = opts.races ?? RACE.races;
+    const s = { first, races, need: opts.need ?? RACE.need, last: first + races - 1, t: 0, random, race: first, wins: 0, losses: 0, fx: [], over: null, margins: [], reroutes: 0, dodged: 0, between: 0, rt: 0 };
     raceSetup(s);
     return s;
   },
@@ -4200,8 +4204,8 @@ const PacketRace = {
     if (s.between > 0) {
       if ((s.between -= dt) <= 0) {
         // all three races are run (the last one has the cut fibre), unless it is already lost
-        if (s.race === RACE.races - 1) s.over = s.wins >= RACE.need ? 'won' : 'lost';
-        else if (s.losses > RACE.races - RACE.need) s.over = 'lost';
+        if (s.race === s.last) s.over = s.wins >= s.need ? 'won' : 'lost';
+        else if (s.losses > s.races - s.need) s.over = 'lost';
         else { s.race++; raceSetup(s); float(s, 1, `Race ${s.race + 1}!`, true); }
       }
       return;
@@ -4262,7 +4266,7 @@ const PacketRace = {
   },
   draw(g, s, w, h, words, theme) {
     g.clearRect(0, 0, w, h);
-    hud(g, w, theme, `Race ${Math.min(s.race + 1, RACE.races)} / ${RACE.races} · You ${s.wins} – ${s.losses} Lord Lag`, s.wins / RACE.need, PacketRace.result({ ...s, over: 'won' }).points, null);
+    hud(g, w, theme, `Race ${s.race - s.first + 1} / ${s.races} · You ${s.wins} – ${s.losses} Lord Lag`, s.wins / s.need, PacketRace.result({ ...s, over: 'won' }).points, null);
     const top = 34, P = (n) => [24 + (w - 48) * RNODES[n].x, top + 10 + (h - top - 30) * RNODES[n].y];
     const opts = PacketRace.options(s);
     for (const [a, b] of RLINKS) {
@@ -4307,6 +4311,554 @@ const PacketRace = {
   },
 };
 
+// ---------------------------------------------------------------- Repeater Rescue (submarine)
+// Light crosses the ocean through repeaters on the seabed. One at a time they start to
+// lose power and blink red: tap them before they go dark. Then the Anchor Dragger cuts the
+// West cable, and the island's traffic has to move to the South cable while the repair
+// ship sails out, with the South cable's repeaters to look after in turn.
+const REP = { power: 22, decide: 14, ship: 14, drain: 0.16, every: 2.6, perCable: 6, lives: 3 };
+const REP_CABLES = [
+  { from: 'Gateway Bay', to: 'Coherent Isle West', y: 0.3 },
+  { from: 'Lightmoor', to: 'Coherent Isle South', y: 0.74 },
+];
+const REP_CHOICES = [
+  { key: 'move', right: true, plain: 'Move it to the South cable', eng: 'Restore onto the South system' },
+  { key: 'wait', plain: 'Wait for the repair ship', eng: 'Wait for the cable ship' },
+  { key: 'boost', plain: 'Turn the light up', eng: 'Raise launch power' },
+];
+const repThird = (r) => Math.min(2, Math.floor((r.i * 3) / REP.perCable));
+function mixUp(a, random) {
+  a = a.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+const RepeaterRescue = {
+  id: 'repeaters',
+  name: { plain: 'Repeater Rescue', eng: 'Repeater Rescue' },
+  how: {
+    plain: 'Light crosses the ocean through boosters on the sea floor. When one blinks red it is running out of power: tap it (or press 1, 2, 3 for the west, middle or east of the sea) before it goes dark. Then watch out for the anchor!',
+    eng: 'The signal crosses the ocean through powered repeaters. A repeater blinking red is losing its power feed: tap it (or 1, 2, 3 for the west, middle or east third) before it drops. Then the Anchor Dragger cuts a cable: restore the island\'s traffic.',
+  },
+  goal: { plain: 'Keep the light crossing, and the island online', eng: 'Keep the repeaters powered and restore the island' },
+  laneNames: { plain: ['West', 'Middle', 'East'], eng: ['West third', 'Middle third', 'East third'] },
+  start(random = Math.random, opts = {}) {
+    const reps = [];
+    REP_CABLES.forEach((c, ci) => { for (let i = 0; i < REP.perCable; i++) reps.push({ cable: ci, i, u: 0.16 + (0.68 * i) / (REP.perCable - 1), power: 1, drain: 0 }); });
+    return {
+      t: 0, random, phase: 'power', pt: 0, reps, lives: REP.lives, fixed: 0, dark: 0, score: 0, fx: [], over: null,
+      next: 1.2, choices: mixUp(REP_CHOICES, random), decided: null, len: opts.seconds ?? REP.power,
+    };
+  },
+  active: (s) => (s.phase === 'power' ? 0 : s.phase === 'ship' ? 1 : null),
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt; s.pt += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    const cable = RepeaterRescue.active(s);
+    if (cable != null) {
+      // one repeater at a time starts losing power
+      if ((s.next -= dt) <= 0) {
+        const healthy = s.reps.filter((r) => r.cable === cable && !r.drain);
+        if (healthy.length) healthy[Math.floor(s.random() * healthy.length)].drain = REP.drain;
+        s.next = REP.every * (0.8 + 0.4 * s.random());
+      }
+      for (const r of s.reps) {
+        if (!r.drain) continue;
+        r.power -= r.drain * dt;
+        if (r.power <= 0) { s.lives--; s.dark++; r.power = 1; r.drain = 0; float(s, repThird(r), 'Repeater dark!', false); }
+      }
+    }
+    if (s.phase === 'power' && s.pt >= s.len) {
+      s.phase = 'anchor'; s.pt = 0;
+      for (const r of s.reps) { r.power = 1; r.drain = 0; }
+      float(s, 1, '⚓ The anchor cut the West cable!', false);
+    } else if (s.phase === 'anchor' && s.pt >= REP.decide) {
+      s.over = 'lost'; s.wrong = 'late';
+    } else if (s.phase === 'ship' && s.pt >= REP.ship) {
+      s.over = 'won'; float(s, 1, '🚢 Cable repaired!', true);
+    }
+    if (s.lives <= 0) s.over = 'lost';
+  },
+  press(s, lane) {
+    if (s.over) return;
+    if (s.phase === 'anchor') {
+      const c = s.choices[lane];
+      if (!c) return;
+      if (!c.right) { s.over = 'lost'; s.wrong = c.key; return; }
+      s.decided = s.pt; s.phase = 'ship'; s.pt = 0; s.next = 2;
+      s.score += 150 + Math.round((REP.decide - s.decided) * 10);
+      float(s, 1, 'Island back online!', true);
+      return;
+    }
+    const cable = RepeaterRescue.active(s);
+    if (cable == null) return;
+    // a tap on a repeater (10 + its index) or a third of the sea (the weakest there)
+    const r = lane >= 10 ? s.reps[lane - 10]
+      : s.reps.filter((x) => x.cable === cable && x.drain && repThird(x) === lane).sort((a, b) => a.power - b.power)[0];
+    if (!r || r.cable !== cable || !r.drain) return;
+    s.score += 20 + Math.round(r.power * 10); s.fixed++;
+    r.power = 1; r.drain = 0;
+    float(s, repThird(r), 'Powered up!', true);
+  },
+  lanes(s, words) {
+    return s.phase === 'anchor' ? s.choices.map((c) => c[words]) : RepeaterRescue.laneNames[words];
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.dark === 0 };
+  },
+  summary(s, words) {
+    const t = s.decided != null ? s.decided.toFixed(1) : null;
+    return words === 'plain'
+      ? `You powered up ${s.fixed} boosters on the sea floor${s.dark ? ` and lost ${s.dark}` : ' without letting one go dark'}. When the anchor cut the West cable, you moved the island to the South cable in ${t} seconds, and the repair ship fixed the cut.`
+      : `${s.fixed} repeater power faults cleared, ${s.dark} dropped. After the cut on the West system, traffic was restored onto the South system in ${t} s and held while the cable ship made the repair.`;
+  },
+  // the seabed: where each cable runs, as x and y for u from 0 (left shore) to 1 (the island)
+  at(c, u, w, h) {
+    const top = 34, x0 = 70, x1 = w - 86, y = top + (h - top) * REP_CABLES[c].y + Math.sin(Math.PI * u) * 22;
+    return [x0 + (x1 - x0) * u, y];
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const top = 34;
+    const phaseText = s.phase === 'power' ? (words === 'plain' ? 'Keep the light crossing' : 'Repeater power')
+      : s.phase === 'anchor' ? (words === 'plain' ? 'Move the island!' : 'Restore the traffic!') : (words === 'plain' ? 'Repair ship on its way' : 'Cable ship en route');
+    const meter = s.phase === 'power' ? s.pt / s.len : s.phase === 'anchor' ? 1 - s.pt / REP.decide : s.pt / REP.ship;
+    hud(g, w, theme, `${phaseText} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(REP.lives - Math.max(0, s.lives))}`, meter, s.score, null);
+    // the sea, the island and the shore
+    g.fillStyle = theme.sea; roundRect(g, 4, top + 4, w - 8, h - top - 8, 12); g.fill();
+    g.fillStyle = theme.land; roundRect(g, w - 74, top + 14, 66, h - top - 28, 18); g.fill();
+    emoji(g, '🏝', w - 41, (top + h) / 2, 30);
+    g.fillStyle = theme.ink; g.font = `800 11px ${theme.font}`; g.textAlign = 'center';
+    g.fillText(words === 'plain' ? 'Coherent Isle' : 'Coherent Isle', w - 41, (top + h) / 2 + 30);
+    if (s.phase === 'anchor' && Math.sin(s.t * 8) > 0) { g.fillStyle = theme.bad; g.fillText('offline!', w - 41, (top + h) / 2 + 44); }
+    REP_CABLES.forEach((c, ci) => {
+      const cut = ci === 0 && s.phase !== 'power';
+      const live = RepeaterRescue.active(s) === ci;
+      g.strokeStyle = live ? theme.accent : theme.muted; g.lineWidth = live ? 4 : 3; g.setLineDash(cut ? [8, 6] : []);
+      g.beginPath();
+      for (let k = 0; k <= 40; k++) { const [x, y] = RepeaterRescue.at(ci, k / 40, w, h); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+      g.stroke(); g.setLineDash([]);
+      const [, sy] = RepeaterRescue.at(ci, 0, w, h);
+      g.font = `800 10px ${theme.font}`;
+      const bw = Math.max(58, g.measureText(c.from).width + 12);
+      g.fillStyle = theme.paper; roundRect(g, 6, sy - 13, bw, 26, 8); g.fill(); g.strokeStyle = theme.ink; g.lineWidth = 2; g.stroke();
+      g.fillStyle = theme.ink; g.textAlign = 'center'; g.fillText(c.from, 6 + bw / 2, sy + 4);
+      // light pulses along a cable that works
+      if (!cut) for (let k = 0; k < 6; k++) { const u = ((s.t * 0.25 + k / 6) % 1); const [x, y] = RepeaterRescue.at(ci, u, w, h); g.fillStyle = live ? theme.gold : theme.muted; g.globalAlpha = live ? 0.9 : 0.35; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.globalAlpha = 1; }
+      if (cut) { const [x, y] = RepeaterRescue.at(0, 0.45, w, h); emoji(g, '✂', x, y + 2, 20); emoji(g, '⚓', x + 18, y - 22, 24); }
+    });
+    for (const r of s.reps) {
+      const [x, y] = RepeaterRescue.at(r.cable, r.u, w, h);
+      const live = RepeaterRescue.active(s) === r.cable;
+      const blink = r.drain && Math.sin(s.t * 10) > 0;
+      g.fillStyle = !live ? theme.well : r.drain ? (blink ? theme.bad : theme.paper) : theme.good;
+      g.beginPath(); g.arc(x, y, 11, 0, 7); g.fill();
+      g.strokeStyle = theme.ink; g.lineWidth = 2; g.stroke();
+      if (r.drain) { g.strokeStyle = theme.bad; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * r.power); g.stroke(); }
+    }
+    if (s.phase === 'ship') { const [x, y] = RepeaterRescue.at(0, 0.45 * Math.min(1, s.pt / REP.ship), w, h); emoji(g, '🚢', x, y - 26, 26); }
+    floats(g, s, (lane) => [w * (0.25 + lane * 0.25), top + 22], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    if (!s) return null;
+    const cable = RepeaterRescue.active(s);
+    if (cable == null) return null;
+    let best = null, bd = 44;
+    s.reps.forEach((r, i) => { if (r.cable !== cable) return; const [rx, ry] = RepeaterRescue.at(r.cable, r.u, w, h); const d = Math.hypot(rx - x, ry - y); if (d < bd) { bd = d; best = 10 + i; } });
+    return best;
+  },
+};
+
+// ---------------------------------------------------------------- Rainbow Packing (metro optical)
+// A tetris of light. The columns are the colours on the fibre, the rows the four spans of
+// the Lumen City ring between its hubs. Each request needs its colours free on every span
+// it crosses, all in the same place (one colour end to end), so a two-span request is a
+// tall piece. Move it with ◀ ▶ and drop it; the Spectrum Hog drops blocks of his own.
+const RB = { cols: 12, goal: 8, patience: 16, lives: 3, hogEvery: 3 };
+const RB_HUBS = ['North', 'East', 'South', 'West'];
+const RB_SIZES = [
+  { w: 1, plain: 'a small link', eng: '100G' },
+  { w: 2, plain: 'a big link', eng: '400G' },
+  { w: 3, plain: 'a data center link', eng: '800G DCI' },
+];
+function rbPiece(s) {
+  const r = s.random();
+  const size = r < 0.5 ? RB_SIZES[0] : r < 0.85 ? RB_SIZES[1] : RB_SIZES[2];
+  const from = Math.floor(s.random() * 4), spans = s.random() < 0.4 ? 2 : 1;
+  const rows = Array.from({ length: spans }, (_, k) => (from + k) % 4);
+  return { rows, w: size.w, size, from, to: (from + spans) % 4, col: 0, t: 0 };
+}
+const rbFits = (s, p, col) => col >= 0 && col + p.w <= RB.cols && p.rows.every((row) => { for (let c = col; c < col + p.w; c++) if (s.grid[row][c]) return false; return true; });
+const rbAnyFit = (s, p) => { for (let c = 0; c + p.w <= RB.cols; c++) if (rbFits(s, p, c)) return true; return false; };
+function rbNext(s) {
+  // the Spectrum Hog helps himself every few requests
+  if (s.placed && s.placed % RB.hogEvery === 0 && s.hogFor !== s.placed) {
+    s.hogFor = s.placed;
+    const row = Math.floor(s.random() * 4), free = [];
+    for (let c = 0; c + 2 <= RB.cols; c++) if (!s.grid[row][c] && !s.grid[row][c + 1]) free.push(c);
+    if (free.length) { const c = free[Math.floor(s.random() * free.length)]; s.grid[row][c] = s.grid[row][c + 1] = 'hog'; s.hogs++; float(s, 1, '🐷 The Spectrum Hog grabbed some spectrum!', false); }
+  }
+  s.piece = rbPiece(s);
+  if (!rbAnyFit(s, s.piece)) rbLose(s, 'No room anywhere!');
+}
+function rbLose(s, text) { s.lives--; s.lost++; float(s, 1, text, false); s.piece = null; s.wait = 0.8; }
+const RainbowPacking = {
+  id: 'rainbow',
+  name: { plain: 'Rainbow Packing', eng: 'Rainbow Packing' },
+  how: {
+    plain: 'Each request needs some colours of light on the Lumen City ring. Move it with ◀ and ▶ (or 1 and 3) and drop it with the middle button (or 2). A request over two stretches of the ring needs the same colours free on both. Pack them tight: the Spectrum Hog takes whatever is left!',
+    eng: 'Each request needs spectrum on the Lumen City ring. Move it with ◀ ▶ (1, 3), drop with 2. A request over two spans needs the same slots free on both (wavelength continuity). Pack without gaps: the Spectrum Hog grabs spectrum too.',
+  },
+  goal: { plain: `Light up ${RB.goal} connections`, eng: `Place ${RB.goal} services without blocking` },
+  laneNames: { plain: ['◀ Move', 'Drop', 'Move ▶'], eng: ['◀ Lower', 'Place', 'Higher ▶'] },
+  start(random = Math.random, opts = {}) {
+    const s = {
+      t: 0, random, grid: Array.from({ length: 4 }, () => Array(RB.cols).fill(null)), piece: null, wait: 0.3,
+      placed: 0, big: 0, hogs: 0, lost: 0, bumps: 0, tight: 0, lives: RB.lives, score: 0, fx: [], over: null, goal: opts.goal ?? RB.goal,
+    };
+    return s;
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (!s.piece) { if ((s.wait -= dt) <= 0) rbNext(s); }
+    else if ((s.piece.t += dt) >= RB.patience) rbLose(s, 'The request gave up waiting');
+    if (s.lives <= 0) s.over = 'lost';
+    else if (s.placed >= s.goal) s.over = 'won';
+  },
+  press(s, lane) {
+    if (s.over || !s.piece) return;
+    const p = s.piece;
+    if (lane >= 10) { const c = Math.min(RB.cols - p.w, Math.max(0, lane - 10)); if (c !== p.col) { p.col = c; return; } lane = 1; }
+    if (lane === 0) p.col = Math.max(0, p.col - 1);
+    else if (lane === 2) p.col = Math.min(RB.cols - p.w, p.col + 1);
+    else if (lane === 1) {
+      if (!rbFits(s, p, p.col)) { s.bumps++; float(s, 1, 'Those colours are taken there', false); return; }
+      const id = `p${s.placed}`;
+      for (const row of p.rows) for (let c = p.col; c < p.col + p.w; c++) s.grid[row][c] = id;
+      // packed tight: against the edge or against something already there
+      const touches = p.col === 0 || p.rows.some((row) => s.grid[row][p.col - 1]);
+      if (touches) s.tight++;
+      s.placed++; if (p.w > 1) s.big++;
+      const pts = 30 + (touches ? 15 : 0) + Math.round((1 - p.t / RB.patience) * 10);
+      s.score += pts; float(s, 1, touches ? `Packed tight! +${pts}` : `+${pts}`, true);
+      s.piece = null; s.wait = 0.4;
+    }
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 40 : 0, flawless: s.lost === 0 };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You lit ${s.placed} connections, ${s.big} of them big ones, and packed ${s.tight} of them tight against the others. The Spectrum Hog grabbed ${s.hogs} piece${s.hogs === 1 ? '' : 's'} of the rainbow${s.lost ? `, and ${s.lost} request${s.lost === 1 ? '' : 's'} found no room` : ', and still every request found room'}.`
+      : `${s.placed} services placed (${s.big} at 400G or more), ${s.tight} packed without a gap, ${s.lost} blocked; the Spectrum Hog took ${s.hogs} slot pair${s.hogs === 1 ? '' : 's'}.`;
+  },
+  grid(w, h) {
+    const top = 96, left = 66, cw = (w - left - 12) / RB.cols, rh = (h - top - 10) / 4;
+    return { top, left, cw, rh };
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    hud(g, w, theme, `${s.placed} / ${s.goal} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(RB.lives - Math.max(0, s.lives))}`, s.placed / s.goal, s.score, null);
+    const { top, left, cw, rh } = RainbowPacking.grid(w, h);
+    // the spectrum along the top: one colour per column
+    for (let c = 0; c < RB.cols; c++) { g.fillStyle = `hsl(${(c / RB.cols) * 300}, 85%, 58%)`; g.fillRect(left + c * cw, top - 10, cw, 6); }
+    for (let row = 0; row < 4; row++) {
+      const y = top + row * rh;
+      g.fillStyle = theme.ink; g.font = `800 11px ${theme.font}`; g.textAlign = 'right';
+      g.fillText(`${RB_HUBS[row][0]} → ${RB_HUBS[(row + 1) % 4][0]}`, left - 8, y + rh / 2 + 4);
+      for (let c = 0; c < RB.cols; c++) {
+        const v = s.grid[row][c], x = left + c * cw;
+        g.fillStyle = v === 'hog' ? '#f4a6c0' : v ? `hsl(${(c / RB.cols) * 300}, 75%, 55%)` : theme.well;
+        roundRect(g, x + 1.5, y + 1.5, cw - 3, rh - 3, 5); g.fill();
+        if (v === 'hog') emoji(g, '🐷', x + cw / 2, y + rh / 2, Math.min(18, rh * 0.5));
+      }
+    }
+    const p = s.piece;
+    if (p) {
+      const ok = rbFits(s, p, p.col);
+      for (const row of p.rows) {
+        g.strokeStyle = ok ? theme.good : theme.bad; g.lineWidth = 3;
+        roundRect(g, left + p.col * cw + 1, top + row * rh + 1, p.w * cw - 2, rh - 2, 6); g.stroke();
+        g.globalAlpha = 0.35; g.fillStyle = ok ? theme.good : theme.bad; g.fill(); g.globalAlpha = 1;
+      }
+      // the request itself, above the grid, with its patience running out
+      const label = words === 'plain'
+        ? `${RB_HUBS[p.from]} → ${RB_HUBS[p.to]} hub · ${p.size.plain}${p.rows.length > 1 ? ' · 2 stretches' : ''}`
+        : `${RB_HUBS[p.from]} → ${RB_HUBS[p.to]} · ${p.size.eng} · ${p.rows.length} span${p.rows.length > 1 ? 's' : ''}`;
+      g.fillStyle = theme.paper; roundRect(g, left, 36, w - left - 12, 36, 10); g.fill();
+      g.strokeStyle = theme.ink; g.lineWidth = 2; g.stroke();
+      g.fillStyle = theme.ink; g.font = `800 13px ${theme.font}`; g.textAlign = 'left'; g.fillText(label, left + 10, 58);
+      g.fillStyle = p.t / RB.patience > 0.7 ? theme.bad : theme.accent;
+      g.fillRect(left + 6, 66, (w - left - 24) * (1 - p.t / RB.patience), 3);
+    }
+    floats(g, s, () => [w / 2, top + 4 * rh - 12], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    const { left, cw } = RainbowPacking.grid(w, h);
+    if (!s?.piece || x < left) return null;
+    return 10 + Math.floor((x - left) / cw);
+  },
+};
+
+// ---------------------------------------------------------------- Mesh Rescue (long haul)
+// A storm cuts the long-haul mesh one fibre after another. Every cut drops the services
+// riding it; for each one, pick one of three ways round. Each fibre carries only a few
+// waves, so a way round that is fine now can leave no room for the next cut: think ahead.
+const MESH = { cap: 2, decide: 25, lives: 3, pause: 1.6 };
+const MNODES = {
+  pf: { x: 0.08, y: 0.34, name: 'Prismfield' }, rr: { x: 0.3, y: 0.1, name: 'Raman Ridge' },
+  lv: { x: 0.58, y: 0.12, name: 'Lambdaview' }, cp: { x: 0.36, y: 0.52, name: 'Crosspoint' },
+  eg: { x: 0.64, y: 0.54, name: 'Erbium Gap' }, sv: { x: 0.92, y: 0.36, name: 'Spectraville' },
+  gb: { x: 0.2, y: 0.9, name: 'Glassbridge' }, bb: { x: 0.76, y: 0.9, name: 'Beambrook' },
+};
+const MLINKS = [['pf', 'rr'], ['rr', 'lv'], ['lv', 'sv'], ['pf', 'cp'], ['rr', 'cp'], ['cp', 'lv'], ['cp', 'eg'], ['lv', 'eg'], ['eg', 'sv'], ['pf', 'gb'], ['gb', 'cp'], ['gb', 'bb'], ['bb', 'eg'], ['bb', 'sv']];
+const MSERVICES = [['pf', 'sv'], ['gb', 'lv'], ['rr', 'bb'], ['pf', 'eg']];
+const MCOLORS = ['#e76f51', '#2f80ed', '#12a35a', '#b5179e'];
+const MCUTS = ['cp-eg', 'lv-sv', 'bb-eg', 'cp-lv'];
+const mkey = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+const mlen = (a, b) => Math.hypot((MNODES[a].x - MNODES[b].x) * 1.6, MNODES[a].y - MNODES[b].y);
+const plen = (path) => path.slice(1).reduce((d, n, i) => d + mlen(path[i], n), 0);
+// every way from a to b that does not use a cut fibre or visit a node twice, shortest first
+function meshPaths(s, a, b) {
+  const out = [], walk = (n, path) => {
+    if (n === b) { out.push(path); return; }
+    if (path.length > 6) return;
+    for (const [x, y] of MLINKS) {
+      const m = x === n ? y : y === n ? x : null;
+      if (m && !path.includes(m) && !s.cut.has(mkey(n, m))) walk(m, [...path, m]);
+    }
+  };
+  walk(a, [a]);
+  return out.sort((p, q) => plen(p) - plen(q));
+}
+const meshFits = (s, path) => path.slice(1).every((n, i) => (s.used[mkey(path[i], n)] ?? 0) < MESH.cap);
+function meshTake(s, path, k) { path.slice(1).forEach((n, i) => { s.used[mkey(path[i], n)] = (s.used[mkey(path[i], n)] ?? 0) + k; }); }
+function meshNextCut(s) {
+  if (s.cutsDone >= s.cuts) { s.over = 'won'; return; }
+  const k = MCUTS[s.cutsDone++];
+  s.cut.add(k);
+  float(s, 1, `✂ ${MNODES[k.split('-')[0]].name} – ${MNODES[k.split('-')[1]].name} cut!`, false);
+  // the services on that fibre drop, and free the rest of their way
+  for (const sv of s.services) {
+    if (!sv.path || !sv.path.slice(1).some((n, i) => mkey(sv.path[i], n) === k)) continue;
+    meshTake(s, sv.path, -1);
+    sv.path = null; s.queue.push(sv);
+  }
+  meshAsk(s);
+}
+function meshAsk(s) {
+  s.asking = null;
+  while (s.queue.length) {
+    const sv = s.queue.shift();
+    const routes = meshPaths(s, sv.a, sv.b).slice(0, 3);
+    if (!routes.some((r) => meshFits(s, r))) { s.lives--; s.down++; float(s, 1, `No way round: ${MNODES[sv.a].name} – ${MNODES[sv.b].name} is down`, false); continue; }
+    s.asking = { sv, routes, t: 0 };
+    return;
+  }
+  s.pause = MESH.pause;
+}
+const MeshRescue = {
+  id: 'mesh',
+  name: { plain: 'Mesh Rescue', eng: 'Mesh Rescue' },
+  how: {
+    plain: 'A storm is cutting the country\'s light highway, one fibre after another. When a link between two towns breaks, pick one of three ways round (tap it, or press 1, 2, 3). Each fibre has room for only two links, so think ahead: the next cut is coming!',
+    eng: 'A storm cuts long-haul fibres one after another. For each service that drops, pick one of three restoration routes (1, 2, 3). Each fibre carries two waves, so a greedy choice now can block the next restoration.',
+  },
+  goal: { plain: 'Keep the towns connected through the storm', eng: 'Restore every service through four cuts' },
+  laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
+  start(random = Math.random, opts = {}) {
+    const s = {
+      t: 0, random, cut: new Set(), used: {}, services: [], queue: [], asking: null, pause: 1.2, cuts: opts.cuts ?? MCUTS.length, cutsDone: 0,
+      lives: MESH.lives, restored: 0, down: 0, full: 0, longest: 0, score: 0, fx: [], over: null,
+    };
+    MSERVICES.forEach(([a, b], i) => { const path = meshPaths(s, a, b)[0]; s.services.push({ a, b, path, color: MCOLORS[i] }); meshTake(s, path, 1); });
+    return s;
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.6);
+    if (s.asking) {
+      if ((s.asking.t += dt) >= MESH.decide) { s.lives--; s.down++; float(s, 1, 'Too late: that service is down', false); meshAsk(s); }
+    } else if ((s.pause -= dt) <= 0) meshNextCut(s);
+    if (s.lives <= 0) s.over = 'lost';
+  },
+  press(s, lane) {
+    if (s.over || !s.asking) return;
+    const r = s.asking.routes[lane];
+    if (!r) return;
+    if (!meshFits(s, r)) { s.full++; float(s, 1, 'No room on that fibre!', false); return; }
+    const sv = s.asking.sv;
+    sv.path = r; meshTake(s, r, 1); s.restored++;
+    s.longest = Math.max(s.longest, r.length - 1);
+    const pts = 100 + Math.round((1 - s.asking.t / MESH.decide) * 30);
+    s.score += pts; float(s, 1, `Back up! +${pts}`, true);
+    meshAsk(s);
+  },
+  lanes(s, words) {
+    const a = s.asking;
+    if (!a) return ['—', '—', '—'];
+    return [0, 1, 2].map((i) => {
+      const r = a.routes[i];
+      if (!r) return '—';
+      // name the route by a town on it that the other routes on offer don't pass through
+      const mid = r.slice(1, -1), elsewhere = new Set(a.routes.filter((x) => x !== r).flatMap((x) => x.slice(1, -1)));
+      const via = MNODES[mid.find((n) => !elsewhere.has(n)) ?? mid[0] ?? r[0]].name;
+      return `${words === 'plain' ? 'via' : 'via'} ${via} · ${r.length - 1} ${words === 'plain' ? 'hops' : 'spans'}${meshFits(s, r) ? '' : ' · full'}`;
+    });
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.down === 0 && s.full === 0 };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `The storm cut ${s.cutsDone} fibres. You found a way round for ${s.restored} links between towns${s.down ? `, and ${s.down} went down` : ' and not one town lost its connection'}. ${s.full ? `${s.full} time${s.full === 1 ? '' : 's'} you tried a fibre that was already full.` : 'You never tried a fibre that was already full.'}`
+      : `${s.cutsDone} fibre cuts, ${s.restored} services restored, ${s.down} lost; longest restoration ${s.longest} spans; ${s.full} attempt${s.full === 1 ? '' : 's'} on a full fibre.`;
+  },
+  pos: (n, w, h) => [30 + (w - 60) * MNODES[n].x, 44 + (h - 70) * MNODES[n].y],
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    hud(g, w, theme, `${words === 'plain' ? 'Storm' : 'Cuts'} ${s.cutsDone} / ${s.cuts} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(MESH.lives - Math.max(0, s.lives))}`, s.asking ? 1 - s.asking.t / MESH.decide : s.cutsDone / s.cuts, s.score, null);
+    const P = (n) => MeshRescue.pos(n, w, h);
+    for (const [a, b] of MLINKS) {
+      const [ax, ay] = P(a), [bx, by] = P(b), k = mkey(a, b), cut = s.cut.has(k), used = s.used[k] ?? 0;
+      g.strokeStyle = cut ? theme.muted : used >= MESH.cap ? theme.bad : theme.muted; g.lineWidth = cut ? 2 : 3; g.setLineDash(cut ? [6, 6] : []);
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.setLineDash([]);
+      const mx = (ax + bx) / 2, my = (ay + by) / 2;
+      if (cut) emoji(g, '✂', mx, my, 18);
+      else for (let c = 0; c < MESH.cap; c++) { g.fillStyle = c < used ? theme.ink : theme.paper; g.strokeStyle = theme.ink; g.lineWidth = 1.5; g.fillRect(mx - 9 + c * 10, my - 4, 8, 8); g.strokeRect(mx - 9 + c * 10, my - 4, 8, 8); }
+    }
+    // the services that are up, each in its colour, slightly apart so they don't hide each other
+    s.services.forEach((sv, i) => {
+      if (!sv.path) return;
+      g.strokeStyle = sv.color; g.lineWidth = 3; g.globalAlpha = 0.85;
+      g.beginPath();
+      sv.path.forEach((n, j) => { const [x, y] = P(n); const o = (i - 1.5) * 3; if (j) g.lineTo(x + o, y + o); else g.moveTo(x + o, y + o); });
+      g.stroke(); g.globalAlpha = 1;
+    });
+    // the ways round on offer, numbered on their middle hop
+    if (s.asking) {
+      s.asking.routes.forEach((r, i) => {
+        const fits = meshFits(s, r);
+        g.strokeStyle = fits ? theme.accent : theme.bad; g.lineWidth = 6; g.globalAlpha = 0.45; g.setLineDash([10, 6]);
+        g.beginPath(); r.forEach((n, j) => { const [x, y] = P(n); if (j) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
+        g.setLineDash([]); g.globalAlpha = 1;
+        const [bx, by] = MeshRescue.badge(s, i, w, h);
+        g.fillStyle = fits ? theme.accent : theme.bad; g.beginPath(); g.arc(bx, by, 13, 0, 7); g.fill();
+        g.fillStyle = '#ffffff'; g.font = `800 13px ${theme.font}`; g.textAlign = 'center'; g.fillText(String(i + 1), bx, by + 5);
+      });
+      const sv = s.asking.sv;
+      g.fillStyle = sv.color; g.font = `800 13px ${theme.font}`; g.textAlign = 'center';
+      g.fillText(`${MNODES[sv.a].name} – ${MNODES[sv.b].name} ${words === 'plain' ? 'needs a way round' : 'needs restoration'}`, w / 2, h - 8);
+    }
+    for (const n of Object.keys(MNODES)) {
+      const [x, y] = P(n);
+      g.font = `800 11px ${theme.font}`; const tw = g.measureText(MNODES[n].name).width;
+      g.fillStyle = theme.paper; roundRect(g, x - tw / 2 - 6, y - 10, tw + 12, 20, 7); g.fill();
+      g.strokeStyle = s.asking && (n === s.asking.sv.a || n === s.asking.sv.b) ? s.asking.sv.color : theme.ink; g.lineWidth = 2; g.stroke();
+      g.fillStyle = theme.ink; g.textAlign = 'center'; g.fillText(MNODES[n].name, x, y + 4);
+    }
+    floats(g, s, () => [w / 2, 52], theme);
+  },
+  // where a route's number sits: on a hop no other route on offer takes, so the numbers
+  // never sit on top of each other (else halfway along it)
+  badge(s, i, w, h) {
+    const routes = s.asking.routes, r = routes[i];
+    const hops = (x) => x.slice(1).map((n, j) => mkey(x[j], n));
+    const others = new Set(routes.filter((_, k) => k !== i).flatMap(hops));
+    const own = hops(r).findIndex((k) => !others.has(k));
+    const j = own >= 0 ? own : Math.floor(r.length / 2) - 1;
+    const [ax, ay] = MeshRescue.pos(r[j], w, h), [bx, by] = MeshRescue.pos(r[j + 1], w, h);
+    return [(ax + bx) / 2, (ay + by) / 2 - 12];
+  },
+  laneAt(x, y, w, h, s) {
+    if (!s?.asking) return null;
+    let best = null, bd = 50;
+    s.asking.routes.forEach((r, i) => { const [bx, by] = MeshRescue.badge(s, i, w, h); const d = Math.hypot(bx - x, by - y); if (d < bd) { bd = d; best = i; } });
+    return best;
+  },
+};
+
+// ---------------------------------------------------------------- The fight with Lord Lag
+// The finale: three short rounds of games already played, a packet tetris, a race with a
+// fibre cut, and a storm on the long haul, with Lord Lag taunting between rounds. Each
+// round won knocks off one of his three hearts.
+const BOSS_ROUNDS = [
+  { game: PacketTetris, opts: { goal: 8 }, taunt: { plain: 'Let\'s see you sort THIS, apprentice! Elephants first!', eng: 'Round one: queue this, if you can. My elephant flows are already on the uplink.' } },
+  { game: PacketRace, opts: { first: 2, races: 1, need: 1 }, taunt: { plain: 'Lucky! Now race me, and mind the cut fibre!', eng: 'Round two: one race, one fibre cut. My IGP against your head end.' } },
+  { game: MeshRescue, opts: { cuts: 2 }, taunt: { plain: 'Enough! My storm will cut you off for good!', eng: 'Final round: a storm on the long haul. Restore that, Chief.' } },
+];
+const LordLagFight = {
+  id: 'boss',
+  name: { plain: 'The fight with Lord Lag', eng: 'The fight with Lord Lag' },
+  how: {
+    plain: 'So you got this far, apprentice. Three rounds, three games you already know, a little faster and a little meaner: a packet tetris, a race with a cut fibre, and a storm. Win all three and Netlandia is yours!',
+    eng: 'Lord Lag\'s last stand: three short rounds, Packet Tetris, a Packet Race with a link failure, and Mesh Rescue in a storm. Win all three to bring Netlandia back for good.',
+  },
+  goal: { plain: 'Win three rounds against Lord Lag', eng: 'Three rounds: win them all' },
+  laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
+  start(random = Math.random) {
+    const s = { t: 0, random, round: 0, sub: null, between: 2.4, points: 0, results: [], fx: [], over: null };
+    return s;
+  },
+  game: (s) => BOSS_ROUNDS[s.round].game,
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    if (s.between > 0) {
+      if ((s.between -= dt) <= 0) { const r = BOSS_ROUNDS[s.round]; s.sub = r.game.start(s.random, r.opts); }
+      return;
+    }
+    const G = LordLagFight.game(s);
+    G.tick(s.sub, dt);
+    const res = G.result(s.sub);
+    if (!res) return;
+    if (!res.won) { s.over = 'lost'; return; }
+    s.points += res.points; s.results.push({ game: G, st: s.sub, flawless: res.flawless });
+    if (s.round === BOSS_ROUNDS.length - 1) { s.over = 'won'; return; }
+    s.round++; s.sub = null; s.between = 2.6;
+  },
+  press(s, lane) { if (!s.over && s.sub) LordLagFight.game(s).press(s.sub, lane); },
+  lanes(s, words) {
+    if (!s.sub) return ['—', '—', '—'];
+    const G = LordLagFight.game(s);
+    return G.lanes ? G.lanes(s.sub, words) : G.laneNames[words];
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.points + 300 : 0, flawless: s.results.every((r) => r.flawless) };
+  },
+  summary(s, words) {
+    const parts = s.results.map((r, i) => `${words === 'plain' ? 'Round' : 'R'}${words === 'plain' ? ' ' : ''}${i + 1}, ${r.game.name[words]}: ${r.game.summary(r.st, words)}`);
+    return `${parts.join(' ')} ${words === 'plain' ? 'Lord Lag is beaten!' : 'Lord Lag: defeated.'}`;
+  },
+  draw(g, s, w, h, words, theme) {
+    if (s.sub) LordLagFight.game(s).draw(g, s.sub, w, h, words, theme);
+    else {
+      // between rounds: Lord Lag himself, and what he has to say
+      g.clearRect(0, 0, w, h);
+      emoji(g, '😈', w / 2, h * 0.36, 72);
+      g.fillStyle = theme.ink; g.font = `800 16px ${theme.font}`; g.textAlign = 'center';
+      g.fillText(`Round ${s.round + 1} of ${BOSS_ROUNDS.length} · ${BOSS_ROUNDS[s.round].game.name[words]}`, w / 2, h * 0.62);
+      g.font = `700 14px ${theme.font}`; g.fillStyle = theme.muted;
+      g.fillText(`“${BOSS_ROUNDS[s.round].taunt[words]}”`, w / 2, h * 0.72, w - 40);
+    }
+    // Lord Lag's hearts, one lost for every round you win
+    const left = BOSS_ROUNDS.length - s.results.length;
+    g.font = `800 13px ${theme.font}`; g.textAlign = 'right'; g.fillStyle = theme.bad;
+    g.fillText(`😈 ${'♥'.repeat(left)}${'♡'.repeat(BOSS_ROUNDS.length - left)}`, w - 10, h - 8);
+  },
+  laneAt(x, y, w, h, s) { return s?.sub ? LordLagFight.game(s).laneAt(x, y, w, h, s.sub) : null; },
+};
+
 // ---------------------------------------------------------------- drawing helpers
 function roundRect(g, x, y, w, h, r) {
   g.beginPath();
@@ -4336,7 +4888,13 @@ function floats(g, s, at, theme) {
 }
 
 // Which chapter plays which game; the rest keep their questions for now.
-const MINIGAMES = { xhaul: KeepTheBeat, aggregation: PacketTetris, ipcore: PacketRace };
+// The finale after the Level 2 exam.
+const BOSS = LordLagFight;
+
+const MINIGAMES = {
+  xhaul: KeepTheBeat, aggregation: PacketTetris, ipcore: PacketRace,
+  submarine: RepeaterRescue, metro: RainbowPacking, longhaul: MeshRescue,
+};
 
 // Netlandia Quest on screen: the start screen, the score bar and the challenge card.
 // The story and its rules are in js/story.js; the globe is reached through `hooks`,
@@ -4450,6 +5008,8 @@ function initQuest(hooks) {
     hooks.focusMajor(id);
     openCard({ kind: 'taunt', id });
   }
+  // the game a card plays: the chapter's own, or the fight with Lord Lag
+  const gameOf = (v) => (v.boss ? BOSS : MINIGAMES[v.id]);
   // a chapter with a mini-game plays it; the others still ask their three questions
   function begin(id) {
     if (MINIGAMES[id]) openCard({ kind: 'how', id });
@@ -4481,20 +5041,21 @@ function initQuest(hooks) {
         ${v.last ? `<p class="q-flash ${v.last.right ? 'ok' : 'bad'}">${v.last.right ? `Right! +${v.last.points}` : v.last.timeout ? 'Too slow!' : 'Not quite.'}</p>` : ''}`;
       startTimer();
     } else if (v.kind === 'how') {
-      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      const game = gameOf(v), words = hooks.plain() ? 'plain' : 'eng';
       card.innerHTML = `
-        <span class="q-k">Win back ${name} · mini-game</span>
-        <h3>🎮 ${esc(game.name[words])}</h3>
+        ${v.boss ? `<div class="q-villain"><span class="q-face" aria-hidden="true">😈</span><div><span class="q-k">The final fight</span><h3>${esc(game.name[words])}</h3></div></div>`
+          : `<span class="q-k">Win back ${name} · mini-game</span>
+        <h3>🎮 ${esc(game.name[words])}</h3>`}
         <p class="q-say">${esc(game.how[words])}</p>
         <p class="q-sum">Goal: <b>${esc(game.goal[words])}</b></p>
         <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="go">Start ▶</button></div>`;
     } else if (v.kind === 'game') {
-      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      const game = gameOf(v), words = hooks.plain() ? 'plain' : 'eng';
       card.innerHTML = `
-        <div class="q-head"><span class="q-k">Win back ${name} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
+        <div class="q-head"><span class="q-k">${v.boss ? '😈 Final fight' : `Win back ${name}`} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
         <canvas class="q-canvas"></canvas>
         <div class="q-lanes">${game.laneNames[words].map((l, i) => `<button data-lane="${i}"><kbd>${i + 1}</kbd>${esc(l)}</button>`).join('')}</div>`;
-      startGame(v.id);
+      startGame(v.id, game);
     } else if (v.kind === 'exam') {
       const n = examAt(v.id).length;
       card.innerHTML = `
@@ -4502,17 +5063,17 @@ function initQuest(hooks) {
         <span class="q-k">🏁 ${esc(MINIGAMES[v.id].name[hooks.plain() ? 'plain' : 'eng'])} won · +${v.carry.toLocaleString('en')} pts</span>
         <h3>Level ${lvl.n} final exam</h3>
         <p class="q-say">${hooks.plain()
-          ? `One last challenge before the clouds over ${name} lift: ${n} questions on all of Level ${lvl.n}, the phone towers, the city and the core. You have two lives.`
-          : `Before ${name} unlocks: ${n} questions across Level ${lvl.n}, xhaul, aggregation and core. Two strikes and you're out.`}</p>
+          ? `One last challenge before the clouds over ${name} lift: ${n} questions on all of Level ${lvl.n}: ${lvl.chapters.map((c) => esc(hooks.majorName(c))).join(', ')}. You have two lives.`
+          : `Before ${name} unlocks: ${n} questions across Level ${lvl.n} (${lvl.chapters.map((c) => esc(hooks.majorName(c))).join(', ')}). Two strikes and you're out.`}</p>
         ${v.st ? `<dl><dt>Your game</dt><dd>${esc(MINIGAMES[v.id].summary(v.st, hooks.plain() ? 'plain' : 'eng'))}</dd></dl>` : ''}
         <div class="q-btns"><button class="primary" data-q="exam">Start the exam ▶</button></div>`;
     } else if (v.kind === 'won') {
       const next = nextChapter(story);
       const ended = lvl.chapters.at(-1) === v.id, after = STORY_LEVELS.find((l) => l.n === lvl.n + 1);
       const news = !ended && DISCOVERY[next];
-      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      const game = gameOf(v), words = hooks.plain() ? 'plain' : 'eng';
       card.innerHTML = `
-        <span class="q-k">Congratulations!</span>
+        <span class="q-k">${v.boss ? '😈 Lord Lag is beaten!' : 'Congratulations!'}</span>
         <h3>You unlocked ${name}</h3>
         <p class="q-say">${esc(say(ch.win))}</p>
         ${v.st && game?.summary ? `<dl><dt>Your game</dt><dd>${esc(game.summary(v.st, words))}</dd></dl>` : ''}
@@ -4527,9 +5088,9 @@ function initQuest(hooks) {
     } else if (v.kind === 'lost') {
       card.innerHTML = `
         <div class="q-villain"><span class="q-face" aria-hidden="true">${ch.villain.face}</span>
-          <div><span class="q-k">This round goes to ${esc(ch.villain.name)}</span><h3>You died${v.exam ? ' in the exam' : ''}</h3></div></div>
-        <p class="q-say">${esc(say(ch.lose))}${v.exam ? ` ${hooks.plain() ? 'Your race still counts: only the exam starts again.' : 'The race result stands; retake the exam.'}` : ''}</p>
-        <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : 'begin'}">Try again</button></div>`;
+          <div><span class="q-k">This round goes to ${esc(v.boss ? 'Lord Lag' : ch.villain.name)}</span><h3>You died${v.exam ? ' in the exam' : v.boss ? ' in the final fight' : ''}</h3></div></div>
+        <p class="q-say">${esc(say(ch.lose))}${v.exam ? ` ${hooks.plain() ? 'Your game still counts: only the exam starts again.' : 'The game result stands; retake the exam.'}` : v.boss ? ` ${hooks.plain() ? 'Your exam still counts: only the fight starts again.' : 'The exam stands; the fight restarts.'}` : ''}</p>
+        <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : v.boss ? 'boss' : 'begin'}">Try again</button></div>`;
     } else if (v.kind === 'locked') {
       const next = nextChapter(story);
       card.innerHTML = `
@@ -4550,8 +5111,8 @@ function initQuest(hooks) {
   }
 
   // ------------------------------------------------ a mini-game on the card's canvas
-  function startGame(id) {
-    const game = MINIGAMES[id], canvas = card.querySelector('.q-canvas'), g = canvas.getContext('2d');
+  function startGame(id, game) {
+    const canvas = card.querySelector('.q-canvas'), g = canvas.getContext('2d');
     play = { id, game, state: game.start(), raf: 0, canvas, last: performance.now() };
     const size = () => {
       const w = canvas.clientWidth, h = canvas.clientHeight, r = Math.min(devicePixelRatio || 1, 2);
@@ -4565,6 +5126,7 @@ function initQuest(hooks) {
       ink: css.color, paper: v('--paper'), well: v('--well'), muted: v('--muted'), font: css.fontFamily,
       accent: c, accentSoft: `${c}40`, gold: '#ffc43d', good: hooks.plain() ? '#12825a' : '#4fd59a', bad: '#e63946',
       lane: ['#e76f51', '#7b2cbf', '#8a94a6'],
+      sea: hooks.plain() ? '#d6ecff' : '#0e1c2b', land: hooks.plain() ? '#cdeab0' : '#1d3324',
     };
     const loop = (now) => {
       if (!play) return;
@@ -4608,20 +5170,23 @@ function initQuest(hooks) {
   }
   function endGame(id, res, st) {
     if (!view || view.kind !== 'game' || view.id !== id) return;
+    const boss = view.boss && { carry: view.carry, flawless: view.flawless };
     stopGame();
-    if (!res.won) { openCard({ kind: 'lost', id }); return; }
+    if (!res.won) { openCard({ kind: 'lost', id, boss }); return; }
     const points = res.points + (res.flawless ? FLAWLESS_BONUS : 0);
+    // the fight with Lord Lag: the chapter is banked with everything before it
+    if (boss) { bank(id, boss.carry + points, boss.flawless && res.flawless, st, true); return; }
     // the last stop of a level has its final exam still to come
     if (examAt(id)) { openCard({ kind: 'exam', id, carry: points, flawless: res.flawless, st }); return; }
     bank(id, points, res.flawless, st);
   }
   // a network won: it unlocks, its points join the score, and the win card says why
-  function bank(id, points, flawless, st = null) {
+  function bank(id, points, flawless, st = null, boss = false) {
     winChapter(story, { id, over: 'won', points });
     save();
     applyLocks(id);
     renderBar();
-    openCard({ kind: 'won', id, points, flawless, st });
+    openCard({ kind: 'won', id, points, flawless, st, boss });
   }
 
   function startTimer() {
@@ -4640,7 +5205,8 @@ function initQuest(hooks) {
     const res = answer(c, pos, seconds);
     if (c.over === 'won') {
       const ex = view.exam;
-      if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st);
+      if (ex && levelOf(c.id).boss) openCard({ kind: 'how', id: c.id, boss: true, carry: ex.carry + c.points, flawless: ex.flawless && !c.mistakes });
+      else if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st);
       else bank(c.id, c.points, !c.mistakes);
     } else if (c.over === 'lost') {
       openCard({ kind: 'lost', id: c.id, exam: view.exam });
@@ -4659,7 +5225,8 @@ function initQuest(hooks) {
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
     else if (what === 'next') { if (next) taunt(next); }
     else if (what === 'begin' && view) begin(view.id);
-    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id });
+    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id, boss: view.boss, carry: view.carry, flawless: view.flawless });
+    else if (what === 'boss' && view) openCard({ kind: 'how', id: view.id, boss: true, carry: view.boss.carry, flawless: view.boss.flawless });
     else if (what === 'exam' && view) {
       const ex = view.exam ?? { carry: view.carry, flawless: view.flawless, st: view.st };
       openCard({ kind: 'question', id: view.id, c: startChallenge(view.id, Math.random, examAt(view.id)), last: null, exam: ex });
@@ -4711,7 +5278,7 @@ function initQuest(hooks) {
       // a question starts its clock again, now that it reads differently; a game keeps
       // running and only its lane buttons change words (the board redraws itself)
       if (view?.kind === 'game') {
-        const names = MINIGAMES[view.id].laneNames[hooks.plain() ? 'plain' : 'eng'];
+        const names = gameOf(view).laneNames[hooks.plain() ? 'plain' : 'eng'];
         card.querySelectorAll('[data-lane]').forEach((b, i) => { b.lastChild.textContent = names[i]; });
       } else if (view) { stopTimer(); renderCard(); }
     },
