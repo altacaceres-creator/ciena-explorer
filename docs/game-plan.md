@@ -239,75 +239,46 @@ win or lose, so the levels can be built and reviewed one PR at a time.
 - **First, the scene-by-scene unlocks** (step 1, the shell), then the mini-games one at a time in the
   order they are played.
 
-## Built so far
+## Built so far: five levels
 
-| Network | Challenge |
-|---|---|
-| 5G mobile xhaul | **Keep the Beat** (mini-game) |
-| Metro aggregation | **Packet Tetris** (mini-game) |
-| IP/MPLS core | **Packet Race** (mini-game), then the **Level 1 final exam** |
-| Submarine | **Repeater Rescue** (mini-game) |
-| Metro optical | **Rainbow Packing** (mini-game) |
-| Long-haul | **Mesh Rescue** (mini-game), then the **Level 2 final exam** and **the fight with Lord Lag** |
+Every mini-game from the route above is built, ten in all, and each one is a stop with its own villain.
+The networks are grouped into five levels; the first four close with a final exam, the fifth is the fight
+with Lord Lag.
+
+| Level | Network | Stops (villain) | Closes with |
+|---|---|---|---|
+| 1 · The city | Metro aggregation | Last Mile Dash (the Buffer Gremlin 👾), Packet Tetris (the Elephant Flows 🐘), Storm Chaser (the Broadcast Banshee 📢) | final exam |
+| 2 · The towers and the core | 5G mobile xhaul | Stop the Fiber Cut (Backhoe Bob 🚜), Keep the Beat (the Jitterbugs 🐞) | |
+| | IP/MPLS core | Packet Race (Lord Lag) | final exam |
+| 3 · Under the sea | Submarine | Repeater Rescue (the Anchor Dragger ⚓), Cable Layer (the Kraken 🦑) | final exam |
+| 4 · The light | Metro optical | Rainbow Packing (the Spectrum Hog 🐷) | |
+| | Long-haul | Mesh Rescue (Backhoe Bob's crew ⛈) | final exam |
+| 5 · The final fight | | Lord Lag 😈 | the end |
+
+- **Stops:** a network can have more than one game. Each stop opens with its villain's taunt; a win shows
+  **Stop cleared** with a summary and the lesson, and the network is unlocked after its last stop. A loss
+  is a retry from that stop, not from the start of the network.
+- **Final exams:** the questions of every network in the level (plus a few extra for the levels with one
+  network). If it is passed with a mistake, the card lists each missed question, the answer picked and
+  the right one.
+- **Level 5, a recap of everything:** four short rounds, one game picked at random from each level, with
+  Lord Lag taunting between rounds and one heart gone for each round won. Beating him ends the story:
+  “Netlandia is back on · Chief of the NOC” 🏆.
+- **Ranks:** Apprentice, Technician, Engineer, Senior engineer, Lead engineer, Architect, Principal
+  architect, Chief of the NOC.
 
 The difficulty was lowered after the first playtests: slower packets, wider targets, 30 seconds per
-question, and slow motion while you choose a route. A player who takes a second or two to react and
-slips now and then should still win; the lesson, not the reflexes, is the challenge.
+question, and slow motion while you choose. The new games were tuned the same way, with robot players
+that react late and slip now and then: they should win most rounds, while Lord Lag's race is just quick
+enough that a slow player usually loses one of the three. The lesson, not the reflexes, is the challenge.
 
-## Levels
+### The new games
 
-- **Level 1, the packet world**: cell towers, city, core. Its last stop plays Packet Race and then a
-  **final exam** (the core's questions plus one from each earlier stop) that closes the level.
-- **Level 2, across the ocean**: the undersea cables first, then the metro optical ring and the long haul.
-- Every win card has a longer summary: your game in numbers, why you won, and what it means in a real
-  network.
-
-## Level 2 plan: across the ocean
-
-Same rules as Level 1, and easy from the start: slow motion whenever the player has to choose, wide
-targets, no reflex tests. Real places from the map: 7 landing stations and 61 repeaters under the sea,
-4 data centers and 4 hubs in Lumen City, and 8 long-haul ROADMs (Prismfield, Raman Ridge, Lambdaview,
-Crosspoint, Erbium Gap, Spectraville, Glassbridge, Beambrook) with 21 amplifier huts between them.
-
-### Stop 1 · Submarine network · Repeater Rescue
-
-- **Villain:** the Anchor Dragger ⚓
-- **Phase 1, keep the light alive:** a beam of light crosses the ocean from the Gateway Bay landing
-  station to Lumen City along a chain of repeaters on the seabed. Repeaters start blinking red as they
-  run short of power; tap each one before it goes dark. A dark repeater and the light can't reach the
-  far shore.
-- **Phase 2, the anchor:** an anchor cuts the North cable. With the three buttons, move the island's
-  traffic to the South cable (Coherent Isle has a landing for each, and both are named on the board)
-  before it goes offline.
-- **You died:** “The island across the sea is cut off. Lord Lag laughs.”
-- **Why it works:** repeaters powered from the shore keep the light strong across the ocean, and islands
-  land more than one cable, so one cut is a repair job, not an outage.
-
-### Stop 2 · Lumen City metro optical · Rainbow Packing
-
-- **Villain:** the Spectrum Hog 🐷
-- **A real tetris, of light:** the columns are the spectrum (the colours on the fibre) and the rows are
-  the spans of the ring between the hubs. Requests arrive in different widths (100G, 400G for the data
-  centers); move each with **◀ · Drop · ▶** and fit it in.
-- **The real trick:** a connection over two spans needs the same colour free on both, so its piece covers
-  several rows (wavelength continuity).
-- The Spectrum Hog drops blocks that take up space. A request that fits nowhere is a loss.
-- **Why it works:** DWDM puts many colours on one fibre, ROADMs add, drop or pass each one, and planning the
-  spectrum without gaps lets the ring grow without new glass.
-
-### Stop 3 · Long-haul RLS mesh · Mesh Rescue
-
-- **Villain:** Backhoe Bob and his crew, in a storm ⛈
-- Fibres between the ROADMs are cut one after another, and each cut drops a service. For each cut, pick
-  one of **three alternative routes**. Every fibre has limited capacity, so a route used badly now may
-  leave no room for the next cut: think ahead. Slow motion while you choose, as in Packet Race.
-- **Why it works:** a mesh of CDC ROADMs can send any wave any way round, so the control plane restores
-  service after cut after cut, as long as the capacity was planned for it.
-
-### Level 2 finale
-
-1. **Level 2 final exam:** 5 questions, the long haul's three plus one from the undersea cables and one
-   from the light ring.
-2. **The fight with Lord Lag** 😈: three short rounds that remix the games already played (a few seconds
-   of Packet Tetris, a race, a fibre cut), with Lord Lag taunting between rounds. Beating him ends the
-   story: “Netlandia is back on · Chief of the NOC” 🏆.
+- **Last Mile Dash** (city): homes ask for videos. A video the nearby cache has goes out at once; one it
+  doesn't has to be fetched from far away first. Serve 14 before three homes give up.
+- **Storm Chaser** (city): an office's switches are wired with loops; pick which links to block so every
+  floor is still reached and no loop is left for a broadcast storm (spanning tree).
+- **Stop the Fiber Cut** (towers): diggers head for the ring's fibres; tap them away, and when one gets
+  through, choose what the ring does: switch to the other way round, wait, or reboot (ring protection).
+- **Cable Layer** (sea): steer the new cable north, middle or south round underwater volcanoes,
+  seamounts and fishing grounds where anchors would catch it, while the Kraken stirs the seabed.

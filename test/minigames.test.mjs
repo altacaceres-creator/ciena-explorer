@@ -9,9 +9,9 @@ import { STORY } from '../js/story.js';
 const seeded = (n = 7) => () => ((n = (n * 16807) % 2147483647) / 2147483647);
 const run = (game, s, seconds, each) => { for (let t = 0; t < seconds && !s.over; t += 1 / 60) { game.tick(s, 1 / 60); each?.(s); } };
 
-test('every mini-game belongs to a chapter and has its words in both readings', () => {
+test('every mini-game is played at a network\'s stop and has its words in both readings', () => {
   for (const [id, g] of Object.entries(MINIGAMES)) {
-    assert.ok(STORY[id], id);
+    assert.ok(Object.values(STORY).some((ch) => ch.stages.includes(id)), id);
     for (const k of ['name', 'how', 'goal', 'laneNames']) assert.ok(g[k].plain && g[k].eng, `${id}.${k}`);
     assert.equal(g.laneNames.plain.length, 3);
     for (const f of ['start', 'tick', 'press', 'result', 'draw', 'laneAt']) assert.equal(typeof g[f], 'function', `${id}.${f}`);
@@ -19,7 +19,7 @@ test('every mini-game belongs to a chapter and has its words in both readings', 
 });
 
 test('Keep the Beat: tapping each packet in the zone wins; never tapping loses; random taps cost sync', () => {
-  const G = MINIGAMES.xhaul;
+  const G = MINIGAMES.beat;
   const good = G.start(seeded());
   run(G, good, 60, (s) => { for (const p of [...s.packets]) if (p.x >= 0.9 && p.x <= 0.95) G.press(s, p.lane); });
   const r = G.result(good);
@@ -37,7 +37,7 @@ test('Keep the Beat: tapping each packet in the zone wins; never tapping loses; 
 });
 
 test('Packet Tetris: every packet in its own queue wins; calls in best effort or elephants in the fast lane lose', () => {
-  const G = MINIGAMES.aggregation;
+  const G = MINIGAMES.tetris;
   const home = { call: 0, sync: 0, work: 1, web: 2, elephant: 2 };
   const good = G.start(seeded(3));
   run(G, good, 300, (s) => { if (s.falling && s.falling.y > 0.2) G.press(s, home[s.falling.kind]); });
@@ -55,7 +55,7 @@ test('Packet Tetris: every packet in its own queue wins; calls in best effort or
 });
 
 test('Packet Race: reading the jams beats Lord Lag, following his shortest road does not, and the cut needs a reroute', () => {
-  const G = MINIGAMES.ipcore;
+  const G = MINIGAMES.race;
   // a smart player: the quickest way given the elephants, decided after a human-ish pause
   const smart = G.start(seeded(5));
   let wait = 0;
@@ -89,7 +89,7 @@ test('Packet Race: reading the jams beats Lord Lag, following his shortest road 
 
 // the hop that starts the quickest way to Edgewater, elephants included
 function bestHop(s, options) {
-  const G = MINIGAMES.ipcore;
+  const G = MINIGAMES.race;
   let best = 0, bt = Infinity;
   options.forEach((n, i) => { const t = G.timeVia(s, s.you.at, n); if (t < bt) { bt = t; best = i; } });
   return best;
@@ -98,24 +98,46 @@ function bestHop(s, options) {
 // ---------------------------------------------------------------- Level 2 and the finale
 const robots = {
   // power up any repeater that has lost a third of its power; at the anchor, move the traffic
-  submarine: (G, s) => {
+  repeaters: (G, s) => {
     if (s.phase === 'anchor') { G.press(s, s.choices.findIndex((c) => c.right)); return; }
     s.reps.forEach((r, i) => { if (r.drain && r.power < 0.65) G.press(s, 10 + i); });
   },
   // the leftmost column where the request fits, then drop
-  metro: (G, s) => {
+  rainbow: (G, s) => {
     const p = s.piece;
     if (!p || p.t < 0.5) return;
     for (let c = 0; c + p.w <= 12; c++) if (p.rows.every((row) => s.grid[row].slice(c, c + p.w).every((v) => !v))) { G.press(s, 10 + c); G.press(s, 10 + c); return; }
   },
+  // serve the street whose oldest request has waited longest
+  lastmile: (G, s) => {
+    const waiting = s.reqs.filter((r) => !s.fetching.some((f) => f.req === r) && r.t > 0.6);
+    if (waiting.length) G.press(s, waiting.sort((a, b) => b.t - a.t)[0].lane);
+  },
+  // block the link on offer that keeps every office connected
+  storm: (G, s) => {
+    if (s.between > 0 || s.t - (s.lastPress ?? -9) < 1) return;
+    const lanes = G.lanes(s, 'plain');
+    const i = s.offer.findIndex((k) => G.safe(s, k));
+    if (i >= 0 && lanes[i] !== '—') { s.lastPress = s.t; G.press(s, i); }
+  },
+  // stop the digger closest to the fibre; when the ring is cut, open the spare link
+  fibercut: (G, s) => {
+    if (s.phase === 'cut') { if (s.pt > 1) G.press(s, s.choices.findIndex((c) => c.right)); return; }
+    s.diggers.forEach((d, i) => { if (d.p > 0.45) G.press(s, 10 + i); });
+  },
+  // steer into the lane with no hazard coming
+  cablelayer: (G, s) => {
+    const near = s.hazards.filter((z) => z.x > 0.2 && z.x < 0.45);
+    if (near.some((z) => z.lane === s.lane)) G.press(s, [0, 1, 2].find((l) => !near.some((z) => z.lane === l)));
+  },
   // the first way round that has room
-  longhaul: (G, s) => {
+  mesh: (G, s) => {
     if (!s.asking || s.asking.t < 1) return;
     G.press(s, s.asking.routes.findIndex((r) => r.slice(1).every((n, j) => (s.used[[r[j], n].sort().join('-')] ?? 0) < 2)));
   },
 };
 
-for (const id of ['submarine', 'metro', 'longhaul']) {
+for (const id of Object.keys(robots)) {
   test(`${MINIGAMES[id].name.plain}: a careful robot wins, an idle one loses`, () => {
     const G = MINIGAMES[id];
     const good = G.start(seeded(11));
@@ -130,15 +152,15 @@ for (const id of ['submarine', 'metro', 'longhaul']) {
 }
 
 test('Repeater Rescue: waiting for the repair ship instead of moving the traffic loses', () => {
-  const G = MINIGAMES.submarine;
+  const G = MINIGAMES.repeaters;
   const s = G.start(seeded(4));
-  run(G, s, 200, (t) => { if (t.phase === 'anchor') G.press(t, t.choices.findIndex((c) => c.key === 'wait')); else robots.submarine(G, t); });
+  run(G, s, 200, (t) => { if (t.phase === 'anchor') G.press(t, t.choices.findIndex((c) => c.key === 'wait')); else robots.repeaters(G, t); });
   assert.equal(G.result(s).won, false);
   assert.equal(s.wrong, 'wait');
 });
 
 test('Rainbow Packing: a request over two spans needs the same colours free on both', () => {
-  const G = MINIGAMES.metro;
+  const G = MINIGAMES.rainbow;
   const s = G.start(seeded(2));
   s.grid[1][0] = 'hog';
   s.piece = { rows: [0, 1], w: 1, size: { w: 1 }, from: 0, to: 2, col: 0, t: 0 };
@@ -150,7 +172,7 @@ test('Rainbow Packing: a request over two spans needs the same colours free on b
 });
 
 test('Mesh Rescue: every choice through the storm can still be won; bad ones cost towns', () => {
-  const G = MINIGAMES.longhaul;
+  const G = MINIGAMES.mesh;
   const settle = (s) => { for (let n = 0; n < 2000 && !s.over && !s.asking; n++) G.tick(s, 0.5); return s; };
   const outcomes = [];
   const play = (picks) => {
@@ -178,23 +200,66 @@ test('Mesh Rescue: every choice through the storm can still be won; bad ones cos
   assert.ok(outcomes.some((s) => s.down === 0), 'and the best ones lose nothing');
 });
 
-test('The fight with Lord Lag: three rounds of games already played; idle loses the first', async () => {
+test('Level 5, the fight with Lord Lag: a round from each level, in any game of it; idle loses the first', async () => {
   const { BOSS } = await import('../js/minigames.js');
-  const s = BOSS.start(seeded(9));
   const home = { call: 0, sync: 0, work: 1, web: 2, elephant: 2 };
-  run(BOSS, s, 600, (b) => {
-    if (!b.sub) return;
-    const G = BOSS.game(b), t = b.sub;
-    if (G === MINIGAMES.aggregation) { if (t.falling && t.falling.y > 0.2) BOSS.press(b, home[t.falling.kind]); }
-    else if (G === MINIGAMES.ipcore) { const o = G.options(t); if (o.length) { let best = 0, bt = Infinity; o.forEach((n, i) => { const x = G.timeVia(t, t.you.at, n); if (x < bt) { bt = x; best = i; } }); BOSS.press(b, best); } }
-    else robots.longhaul(G, t);
-  });
-  const r = BOSS.result(s);
-  assert.equal(r.won, true, `round ${s.round}`);
-  assert.equal(s.results.length, 3);
-  assert.ok(BOSS.summary(s, 'plain').includes('Lord Lag is beaten'));
+  const play = (picks) => {
+    const s = BOSS.start(seeded(9), { picks });
+    run(BOSS, s, 900, (b) => {
+      if (!b.sub) return;
+      const id = b.picks[b.round], G = MINIGAMES[id], t = b.sub;
+      if (id === 'tetris') { if (t.falling && t.falling.y > 0.2) BOSS.press(b, home[t.falling.kind]); }
+      else if (id === 'race') { const o = G.options(t); if (o.length) { let best = 0, bt = Infinity; o.forEach((n, i) => { const x = G.timeVia(t, t.you.at, n); if (x < bt) { bt = x; best = i; } }); BOSS.press(b, best); } }
+      else if (id === 'beat') { for (const p of [...t.packets]) if (p.x >= 0.9 && p.x <= 0.95) BOSS.press(b, p.lane); }
+      else robots[id](G, t);
+    });
+    return s;
+  };
+  for (const picks of [['tetris', 'race', 'repeaters', 'mesh'], ['lastmile', 'beat', 'cablelayer', 'rainbow'], ['storm', 'fibercut', 'repeaters', 'mesh']]) {
+    const s = play(picks);
+    assert.equal(BOSS.result(s).won, true, `${picks.join(' ')}: round ${s.round}`);
+    assert.equal(s.results.length, 4);
+    assert.ok(BOSS.summary(s, 'plain').includes('Lord Lag is beaten'));
+  }
+  // left to pick, every round is a game from its own level
+  const s = BOSS.start(seeded(3));
+  assert.deepEqual(s.picks.map((id) => Object.entries(STORY).find(([, ch]) => ch.stages.includes(id))[0]).map((c) => ({ aggregation: 1, xhaul: 2, ipcore: 2, submarine: 3, metro: 4, longhaul: 4 })[c]), [1, 2, 3, 4]);
   const idle = BOSS.start(seeded(9));
   run(BOSS, idle, 600);
   assert.equal(BOSS.result(idle).won, false);
   assert.equal(idle.round, 0);
+});
+
+test('Last Mile Dash: a show the cache doesn\'t have goes to the origin once, then every request for it is a hit', () => {
+  const G = MINIGAMES.lastmile;
+  const s = G.start(seeded(5));
+  s.reqs.push({ lane: 0, title: 3, t: 0, slot: 0 });
+  G.press(s, 0);
+  assert.equal(s.misses, 1);
+  run(G, s, 3);
+  assert.ok(s.cached.has(3), 'cached after the first fetch');
+  s.reqs.push({ lane: 1, title: 3, t: 0, slot: 0 });
+  const hits = s.hits; G.press(s, 1);
+  assert.equal(s.hits, hits + 1);
+});
+
+test('Storm Chaser: blocking a link that cuts an office off costs a life; the safe one calms the storm', () => {
+  const G = MINIGAMES.storm;
+  const s = G.start(seeded(6));
+  const bad = s.offer.findIndex((k) => !G.safe(s, k)), good = s.offer.findIndex((k) => G.safe(s, k));
+  G.press(s, bad);
+  assert.equal(s.lives, 2);
+  G.press(s, s.offer.findIndex((k) => G.safe(s, k)));
+  assert.equal(s.calmed, 1);
+  assert.ok(good >= 0);
+});
+
+test('Stop the Fiber Cut and Cable Layer: the wrong move loses', () => {
+  const F = MINIGAMES.fibercut, f = F.start(seeded(2));
+  run(F, f, 200, (s) => { if (s.phase === 'cut') F.press(s, s.choices.findIndex((c) => c.key === 'wait')); else robots.fibercut(F, s); });
+  assert.equal(F.result(f).won, false);
+  assert.equal(f.wrong, 'wait');
+  const C = MINIGAMES.cablelayer, c = C.start(seeded(2));
+  run(C, c, 60, (s) => { const z = s.hazards.find((h) => h.x > 0.2 && h.x < 0.3); if (z) C.press(s, z.lane); });
+  assert.equal(C.result(c).won, false, 'steering into every hazard sinks the lay');
 });

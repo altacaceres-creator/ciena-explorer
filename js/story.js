@@ -3,37 +3,50 @@
 // no page or 3D in it, so the tests can play it; js/game.js puts it on screen.
 //
 // Every line comes in two readings, like the rest of the map: `plain` for Explorer
-// and `eng` for Engineer. A challenge is three questions for now; each chapter's
-// mini-game (docs/game-plan.md) will take its place one at a time.
+// and `eng` for Engineer. Each network plays one or more mini-games (js/minigames.js),
+// its stops; its questions come back in the final exam of its level.
 
-// The order the scenes unlock in, the way a phone's packets travel: the cell towers,
-// the businesses and homes of the city, the core. That finishes the packet world on
-// side B; the undersea cables are then a new discovery, and across the ocean wait the
-// optical networks of side A.
-export const STORY_ORDER = ['xhaul', 'aggregation', 'ipcore', 'submarine', 'metro', 'longhaul'];
+// The order the networks unlock in: the city first (homes, businesses and its ring),
+// then the cell towers and the core. That finishes the packet world on side B; the
+// undersea cables are then a new discovery, and across the ocean wait the optical
+// networks of side A.
+export const STORY_ORDER = ['aggregation', 'xhaul', 'ipcore', 'submarine', 'metro', 'longhaul'];
 
-// The networks are played in two levels. Each ends with a final exam at its last stop:
-// that stop's questions and one from each earlier stop. The second then has the fight
-// with Lord Lag.
+// Five levels. Each of the first four plays the games of its networks and ends with a
+// final exam on all of them; the fifth is the fight with Lord Lag, a round from each.
 export const STORY_LEVELS = [
   {
-    n: 1, chapters: ['xhaul', 'aggregation', 'ipcore'],
-    name: { plain: 'The packet world', eng: 'Side B: the packet network' },
-    exam: () => [...STORY.ipcore.questions, STORY.xhaul.questions[1], STORY.aggregation.questions[1]],
+    n: 1, chapters: ['aggregation'],
+    name: { plain: 'The city', eng: 'Metro aggregation' },
+    exam: () => [...STORY.aggregation.questions, ...EXTRA_QUESTIONS.city],
   },
   {
-    n: 2, chapters: ['submarine', 'metro', 'longhaul'],
-    name: { plain: 'Across the ocean', eng: 'Subsea and optical transport' },
-    exam: () => [...STORY.longhaul.questions, STORY.submarine.questions[1], STORY.metro.questions[1]],
-    boss: true,     // after its exam, the fight with Lord Lag ends the story
+    n: 2, chapters: ['xhaul', 'ipcore'],
+    name: { plain: 'The towers and the core', eng: 'xhaul and the IP core' },
+    exam: () => [...STORY.xhaul.questions, ...STORY.ipcore.questions],
+  },
+  {
+    n: 3, chapters: ['submarine'],
+    name: { plain: 'Under the sea', eng: 'Subsea' },
+    exam: () => [...STORY.submarine.questions, ...EXTRA_QUESTIONS.sea],
+  },
+  {
+    n: 4, chapters: ['metro', 'longhaul'],
+    name: { plain: 'The light', eng: 'Optical transport' },
+    exam: () => [...STORY.metro.questions, ...STORY.longhaul.questions],
+  },
+  {
+    n: 5, chapters: [], boss: true,
+    name: { plain: 'The final fight', eng: 'The final fight' },
   },
 ];
+export const BOSS_LEVEL = STORY_LEVELS.at(-1);
 export const levelOf = (id) => STORY_LEVELS.find((l) => l.chapters.includes(id));
-// the questions that close a level, asked after the game at its last stop
+// the questions that close a level, asked after the last game of its last network
 export const examAt = (id) => { const l = levelOf(id); return l?.exam && l.chapters.at(-1) === id ? l.exam() : null; };
 
-// One rank per network won back; the first is where everyone starts.
-export const STORY_RANKS = ['Apprentice', 'Technician', 'Engineer', 'Senior engineer', 'Architect', 'Principal architect', 'Chief of the NOC'];
+// A rank for every network won back, and the last one for beating Lord Lag.
+export const STORY_RANKS = ['Apprentice', 'Technician', 'Engineer', 'Senior engineer', 'Lead engineer', 'Architect', 'Principal architect', 'Chief of the NOC'];
 
 export const STORY_LIVES = 2;          // one mistake per challenge is allowed, the second ends it
 export const STORY_SECONDS = 30;       // to answer each question
@@ -41,11 +54,7 @@ export const STORY_SECONDS = 30;       // to answer each question
 // Each answer list starts with the right one; the game shuffles them.
 export const STORY = {
   aggregation: {
-    villain: { name: 'The Buffer Gremlin', face: '👾' },
-    taunt: {
-      plain: 'Mwahaha! My Buffer Gremlin has frozen every screen in Popcorn Hill on premiere night. Enjoy your spinning wheel!',
-      eng: 'My Buffer Gremlin is rebuffering every stream in Popcorn Hill, and my elephant flows own your uplink. Good luck, apprentice.',
-    },
+    stages: ['lastmile', 'tetris', 'storm'],
     questions: [
       {
         plain: { q: 'Everyone in Popcorn Hill starts the premiere at once. Where should the show come from so it starts right away?', a: ['A copy kept in the city network, a few hops from home', 'The film studio, on the other side of the world, every time', 'The house next door'] },
@@ -60,10 +69,6 @@ export const STORY = {
         eng: { q: 'A fibre on the G.8032 ring is cut. What restores traffic within 50 ms?', a: ['CFM sees the loss and the RPL is unblocked, so traffic goes the other way round', 'BGP reconverges across the core', 'The 3900 NIDs hold the traffic until the repair'] },
       },
     ],
-    lose: {
-      plain: 'Buffering… Movie night is over. 312 homes gave up.',
-      eng: 'Rebuffering on every stream: voice and video were dropped while the backup ran. 312 homes gave up.',
-    },
     win: {
       plain: 'The premiere plays in every home, calls never drop, and the ring heals itself.',
       eng: 'Hits served from the Couchwave cache, voice in EF, and G.8032 protecting the ring in under 50 ms.',
@@ -80,11 +85,7 @@ export const STORY = {
   },
 
   xhaul: {
-    villain: { name: 'The Jitterbugs', face: '🐞' },
-    taunt: {
-      plain: 'My Jitterbugs are nudging the clocks. Soon no two phone towers will agree what time it is!',
-      eng: 'My Jitterbugs are adding delay variation to your timing packets. Watch the cell sites drift out of phase.',
-    },
+    stages: ['fibercut', 'beat'],
     questions: [
       {
         plain: { q: 'Phone towers must agree on the exact time. What do their timing messages need on the way?', a: ['The fastest lane, with no waiting in line', 'The slowest lane, so they arrive gently', 'Nothing: a few seconds late is fine'] },
@@ -99,10 +100,6 @@ export const STORY = {
         eng: { q: 'In C-RAN, where does the DU run?', a: ['Pooled at a hub site, serving several RUs', 'On the UE', 'In the 5G core data center, beside the UPF'] },
       },
     ],
-    lose: {
-      plain: 'The towers drifted out of step. Calls drop every time a phone moves between them.',
-      eng: 'Phase error past budget: handovers fail and neighbouring cells interfere.',
-    },
     win: {
       plain: 'Every tower keeps perfect time, and calls pass from tower to tower without a hiccup.',
       eng: 'Timing and fronthaul ride first, every DU sits inside its fronthaul budget, and every cell is in phase.',
@@ -119,11 +116,7 @@ export const STORY = {
   },
 
   ipcore: {
-    villain: { name: 'The Elephant Flows', face: '🐘' },
-    taunt: {
-      plain: 'My Elephant Flows are stomping through Coreburg. Tidewell\'s video meeting is about to freeze!',
-      eng: 'At 9:00 my elephant flows fill the Coreburg pair. Let\'s see Tidewell\'s video meeting survive that.',
-    },
+    stages: ['race'],
     questions: [
       {
         plain: { q: 'The short road between two Tidewell offices is jammed by backups. What saves the video meeting?', a: ['Send the meeting a quieter way round, through Northport', 'Stop the meeting until the backups finish', 'Make the backups bigger so they finish sooner'] },
@@ -138,10 +131,6 @@ export const STORY = {
         eng: { q: 'A core link fails. What reroutes the traffic in under 50 ms?', a: ['TI-LFA: a loop-free backup path computed and installed before the failure', 'A full IGP reconvergence with a new SPF run', 'A manual change from the NOC'] },
       },
     ],
-    lose: {
-      plain: 'The meeting froze on the boss\'s face. Tidewell is not happy.',
-      eng: 'Jitter at 37 ms: the EF queue overflowed and the meeting froze on the CEO\'s face.',
-    },
     win: {
       plain: 'The meeting is smooth, the backups still run, and a broken road is fixed in a blink.',
       eng: 'The main path is back up, and the secondary paths aren\'t overloaded anymore.',
@@ -158,11 +147,7 @@ export const STORY = {
   },
 
   submarine: {
-    villain: { name: 'The Anchor Dragger', face: '⚓' },
-    taunt: {
-      plain: 'My Anchor Dragger is fishing for your cables. Say goodbye to the other side of the world!',
-      eng: 'My Anchor Dragger is trawling the shelf off Coherent Isle. One cable down, and the ocean crossing goes with it.',
-    },
+    stages: ['repeaters', 'cablelayer'],
     questions: [
       {
         plain: { q: 'Light gets weaker as it travels thousands of kilometres under the sea. What keeps it strong?', a: ['Boosters on the sea floor every so often, powered through the cable', 'Fish swimming beside the cable', 'Nothing: it is just very bright when it starts'] },
@@ -177,10 +162,6 @@ export const STORY = {
         eng: { q: 'Where does the submarine line terminal sit?', a: ['In the cable landing station, near the beach', 'On the repair ship', 'Inside the first repeater'] },
       },
     ],
-    lose: {
-      plain: 'The island across the sea is cut off. Lord Lag laughs.',
-      eng: 'One cable, one landing: the island is isolated until the repair ship arrives.',
-    },
     win: {
       plain: 'The two sides of the world are talking again.',
       eng: 'Traffic restored on the diverse system, the repeaters powered, and the repair ship on its way.',
@@ -197,11 +178,7 @@ export const STORY = {
   },
 
   metro: {
-    villain: { name: 'The Spectrum Hog', face: '🐷' },
-    taunt: {
-      plain: 'My Spectrum Hog has gobbled up every colour of light in Lumen City. No room for your data centers!',
-      eng: 'My Spectrum Hog has grabbed half the C-band on the Lumen City ring. Try fitting your 400G DCI into what\'s left.',
-    },
+    stages: ['rainbow'],
     questions: [
       {
         plain: { q: 'One glass fibre in Lumen City carries many conversations at once. How?', a: ['Each one travels in its own colour of light', 'They take turns, one per day', 'The fibre is split into thousands of tiny tubes'] },
@@ -216,10 +193,6 @@ export const STORY = {
         eng: { q: 'What links the two Lumen City data centers?', a: ['A DCI: 400G coherent waves on Waveserver, point to point over the ring', 'A 1G Ethernet service over the aggregation ring', 'A copper cross-connect'] },
       },
     ],
-    lose: {
-      plain: 'No room left on the fibre. The data centers can\'t talk.',
-      eng: 'Spectrum exhausted: the DCI waves can\'t be placed without blocking.',
-    },
     win: {
       plain: 'Every colour has its place, and the data centers are talking.',
       eng: 'Spectrum planned, the ROADMs express what passes through, and 400G DCI is up between the data centers.',
@@ -236,11 +209,7 @@ export const STORY = {
   },
 
   longhaul: {
-    villain: { name: 'Lord Lag', face: '😈' },
-    taunt: {
-      plain: 'It\'s me, Lord Lag! Backhoe Bob and his crew are cutting the country\'s light highway in three places. You\'ll never keep up!',
-      eng: 'Lord Lag here. Three long-haul fibre cuts in one storm, one after another. Let\'s see your mesh restore that.',
-    },
+    stages: ['mesh'],
     questions: [
       {
         plain: { q: 'A storm cuts three long fibres one after another. How does the light highway keep the towns connected?', a: ['It finds a new road for each cut, because the roads form a web, not a line', 'It closes the highway until the storm ends', 'It squeezes everything onto one road, even when it is full'] },
@@ -255,10 +224,6 @@ export const STORY = {
         eng: { q: 'What sits every 80 km or so along a long-haul span?', a: ['In-line amplifier (ILA) huts', 'Core routers', 'Regenerators that convert every wave to electrical'] },
       },
     ],
-    lose: {
-      plain: 'Two towns went dark. The cuts beat you, and Lord Lag is laughing.',
-      eng: 'Restoration ran out of capacity: two towns are isolated.',
-    },
     win: {
       plain: 'Lord Lag is beaten, and Netlandia is back on, all of it.',
       eng: 'Three cuts restored without losing one service. Lord Lag is beaten.',
@@ -275,6 +240,185 @@ export const STORY = {
   },
 };
 
+// Each game's own villain, taunt, loss and lesson (the lesson closes a stop that is not
+// the last of its network).
+export const STAGES = {
+  lastmile: {
+    villain: { name: 'The Buffer Gremlin', face: '👾' },
+    taunt: {
+      plain: 'Mwahaha! My Buffer Gremlin has frozen every screen in Popcorn Hill on premiere night. Enjoy your spinning wheel!',
+      eng: 'My Buffer Gremlin is rebuffering every stream in Popcorn Hill. Let\'s see your cache hit ratio, apprentice.',
+    },
+    lose: {
+      plain: 'Buffering… Movie night is over. The homes gave up.',
+      eng: 'Too many abandoned sessions: the streams buffered out before they were served.',
+    },
+    lesson: {
+      plain: 'A copy of each popular show kept a few hops from home starts it at once, and it only has to cross the network once.',
+      eng: 'The CDN cache next to the aggregation router serves the hits; a miss is fetched once from the origin and then cached for everyone.',
+    },
+  },
+  tetris: {
+    villain: { name: 'The Elephant Flows', face: '🐘' },
+    taunt: {
+      plain: 'Here come my Elephant Flows! Giant backups stomping down the road out of the city. Good luck keeping your calls alive!',
+      eng: 'My elephant flows are on the 5170 uplink. Let\'s see your QoS keep voice alive.',
+    },
+    lose: {
+      plain: 'The fast lane filled up behind a backup, and the calls dropped.',
+      eng: 'Voice queued behind elephant flows: EF starved, calls dropped.',
+    },
+    lesson: {
+      plain: 'Calls and clocks go first in a small fast lane, and the giant backups wait in "everything else", where waiting hurts nobody.',
+      eng: 'Strict-priority EF for voice and PTP, AF for business, best effort for the elephants: the scheduler serves EF first.',
+    },
+  },
+  storm: {
+    villain: { name: 'The Broadcast Banshee', face: '📢' },
+    taunt: {
+      plain: 'Eeeee! Someone plugged a cable in twice at Tidewell. My Broadcast Banshee is screaming round and round!',
+      eng: 'A patch cable closed a loop at Tidewell. My Broadcast Banshee is flooding every port.',
+    },
+    lose: {
+      plain: 'Every port at 100%. The whole office is offline.',
+      eng: 'Broadcast storm: every link saturated, the office network is down.',
+    },
+    lesson: {
+      plain: 'A network of switches must never have a loop in use: one link in each loop stays switched off, ready for when it is needed.',
+      eng: 'Loops must be blocked (STP, or the RPL on a G.8032 ring), and storm control caps broadcasts at the edge.',
+    },
+  },
+  fibercut: {
+    villain: { name: 'Backhoe Bob', face: '🚜' },
+    taunt: {
+      plain: 'Backhoe Bob here! My crew is digging all round the phone towers\' fibre. Oops, was that a cable?',
+      eng: 'Backhoe Bob\'s crew is excavating along the xhaul ring. No locate requests filed, of course.',
+    },
+    lose: {
+      plain: 'Too many diggers hit the fibre, and the towers went quiet.',
+      eng: 'Multiple fibre strikes: the ring is down and the cell sites are isolated.',
+    },
+    lesson: {
+      plain: 'Calling before you dig keeps most diggers off the cables, and the ring keeps one spare link ready for the cut that happens anyway.',
+      eng: 'Locate requests prevent most strikes; for the rest, G.8032 unblocks the RPL and restores the ring in under 50 ms.',
+    },
+  },
+  beat: {
+    villain: { name: 'The Jitterbugs', face: '🐞' },
+    taunt: {
+      plain: 'My Jitterbugs are nudging the clocks. Soon no two phone towers will agree what time it is!',
+      eng: 'My Jitterbugs are adding delay variation to your timing packets. Watch the cell sites drift out of phase.',
+    },
+    lose: {
+      plain: 'The towers drifted out of step. Calls drop every time a phone moves between them.',
+      eng: 'Phase error past budget: handovers fail and neighbouring cells interfere.',
+    },
+    lesson: {
+      plain: 'Phone towers take turns to talk, so their clock messages ride the fastest lane and arrive right on the beat.',
+      eng: 'PTP rides the top strict-priority queue, so delay variation stays inside the phase budget of each cell site.',
+    },
+  },
+  race: {
+    villain: { name: 'Lord Lag', face: '😈' },
+    taunt: {
+      plain: 'At nine o\'clock my Elephant Flows fill the roads through Coreburg. Race me to Edgewater, if you dare!',
+      eng: 'At 9:00 my elephant flows fill the Coreburg pair. Race your SR-TE head end against my IGP.',
+    },
+    lose: {
+      plain: 'Lord Lag\'s packet got there first. The meeting froze on the boss\'s face.',
+      eng: 'Lost the race to the IGP path: the video meeting froze on the CEO\'s face.',
+    },
+    lesson: {
+      plain: 'Pick the road for each call by where the jams are, not just by distance, and keep a spare road ready.',
+      eng: 'Segment routing lets the head end steer around congestion, and TI-LFA keeps a backup path ready before a failure.',
+    },
+  },
+  repeaters: {
+    villain: { name: 'The Anchor Dragger', face: '⚓' },
+    taunt: {
+      plain: 'My Anchor Dragger is fishing for your cables. Say goodbye to the other side of the world!',
+      eng: 'My Anchor Dragger is trawling the shelf off Coherent Isle. One cable down, and the ocean crossing goes with it.',
+    },
+    lose: {
+      plain: 'The island across the sea is cut off. Lord Lag laughs.',
+      eng: 'One cable, one landing: the island is isolated until the repair ship arrives.',
+    },
+    lesson: {
+      plain: 'Boosters on the sea floor, powered from the shore, keep the light strong, and an island lands more than one cable.',
+      eng: 'Powered repeater chains keep the signal up; diverse cables and landings turn a cut into a repair job.',
+    },
+  },
+  cablelayer: {
+    villain: { name: 'The Kraken', face: '🦑' },
+    taunt: {
+      plain: 'Lay a new cable across MY ocean? My Kraken will stir up every volcano and fishing boat on the way!',
+      eng: 'A new cable lay through the Kraken\'s waters. Hope your route survey was good.',
+    },
+    lose: {
+      plain: 'The cable caught on the seabed too many times. Back to port!',
+      eng: 'Too many hazards on the route: the lay is abandoned.',
+    },
+    lesson: {
+      plain: 'Before a cable is laid, the sea floor is surveyed so the route steers clear of volcanoes, steep rocks and fishing grounds.',
+      eng: 'A marine route survey keeps the lay off hazards and trawling grounds, with burial and armour where anchors could reach.',
+    },
+  },
+  rainbow: {
+    villain: { name: 'The Spectrum Hog', face: '🐷' },
+    taunt: {
+      plain: 'My Spectrum Hog has gobbled up every colour of light in Lumen City. No room for your data centers!',
+      eng: 'My Spectrum Hog has grabbed half the C-band on the Lumen City ring. Try fitting your DCI in what\'s left.',
+    },
+    lose: {
+      plain: 'No room left on the fibre. The data centers can\'t talk.',
+      eng: 'Spectrum exhausted: the waves can\'t be placed without blocking.',
+    },
+    lesson: {
+      plain: 'Each link gets its own colours of light, the same all the way along, and packing them tight leaves room for more.',
+      eng: 'Wavelength continuity end to end, and a well-packed spectrum, let the ring grow without new fibre.',
+    },
+  },
+  mesh: {
+    villain: { name: 'Backhoe Bob\'s crew', face: '⛈' },
+    taunt: {
+      plain: 'A storm! And Backhoe Bob\'s whole crew is out in it, cutting the country\'s light highway in three places!',
+      eng: 'A storm front and Backhoe Bob\'s crew: successive long-haul fibre cuts. Let\'s see your mesh restore that.',
+    },
+    lose: {
+      plain: 'Two towns went dark. The cuts beat you.',
+      eng: 'Restoration ran out of capacity: two towns are isolated.',
+    },
+    lesson: {
+      plain: 'A web of fibres with smart crossroads can always find another way, if there is room to spare on it.',
+      eng: 'A CDC ROADM mesh restores wave after wave, as long as the capacity was planned for it.',
+    },
+  },
+};
+
+// Extra questions for the exams of the levels with a single network.
+export const EXTRA_QUESTIONS = {
+  city: [
+    {
+      plain: { q: 'Someone plugs one cable into two sockets of the same office switch, and the network floods with copies. What stops it?', a: ['Keeping one link switched off in every loop, ready for when it is needed', 'Buying a faster switch', 'Sending every message twice'] },
+      eng: { q: 'A patch cable closes a loop on the access switches and a broadcast storm starts. What prevents it?', a: ['Blocking one link in every loop (STP or the G.8032 RPL), plus storm control', 'More bandwidth on the uplink', 'A larger MTU'] },
+    },
+    {
+      plain: { q: 'The homes of Popcorn Hill share one fibre from the street cabinet. What divides it between them?', a: ['A splitter in the cabinet that needs no power', 'A router in every garden', 'A satellite dish on the roof'] },
+      eng: { q: 'In XGS-PON, what sits between the OLT and the homes?', a: ['A passive optical splitter', 'An active Ethernet switch on every street', 'A DWDM ROADM'] },
+    },
+  ],
+  sea: [
+    {
+      plain: { q: 'How do engineers choose where an undersea cable runs?', a: ['They survey the sea floor and steer clear of volcanoes, steep rocks and fishing grounds', 'They drop it in a straight line', 'The fish choose the way'] },
+      eng: { q: 'How is a subsea cable route chosen?', a: ['A marine survey avoids hazards and trawling grounds, with burial and armour near shore', 'The shortest great circle, whatever the seabed', 'By depth alone: the deeper the better, everywhere'] },
+    },
+    {
+      plain: { q: 'Near the beach, where boats and anchors are, how is an undersea cable protected?', a: ['It is buried under the sea floor and wrapped in thicker armour', 'It floats on the surface', 'It is painted bright orange'] },
+      eng: { q: 'How is a subsea cable protected in shallow water?', a: ['Armoured and buried by a plough', 'Left unarmoured to save weight', 'Laid in loops so it can stretch'] },
+    },
+  ],
+};
+
 // ---------------------------------------------------------------- the rules
 
 // Points for one answer: 100 if right, plus up to 50 for answering quickly.
@@ -286,7 +430,7 @@ export function answerPoints(right, seconds) {
 export const FLAWLESS_BONUS = 200;
 
 export function newStory() {
-  return { unlocked: [], score: 0, best: 0 };
+  return { unlocked: [], stage: 0, final: false, score: 0, best: 0 };
 }
 // Saved progress, checked: anything unknown or out of order is dropped.
 export function loadStory(saved) {
@@ -295,15 +439,29 @@ export function loadStory(saved) {
   for (const id of Array.isArray(saved.unlocked) ? saved.unlocked : []) {
     if (id === STORY_ORDER[s.unlocked.length]) s.unlocked.push(id); else break;
   }
+  const next = nextChapter(s);
+  s.stage = next && Number.isInteger(saved.stage) && saved.stage > 0 && saved.stage < STORY[next].stages.length ? saved.stage : 0;
+  s.final = saved.final === true && s.unlocked.length === STORY_ORDER.length;
   s.score = Number.isFinite(saved.score) && saved.score > 0 ? Math.round(saved.score) : 0;
   s.best = Math.max(s.score, Number.isFinite(saved.best) ? Math.round(saved.best) : 0);
   return s;
 }
 export const nextChapter = (s) => STORY_ORDER[s.unlocked.length] ?? null;
+// the game to play next in the network being won back
+export const nextStage = (s) => { const id = nextChapter(s); return id ? STORY[id].stages[s.stage] : null; };
 export const isUnlocked = (s, id) => s.unlocked.includes(id);
-export const rankOf = (s) => STORY_RANKS[Math.min(s.unlocked.length, STORY_RANKS.length - 1)];
-export const storyDone = (s) => s.unlocked.length === STORY_ORDER.length;
-
+// every network back, and Lord Lag still to beat
+export const bossNext = (s) => !nextChapter(s) && !s.final;
+export const rankOf = (s) => STORY_RANKS[Math.min(s.unlocked.length + (s.final ? 1 : 0), STORY_RANKS.length - 1)];
+export const storyDone = (s) => s.final;
+const bankPoints = (s, points) => { s.score += points; s.best = Math.max(s.best, s.score); };
+// A stop cleared that is not the network's last: on to its next game.
+export function winStage(s, id, points) {
+  if (nextChapter(s) !== id || s.stage >= STORY[id].stages.length - 1) return s;
+  s.stage++;
+  bankPoints(s, points);
+  return s;
+}
 // One attempt at a chapter's questions (or a level's exam): answers shuffled,
 // lives, and the points earned so far (which only count if it is won).
 export function startChallenge(id, random = Math.random, questions = STORY[id].questions) {
@@ -328,17 +486,25 @@ export function answer(c, pick, seconds) {
   }
   return { right, points };
 }
-// Bank a won challenge: the network unlocks and its points join the score.
+// The network's last stop won (and its level's exam, if it closes one): it unlocks and
+// the points join the score.
 export function winChapter(s, c) {
   if (c.over !== 'won' || nextChapter(s) !== c.id) return s;
   s.unlocked.push(c.id);
-  s.score += c.points;
-  s.best = Math.max(s.best, s.score);
+  s.stage = 0;
+  bankPoints(s, c.points);
+  return s;
+}
+// Lord Lag beaten: the story is over.
+export function winFinal(s, points) {
+  if (!bossNext(s)) return s;
+  s.final = true;
+  bankPoints(s, points);
   return s;
 }
 // Start the story again from the top, keeping the best score.
 export function restartStory(s) {
-  return Object.assign(s, { unlocked: [], score: 0 });
+  return Object.assign(s, { unlocked: [], stage: 0, final: false, score: 0 });
 }
 
 function shuffle(a, random) {
