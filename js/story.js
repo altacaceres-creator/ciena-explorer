@@ -33,7 +33,7 @@ export const examAt = (id) => { const l = levelOf(id); return l?.exam && l.chapt
 export const STORY_RANKS = ['Apprentice', 'Technician', 'Engineer', 'Senior engineer', 'Architect', 'Principal architect', 'Chief of the NOC'];
 
 export const STORY_LIVES = 2;          // one mistake per challenge is allowed, the second ends it
-export const STORY_SECONDS = 20;       // to answer each question
+export const STORY_SECONDS = 30;       // to answer each question
 
 // Each answer list starts with the right one; the game shuffles them.
 export const STORY = {
