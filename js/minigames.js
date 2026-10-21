@@ -597,9 +597,11 @@ const RepeaterRescue = {
       g.beginPath();
       for (let k = 0; k <= 40; k++) { const [x, y] = RepeaterRescue.at(ci, k / 40, w, h); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
       g.stroke(); g.setLineDash([]);
-      const [sx, sy] = RepeaterRescue.at(ci, 0, w, h);
-      g.fillStyle = theme.paper; roundRect(g, 8, sy - 13, 58, 26, 8); g.fill(); g.strokeStyle = theme.ink; g.lineWidth = 2; g.stroke();
-      g.fillStyle = theme.ink; g.font = `800 10px ${theme.font}`; g.textAlign = 'center'; g.fillText(c.from, 37, sy + 4);
+      const [, sy] = RepeaterRescue.at(ci, 0, w, h);
+      g.font = `800 10px ${theme.font}`;
+      const bw = Math.max(58, g.measureText(c.from).width + 12);
+      g.fillStyle = theme.paper; roundRect(g, 6, sy - 13, bw, 26, 8); g.fill(); g.strokeStyle = theme.ink; g.lineWidth = 2; g.stroke();
+      g.fillStyle = theme.ink; g.textAlign = 'center'; g.fillText(c.from, 6 + bw / 2, sy + 4);
       // light pulses along a cable that works
       if (!cut) for (let k = 0; k < 6; k++) { const u = ((s.t * 0.25 + k / 6) % 1); const [x, y] = RepeaterRescue.at(ci, u, w, h); g.fillStyle = live ? theme.gold : theme.muted; g.globalAlpha = live ? 0.9 : 0.35; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.globalAlpha = 1; }
       if (cut) { const [x, y] = RepeaterRescue.at(0, 0.45, w, h); emoji(g, '✂', x, y + 2, 20); emoji(g, '⚓', x + 18, y - 22, 24); }
@@ -863,7 +865,9 @@ const MeshRescue = {
     return [0, 1, 2].map((i) => {
       const r = a.routes[i];
       if (!r) return '—';
-      const via = MNODES[r[1] === a.sv.b ? r[0] : r[1]].name;
+      // name the route by a town on it that the other routes on offer don't pass through
+      const mid = r.slice(1, -1), elsewhere = new Set(a.routes.filter((x) => x !== r).flatMap((x) => x.slice(1, -1)));
+      const via = MNODES[mid.find((n) => !elsewhere.has(n)) ?? mid[0] ?? r[0]].name;
       return `${words === 'plain' ? 'via' : 'via'} ${via} · ${r.length - 1} ${words === 'plain' ? 'hops' : 'spans'}${meshFits(s, r) ? '' : ' · full'}`;
     });
   },
@@ -921,11 +925,16 @@ const MeshRescue = {
     }
     floats(g, s, () => [w / 2, 52], theme);
   },
-  // where a route's number sits: halfway along it
+  // where a route's number sits: on a hop no other route on offer takes, so the numbers
+  // never sit on top of each other (else halfway along it)
   badge(s, i, w, h) {
-    const r = s.asking.routes[i], m = r[Math.floor(r.length / 2)], m0 = r[Math.floor(r.length / 2) - 1];
-    const [ax, ay] = MeshRescue.pos(m0, w, h), [bx, by] = MeshRescue.pos(m, w, h);
-    return [(ax + bx) / 2 + (i - 1) * 8, (ay + by) / 2 - 14 + i * 4];
+    const routes = s.asking.routes, r = routes[i];
+    const hops = (x) => x.slice(1).map((n, j) => mkey(x[j], n));
+    const others = new Set(routes.filter((_, k) => k !== i).flatMap(hops));
+    const own = hops(r).findIndex((k) => !others.has(k));
+    const j = own >= 0 ? own : Math.floor(r.length / 2) - 1;
+    const [ax, ay] = MeshRescue.pos(r[j], w, h), [bx, by] = MeshRescue.pos(r[j + 1], w, h);
+    return [(ax + bx) / 2, (ay + by) / 2 - 12];
   },
   laneAt(x, y, w, h, s) {
     if (!s?.asking) return null;
