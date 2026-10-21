@@ -12,8 +12,9 @@
 // optical networks of side A.
 export const STORY_ORDER = ['xhaul', 'aggregation', 'ipcore', 'submarine', 'metro', 'longhaul'];
 
-// The networks are played in two levels. The first ends with a final exam at its last
-// stop: the core's questions and one from each earlier stop, on the whole packet world.
+// The networks are played in two levels. Each ends with a final exam at its last stop:
+// that stop's questions and one from each earlier stop. The second then has the fight
+// with Lord Lag.
 export const STORY_LEVELS = [
   {
     n: 1, chapters: ['xhaul', 'aggregation', 'ipcore'],
@@ -23,6 +24,8 @@ export const STORY_LEVELS = [
   {
     n: 2, chapters: ['submarine', 'metro', 'longhaul'],
     name: { plain: 'Across the ocean', eng: 'Subsea and optical transport' },
+    exam: () => [...STORY.longhaul.questions, STORY.submarine.questions[1], STORY.metro.questions[1]],
+    boss: true,     // after its exam, the fight with Lord Lag ends the story
   },
 ];
 export const levelOf = (id) => STORY_LEVELS.find((l) => l.chapters.includes(id));

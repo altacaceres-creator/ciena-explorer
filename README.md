@@ -195,12 +195,23 @@ in the card, played by touch, click or the keys 1, 2 and 3:
 
 The networks come in two levels. **Level 1, the packet world** (towers, city, core)
 closes with a **final exam** after Packet Race: the core's three questions and one
-from each earlier stop. Then **Level 2, across the ocean**, starts with the undersea
-cables. Every win card tells the story of your game in numbers, why you won, and a
+from each earlier stop. **Level 2, across the ocean** (undersea cables, light ring,
+long haul) closes the same way after Mesh Rescue, and then comes **the fight with Lord
+Lag**: three short rounds of games already played (a packet tetris, a race with a cut
+fibre, a storm), one of his three hearts gone for each round won. Every win card tells the story of your game in numbers, why you won, and a
 longer paragraph on what that means in a real network.
 
-The networks without a game yet ask three quick questions instead (a 30-second clock,
-two lives), until theirs is built. Losing is **You died**, with what that would mean in
+- **Repeater Rescue** (undersea cables): light crosses the ocean through repeaters on
+  the seabed; tap each one that blinks red before it loses power, then, when the anchor
+  cuts a cable, move the island's traffic to its other cable while the repair ship sails.
+- **Rainbow Packing** (metro optical ring): a tetris of light. Columns are colours,
+  rows the ring's spans; move each request with ◀ ▶ and drop it, and a request over two
+  spans needs the same colours free on both. The Spectrum Hog grabs some too.
+- **Mesh Rescue** (long haul): a storm cuts fibre after fibre; for each service that
+  drops, pick one of three ways round, with only two waves per fibre, so think ahead.
+
+The games are tuned to be easy: slow motion while you choose, wide targets, and a
+player who reacts in a second or two still wins. Losing is **You died**, with what that would mean in
 a real network. A win
 lifts the clouds, pops the landmarks back up and shows **You unlocked …** with why
 you won, and the scene can then be opened like any other. Points come from the game
@@ -241,14 +252,14 @@ inlined, so it can be shared as one file.
 | `js/basics.js` | the introduction-to-networking topics for each network (Explorer mode) |
 | `js/vocab.js` | the two reading modes: every name, label and sentence the HUD prints, in plain words and in the trade's |
 | `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, each chapter's villain, taunt, questions, win and loss in both readings, and the rules (points, lives, ranks, saved progress) |
-| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Keep the Beat, Packet Tetris and Packet Race |
+| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Keep the Beat, Packet Tetris, Packet Race, Repeater Rescue, Rainbow Packing, Mesh Rescue, and the fight with Lord Lag built from three of them |
 | `js/game.js` | the Quest on screen: the start screen, the score bar and the challenge card; reaches the globe only through the hooks main.js hands it |
 | `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos and the Quest's cloud cover, the airliner, switching views, labels, picking, the site card |
 | `css/net.css` | the HUD, and the Engineer theme as a second set of tokens |
 | `test/tech.test.mjs` | every topic's steps, in both modes, touch only that network's sites and links; Explorer's vocabulary covers every site and network without jargon; the brief's technologies are where it asked |
 | `test/world.test.mjs` | data checks: links resolve, transport on side A and data on side B, gear and fibre on land, subsea cables at sea, no two cables run alongside each other, every ROADM and core router has 3+ routes, no customer or cell site on a spur, the VPN offices on three different core routers, every cell site has an RU, DU and CU and every CU an uplink, every home reaches the streaming cache, the six networks own their own links, each network's sites stand inside its region |
 | `test/story.test.mjs` | the Quest covers every network once (side B, then the ocean, then side A), every line has both readings, and the rules score, lose, win, unlock in order and reload saved progress safely |
-| `test/minigames.test.mjs` | robots play the mini-games: a perfect player wins, an idle one loses, calls in best effort or elephants in the fast lane lose Packet Tetris, and following Lord Lag's shortest road loses Packet Race |
+| `test/minigames.test.mjs` | robots play every mini-game and the final fight: a careful player wins, an idle one loses; calls in best effort lose Packet Tetris, following Lord Lag's shortest road loses Packet Race, waiting for the ship loses Repeater Rescue, a two-span request needs the same colours on both, and every real sequence of choices in Mesh Rescue can still be won |
 | `build.mjs` | bundles everything into `dist/netlandia.html`, and fails if two modules declare the same top-level name |
 | `vendor/` | three.js r160 and OrbitControls (MIT) |
 

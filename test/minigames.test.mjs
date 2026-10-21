@@ -94,3 +94,107 @@ function bestHop(s, options) {
   options.forEach((n, i) => { const t = G.timeVia(s, s.you.at, n); if (t < bt) { bt = t; best = i; } });
   return best;
 }
+
+// ---------------------------------------------------------------- Level 2 and the finale
+const robots = {
+  // power up any repeater that has lost a third of its power; at the anchor, move the traffic
+  submarine: (G, s) => {
+    if (s.phase === 'anchor') { G.press(s, s.choices.findIndex((c) => c.right)); return; }
+    s.reps.forEach((r, i) => { if (r.drain && r.power < 0.65) G.press(s, 10 + i); });
+  },
+  // the leftmost column where the request fits, then drop
+  metro: (G, s) => {
+    const p = s.piece;
+    if (!p || p.t < 0.5) return;
+    for (let c = 0; c + p.w <= 12; c++) if (p.rows.every((row) => s.grid[row].slice(c, c + p.w).every((v) => !v))) { G.press(s, 10 + c); G.press(s, 10 + c); return; }
+  },
+  // the first way round that has room
+  longhaul: (G, s) => {
+    if (!s.asking || s.asking.t < 1) return;
+    G.press(s, s.asking.routes.findIndex((r) => r.slice(1).every((n, j) => (s.used[[r[j], n].sort().join('-')] ?? 0) < 2)));
+  },
+};
+
+for (const id of ['submarine', 'metro', 'longhaul']) {
+  test(`${MINIGAMES[id].name.plain}: a careful robot wins, an idle one loses`, () => {
+    const G = MINIGAMES[id];
+    const good = G.start(seeded(11));
+    run(G, good, 400, (s) => robots[id](G, s));
+    const r = G.result(good);
+    assert.equal(r.won, true, `${id}: ${JSON.stringify({ lives: good.lives, over: good.over })}`);
+    assert.ok(G.summary(good, 'plain').length > 40 && G.summary(good, 'eng').length > 40);
+    const idle = G.start(seeded(11));
+    run(G, idle, 400);
+    assert.equal(G.result(idle).won, false, `${id}: doing nothing loses`);
+  });
+}
+
+test('Repeater Rescue: waiting for the repair ship instead of moving the traffic loses', () => {
+  const G = MINIGAMES.submarine;
+  const s = G.start(seeded(4));
+  run(G, s, 200, (t) => { if (t.phase === 'anchor') G.press(t, t.choices.findIndex((c) => c.key === 'wait')); else robots.submarine(G, t); });
+  assert.equal(G.result(s).won, false);
+  assert.equal(s.wrong, 'wait');
+});
+
+test('Rainbow Packing: a request over two spans needs the same colours free on both', () => {
+  const G = MINIGAMES.metro;
+  const s = G.start(seeded(2));
+  s.grid[1][0] = 'hog';
+  s.piece = { rows: [0, 1], w: 1, size: { w: 1 }, from: 0, to: 2, col: 0, t: 0 };
+  G.press(s, 1);
+  assert.equal(s.placed, 0, 'column 0 is taken on the second span');
+  G.press(s, 2); G.press(s, 1);
+  assert.equal(s.placed, 1);
+  assert.ok(s.grid[0][1] && s.grid[1][1], 'the same column on both spans');
+});
+
+test('Mesh Rescue: every choice through the storm can still be won; bad ones cost towns', () => {
+  const G = MINIGAMES.longhaul;
+  const settle = (s) => { for (let n = 0; n < 2000 && !s.over && !s.asking; n++) G.tick(s, 0.5); return s; };
+  const outcomes = [];
+  const play = (picks) => {
+    const s = settle(G.start(seeded(1)));
+    let k = 0;
+    while (!s.over) {
+      const options = s.asking.routes.map((r, i) => i);
+      const i = picks[k++] ?? 0;
+      if (i >= options.length) return null;
+      const full = s.full; G.press(s, i);
+      if (s.full > full) return null;        // a full fibre: not a choice anyone keeps
+      settle(s);
+    }
+    return s;
+  };
+  // every sequence of up to three choices at each of the first six questions
+  for (let n = 0; n < 3 ** 6; n++) {
+    const picks = Array.from({ length: 6 }, (_, k) => Math.floor(n / 3 ** k) % 3);
+    const s = play(picks);
+    if (s) outcomes.push(s);
+  }
+  assert.ok(outcomes.length > 5);
+  assert.ok(outcomes.every((s) => s.over === 'won'), 'easy: no sequence of real choices loses outright');
+  assert.ok(outcomes.some((s) => s.down > 0), 'but some choices leave a town cut off');
+  assert.ok(outcomes.some((s) => s.down === 0), 'and the best ones lose nothing');
+});
+
+test('The fight with Lord Lag: three rounds of games already played; idle loses the first', async () => {
+  const { BOSS } = await import('../js/minigames.js');
+  const s = BOSS.start(seeded(9));
+  const home = { call: 0, sync: 0, work: 1, web: 2, elephant: 2 };
+  run(BOSS, s, 600, (b) => {
+    if (!b.sub) return;
+    const G = BOSS.game(b), t = b.sub;
+    if (G === MINIGAMES.aggregation) { if (t.falling && t.falling.y > 0.2) BOSS.press(b, home[t.falling.kind]); }
+    else if (G === MINIGAMES.ipcore) { const o = G.options(t); if (o.length) { let best = 0, bt = Infinity; o.forEach((n, i) => { const x = G.timeVia(t, t.you.at, n); if (x < bt) { bt = x; best = i; } }); BOSS.press(b, best); } }
+    else robots.longhaul(G, t);
+  });
+  const r = BOSS.result(s);
+  assert.equal(r.won, true, `round ${s.round}`);
+  assert.equal(s.results.length, 3);
+  assert.ok(BOSS.summary(s, 'plain').includes('Lord Lag is beaten'));
+  const idle = BOSS.start(seeded(9));
+  run(BOSS, idle, 600);
+  assert.equal(BOSS.result(idle).won, false);
+  assert.equal(idle.round, 0);
+});

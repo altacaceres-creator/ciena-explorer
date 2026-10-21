@@ -5,7 +5,7 @@ import {
   STORY, STORY_ORDER, STORY_LEVELS, STORY_SECONDS, STORY_LIVES, loadStory, nextChapter, isUnlocked, rankOf, storyDone,
   startChallenge, answer, winChapter, restartStory, FLAWLESS_BONUS, levelOf, examAt,
 } from './story.js';
-import { MINIGAMES } from './minigames.js';
+import { MINIGAMES, BOSS } from './minigames.js';
 
 const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play';
 
@@ -115,6 +115,8 @@ export function initQuest(hooks) {
     hooks.focusMajor(id);
     openCard({ kind: 'taunt', id });
   }
+  // the game a card plays: the chapter's own, or the fight with Lord Lag
+  const gameOf = (v) => (v.boss ? BOSS : MINIGAMES[v.id]);
   // a chapter with a mini-game plays it; the others still ask their three questions
   function begin(id) {
     if (MINIGAMES[id]) openCard({ kind: 'how', id });
@@ -146,20 +148,21 @@ export function initQuest(hooks) {
         ${v.last ? `<p class="q-flash ${v.last.right ? 'ok' : 'bad'}">${v.last.right ? `Right! +${v.last.points}` : v.last.timeout ? 'Too slow!' : 'Not quite.'}</p>` : ''}`;
       startTimer();
     } else if (v.kind === 'how') {
-      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      const game = gameOf(v), words = hooks.plain() ? 'plain' : 'eng';
       card.innerHTML = `
-        <span class="q-k">Win back ${name} · mini-game</span>
-        <h3>🎮 ${esc(game.name[words])}</h3>
+        ${v.boss ? `<div class="q-villain"><span class="q-face" aria-hidden="true">😈</span><div><span class="q-k">The final fight</span><h3>${esc(game.name[words])}</h3></div></div>`
+          : `<span class="q-k">Win back ${name} · mini-game</span>
+        <h3>🎮 ${esc(game.name[words])}</h3>`}
         <p class="q-say">${esc(game.how[words])}</p>
         <p class="q-sum">Goal: <b>${esc(game.goal[words])}</b></p>
         <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="go">Start ▶</button></div>`;
     } else if (v.kind === 'game') {
-      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      const game = gameOf(v), words = hooks.plain() ? 'plain' : 'eng';
       card.innerHTML = `
-        <div class="q-head"><span class="q-k">Win back ${name} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
+        <div class="q-head"><span class="q-k">${v.boss ? '😈 Final fight' : `Win back ${name}`} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
         <canvas class="q-canvas"></canvas>
         <div class="q-lanes">${game.laneNames[words].map((l, i) => `<button data-lane="${i}"><kbd>${i + 1}</kbd>${esc(l)}</button>`).join('')}</div>`;
-      startGame(v.id);
+      startGame(v.id, game);
     } else if (v.kind === 'exam') {
       const n = examAt(v.id).length;
       card.innerHTML = `
@@ -167,17 +170,17 @@ export function initQuest(hooks) {
         <span class="q-k">🏁 ${esc(MINIGAMES[v.id].name[hooks.plain() ? 'plain' : 'eng'])} won · +${v.carry.toLocaleString('en')} pts</span>
         <h3>Level ${lvl.n} final exam</h3>
         <p class="q-say">${hooks.plain()
-          ? `One last challenge before the clouds over ${name} lift: ${n} questions on all of Level ${lvl.n}, the phone towers, the city and the core. You have two lives.`
-          : `Before ${name} unlocks: ${n} questions across Level ${lvl.n}, xhaul, aggregation and core. Two strikes and you're out.`}</p>
+          ? `One last challenge before the clouds over ${name} lift: ${n} questions on all of Level ${lvl.n}: ${lvl.chapters.map((c) => esc(hooks.majorName(c))).join(', ')}. You have two lives.`
+          : `Before ${name} unlocks: ${n} questions across Level ${lvl.n} (${lvl.chapters.map((c) => esc(hooks.majorName(c))).join(', ')}). Two strikes and you're out.`}</p>
         ${v.st ? `<dl><dt>Your game</dt><dd>${esc(MINIGAMES[v.id].summary(v.st, hooks.plain() ? 'plain' : 'eng'))}</dd></dl>` : ''}
         <div class="q-btns"><button class="primary" data-q="exam">Start the exam ▶</button></div>`;
     } else if (v.kind === 'won') {
       const next = nextChapter(story);
       const ended = lvl.chapters.at(-1) === v.id, after = STORY_LEVELS.find((l) => l.n === lvl.n + 1);
       const news = !ended && DISCOVERY[next];
-      const game = MINIGAMES[v.id], words = hooks.plain() ? 'plain' : 'eng';
+      const game = gameOf(v), words = hooks.plain() ? 'plain' : 'eng';
       card.innerHTML = `
-        <span class="q-k">Congratulations!</span>
+        <span class="q-k">${v.boss ? '😈 Lord Lag is beaten!' : 'Congratulations!'}</span>
         <h3>You unlocked ${name}</h3>
         <p class="q-say">${esc(say(ch.win))}</p>
         ${v.st && game?.summary ? `<dl><dt>Your game</dt><dd>${esc(game.summary(v.st, words))}</dd></dl>` : ''}
@@ -192,9 +195,9 @@ export function initQuest(hooks) {
     } else if (v.kind === 'lost') {
       card.innerHTML = `
         <div class="q-villain"><span class="q-face" aria-hidden="true">${ch.villain.face}</span>
-          <div><span class="q-k">This round goes to ${esc(ch.villain.name)}</span><h3>You died${v.exam ? ' in the exam' : ''}</h3></div></div>
-        <p class="q-say">${esc(say(ch.lose))}${v.exam ? ` ${hooks.plain() ? 'Your race still counts: only the exam starts again.' : 'The race result stands; retake the exam.'}` : ''}</p>
-        <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : 'begin'}">Try again</button></div>`;
+          <div><span class="q-k">This round goes to ${esc(v.boss ? 'Lord Lag' : ch.villain.name)}</span><h3>You died${v.exam ? ' in the exam' : v.boss ? ' in the final fight' : ''}</h3></div></div>
+        <p class="q-say">${esc(say(ch.lose))}${v.exam ? ` ${hooks.plain() ? 'Your game still counts: only the exam starts again.' : 'The game result stands; retake the exam.'}` : v.boss ? ` ${hooks.plain() ? 'Your exam still counts: only the fight starts again.' : 'The exam stands; the fight restarts.'}` : ''}</p>
+        <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : v.boss ? 'boss' : 'begin'}">Try again</button></div>`;
     } else if (v.kind === 'locked') {
       const next = nextChapter(story);
       card.innerHTML = `
@@ -215,8 +218,8 @@ export function initQuest(hooks) {
   }
 
   // ------------------------------------------------ a mini-game on the card's canvas
-  function startGame(id) {
-    const game = MINIGAMES[id], canvas = card.querySelector('.q-canvas'), g = canvas.getContext('2d');
+  function startGame(id, game) {
+    const canvas = card.querySelector('.q-canvas'), g = canvas.getContext('2d');
     play = { id, game, state: game.start(), raf: 0, canvas, last: performance.now() };
     const size = () => {
       const w = canvas.clientWidth, h = canvas.clientHeight, r = Math.min(devicePixelRatio || 1, 2);
@@ -230,6 +233,7 @@ export function initQuest(hooks) {
       ink: css.color, paper: v('--paper'), well: v('--well'), muted: v('--muted'), font: css.fontFamily,
       accent: c, accentSoft: `${c}40`, gold: '#ffc43d', good: hooks.plain() ? '#12825a' : '#4fd59a', bad: '#e63946',
       lane: ['#e76f51', '#7b2cbf', '#8a94a6'],
+      sea: hooks.plain() ? '#d6ecff' : '#0e1c2b', land: hooks.plain() ? '#cdeab0' : '#1d3324',
     };
     const loop = (now) => {
       if (!play) return;
@@ -273,20 +277,23 @@ export function initQuest(hooks) {
   }
   function endGame(id, res, st) {
     if (!view || view.kind !== 'game' || view.id !== id) return;
+    const boss = view.boss && { carry: view.carry, flawless: view.flawless };
     stopGame();
-    if (!res.won) { openCard({ kind: 'lost', id }); return; }
+    if (!res.won) { openCard({ kind: 'lost', id, boss }); return; }
     const points = res.points + (res.flawless ? FLAWLESS_BONUS : 0);
+    // the fight with Lord Lag: the chapter is banked with everything before it
+    if (boss) { bank(id, boss.carry + points, boss.flawless && res.flawless, st, true); return; }
     // the last stop of a level has its final exam still to come
     if (examAt(id)) { openCard({ kind: 'exam', id, carry: points, flawless: res.flawless, st }); return; }
     bank(id, points, res.flawless, st);
   }
   // a network won: it unlocks, its points join the score, and the win card says why
-  function bank(id, points, flawless, st = null) {
+  function bank(id, points, flawless, st = null, boss = false) {
     winChapter(story, { id, over: 'won', points });
     save();
     applyLocks(id);
     renderBar();
-    openCard({ kind: 'won', id, points, flawless, st });
+    openCard({ kind: 'won', id, points, flawless, st, boss });
   }
 
   function startTimer() {
@@ -305,7 +312,8 @@ export function initQuest(hooks) {
     const res = answer(c, pos, seconds);
     if (c.over === 'won') {
       const ex = view.exam;
-      if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st);
+      if (ex && levelOf(c.id).boss) openCard({ kind: 'how', id: c.id, boss: true, carry: ex.carry + c.points, flawless: ex.flawless && !c.mistakes });
+      else if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st);
       else bank(c.id, c.points, !c.mistakes);
     } else if (c.over === 'lost') {
       openCard({ kind: 'lost', id: c.id, exam: view.exam });
@@ -324,7 +332,8 @@ export function initQuest(hooks) {
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
     else if (what === 'next') { if (next) taunt(next); }
     else if (what === 'begin' && view) begin(view.id);
-    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id });
+    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id, boss: view.boss, carry: view.carry, flawless: view.flawless });
+    else if (what === 'boss' && view) openCard({ kind: 'how', id: view.id, boss: true, carry: view.boss.carry, flawless: view.boss.flawless });
     else if (what === 'exam' && view) {
       const ex = view.exam ?? { carry: view.carry, flawless: view.flawless, st: view.st };
       openCard({ kind: 'question', id: view.id, c: startChallenge(view.id, Math.random, examAt(view.id)), last: null, exam: ex });
@@ -376,7 +385,7 @@ export function initQuest(hooks) {
       // a question starts its clock again, now that it reads differently; a game keeps
       // running and only its lane buttons change words (the board redraws itself)
       if (view?.kind === 'game') {
-        const names = MINIGAMES[view.id].laneNames[hooks.plain() ? 'plain' : 'eng'];
+        const names = gameOf(view).laneNames[hooks.plain() ? 'plain' : 'eng'];
         card.querySelectorAll('[data-lane]').forEach((b, i) => { b.lastChild.textContent = names[i]; });
       } else if (view) { stopTimer(); renderCard(); }
     },

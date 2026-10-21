@@ -246,9 +246,9 @@ win or lose, so the levels can be built and reviewed one PR at a time.
 | 5G mobile xhaul | **Keep the Beat** (mini-game) |
 | Metro aggregation | **Packet Tetris** (mini-game) |
 | IP/MPLS core | **Packet Race** (mini-game), then the **Level 1 final exam** |
-| Submarine | three questions, until **Repeater Rescue** |
-| Metro optical | three questions, until **Rainbow Packing** |
-| Long-haul | three questions, until **Mesh Rescue**, then the **Level 2 final exam** and **the fight with Lord Lag** |
+| Submarine | **Repeater Rescue** (mini-game) |
+| Metro optical | **Rainbow Packing** (mini-game) |
+| Long-haul | **Mesh Rescue** (mini-game), then the **Level 2 final exam** and **the fight with Lord Lag** |
 
 The difficulty was lowered after the first playtests: slower packets, wider targets, 30 seconds per
 question, and slow motion while you choose a route. A player who takes a second or two to react and

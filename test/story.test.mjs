@@ -118,7 +118,8 @@ test('two levels: the packet world closes with a final exam at the core, then ac
   assert.equal(exam.length, 5, 'the core\'s three, plus one from the towers and one from the city');
   assert.ok(STORY.ipcore.questions.every((q) => exam.includes(q)));
   assert.equal(examAt('aggregation'), null);
-  assert.equal(examAt('longhaul'), null, 'level 2 has no exam yet');
+  assert.equal(examAt('longhaul').length, 5, 'level 2 closes with an exam too');
+  assert.ok(STORY_LEVELS[1].boss && !STORY_LEVELS[0].boss, 'and then the fight with Lord Lag');
   // an exam is a challenge like any other, just longer
   const c = startChallenge('ipcore', () => 0.999, exam);
   for (let i = 0; i < exam.length; i++) answer(c, c.order[c.i].indexOf(0), 0);
