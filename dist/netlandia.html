@@ -3526,7 +3526,7 @@ const examAt = (id) => { const l = levelOf(id); return l?.exam && l.chapters.at(
 const STORY_RANKS = ['Apprentice', 'Technician', 'Engineer', 'Senior engineer', 'Architect', 'Principal architect', 'Chief of the NOC'];
 
 const STORY_LIVES = 2;          // one mistake per challenge is allowed, the second ends it
-const STORY_SECONDS = 20;       // to answer each question
+const STORY_SECONDS = 30;       // to answer each question
 
 // Each answer list starts with the right one; the game shuffles them.
 const STORY = {
@@ -3855,7 +3855,7 @@ const float = (s, lane, text, good) => s.fx.push({ lane, text, good, t: 0 });
 // packet reaches the tower; a miss lets the tower drift out of sync. From a few seconds
 // in, the Jitterbugs ride the packets and make them speed up and slow down.
 const BEAT = {
-  lanes: 3, seconds: 35, zone: [0.84, 1.0], perfect: 0.025, center: 0.92,
+  lanes: 3, seconds: 30, zone: [0.8, 1.02], perfect: 0.03, center: 0.91, bugsAt: 10,
 };
 const KeepTheBeat = {
   id: 'beat',
@@ -3864,7 +3864,7 @@ const KeepTheBeat = {
     plain: 'Clock messages race to three phone towers. Tap a tower\'s lane (or press 1, 2, 3) just as its clock reaches the tower. Miss and the tower drifts out of time. Watch out for the Jitterbugs!',
     eng: 'PTP timing packets run from the hub to three cell sites. Tap the lane (or 1, 2, 3) as each packet hits its site. A miss costs phase sync; the Jitterbugs add delay variation from a few seconds in.',
   },
-  goal: { plain: 'Keep the towers in time for 35 seconds', eng: 'Hold phase sync for 35 s' },
+  goal: { plain: `Keep the towers in time for ${BEAT.seconds} seconds`, eng: `Hold phase sync for ${BEAT.seconds} s` },
   laneNames: { plain: ['Tower 1', 'Tower 2', 'Tower 3'], eng: ['Cell site 1', 'Cell site 2', 'Cell site 3'] },
   start(random = Math.random) {
     return { t: 0, random, packets: [], next: 0.6, sync: 100, score: 0, combo: 0, best: 0, hits: 0, perfects: 0, misses: 0, bugged: 0, fx: [], over: null, bugs: false };
@@ -3873,21 +3873,21 @@ const KeepTheBeat = {
     if (s.over) return;
     s.t += dt;
     const k = Math.min(1, s.t / BEAT.seconds);
-    if (!s.bugs && s.t > 8) { s.bugs = true; float(s, 1, '🐞 Jitterbugs!', false); }
+    if (!s.bugs && s.t > BEAT.bugsAt) { s.bugs = true; float(s, 1, '🐞 Jitterbugs!', false); }
     // a packet on the beat, coming faster as the song goes on
     if ((s.next -= dt) <= 0) {
       const lane = Math.floor(s.random() * BEAT.lanes);
-      s.packets.push({ lane, x: 0, v: 0.36 + 0.22 * k, phase: s.random() * 6.3, bug: s.bugs && s.random() < 0.55 });
-      s.next = 1.15 - 0.5 * k;
+      s.packets.push({ lane, x: 0, v: 0.26 + 0.12 * k, phase: s.random() * 6.3, bug: s.bugs && s.random() < 0.4 });
+      s.next = 1.6 - 0.5 * k;
     }
     for (const p of s.packets) {
       // a Jitterbug makes its packet surge and stall, but never go backwards
-      const wobble = p.bug ? 0.6 * p.v * Math.sin(s.t * 5 + p.phase) : 0;
+      const wobble = p.bug ? 0.4 * p.v * Math.sin(s.t * 4 + p.phase) : 0;
       p.x += (p.v + wobble) * dt;
     }
     for (const p of s.packets.filter((q) => q.x > 1.04)) {
       s.packets.splice(s.packets.indexOf(p), 1);
-      s.misses++; s.combo = 0; s.sync -= 20;
+      s.misses++; s.combo = 0; s.sync -= 14;
       float(s, p.lane, 'Drifted!', false);
     }
     for (const f of s.fx) f.t += dt;
@@ -3897,7 +3897,7 @@ const KeepTheBeat = {
   press(s, lane) {
     if (s.over) return;
     const inZone = s.packets.filter((p) => p.lane === lane && p.x >= BEAT.zone[0] - 0.04 && p.x <= BEAT.zone[1] + 0.04);
-    if (!inZone.length) { s.sync -= 6; s.combo = 0; float(s, lane, 'Off beat', false); return; }
+    if (!inZone.length) { s.sync -= 3; s.combo = 0; float(s, lane, 'Off beat', false); return; }
     const p = inZone.sort((a, b) => b.x - a.x)[0];
     s.packets.splice(s.packets.indexOf(p), 1);
     const perfect = Math.abs(p.x - BEAT.center) <= BEAT.perfect + 0.02;
@@ -3905,7 +3905,7 @@ const KeepTheBeat = {
     if (perfect) s.perfects++;
     if (p.bug) s.bugged++;
     s.score += Math.round((perfect ? 30 : 15) * (1 + Math.min(s.combo, 10) / 10));
-    s.sync = Math.min(100, s.sync + 4);
+    s.sync = Math.min(100, s.sync + 5);
     float(s, lane, perfect ? 'Perfect!' : 'In sync', true);
   },
   result(s) {
@@ -3956,7 +3956,7 @@ const KeepTheBeat = {
 // Packets fall toward the aggregation router's uplink. Send each into a queue before it
 // lands: calls into the fast lane, work into business, web and giant backups (the
 // elephant flows) into best effort. The uplink serves the fast lane first.
-const SORT = { goal: 22, lives: 3, rate: 1.3 };
+const SORT = { goal: 18, lives: 3, rate: 1.6 };
 const KINDS = {
   call: { icon: '📞', size: 1, home: 0, plain: 'Call', eng: 'Voice' },
   sync: { icon: '⏱', size: 1, home: 0, plain: 'Clock', eng: 'PTP' },
@@ -3985,7 +3985,7 @@ const PacketTetris = {
     const r = s.random();
     let kind = r < 0.3 ? 'call' : r < 0.4 ? 'sync' : r < 0.65 ? 'work' : 'web';
     if (s.elephants && s.random() < 0.3) kind = 'elephant';
-    const fall = Math.max(1.6, 3.4 - s.sorted * 0.08);
+    const fall = Math.max(2.6, 4.6 - s.sorted * 0.08);
     s.falling = { kind, y: 0, fall, t: 0 };
   },
   tick(s, dt) {
@@ -4098,7 +4098,7 @@ function miss(s, f) {
 // router you pick the next hop; elephants jam different links each race, so read the
 // map before you go. Lord Lag always takes the shortest way (the IGP path). In the last
 // race a fibre is cut in front of you, and you have to find another way round.
-const RACE = { races: 3, need: 2, speed: 0.55, reconverge: 1.2 };
+const RACE = { races: 3, need: 2, speed: 0.4, reconverge: 1.5, think: 0.15 };
 const RNODES = {
   gw: { x: 0.08, y: 0.55, plain: 'Gateway Bay', sid: 16001 },
   c1: { x: 0.36, y: 0.78, plain: 'Coreburg 1', sid: 16002 },
@@ -4158,7 +4158,7 @@ const PacketRace = {
   id: 'race',
   name: { plain: 'Packet Race', eng: 'Packet Race' },
   how: {
-    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3). Elephants 🐘 jam different roads each race, so look before you go. Lord Lag always takes the shortest road. Win two of the three races!',
+    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3); the race slows right down while you choose. Elephants 🐘 jam different roads each race, so look before you go. Lord Lag always takes the shortest road. Win two of the three races!',
     eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path. In race 3 a link fails: reroute. Win two of three.',
   },
   goal: { plain: 'Three races: beat Lord Lag in at least two', eng: 'Three races to Edgewater: win at least two' },
@@ -4206,6 +4206,9 @@ const PacketRace = {
       }
       return;
     }
+    // while your packet waits at a router for you to choose, the race runs in slow motion:
+    // the game is about reading the map, not about quick fingers
+    if (PacketRace.options(s).length) dt *= RACE.think;
     s.rt += dt;
     // race 3: a fibre fails right in front of you
     if (!s.cutDone && s.rt > 1.2 && s.you.at !== 'gw') {

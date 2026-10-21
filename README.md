@@ -199,7 +199,7 @@ from each earlier stop. Then **Level 2, across the ocean**, starts with the unde
 cables. Every win card tells the story of your game in numbers, why you won, and a
 longer paragraph on what that means in a real network.
 
-The networks without a game yet ask three quick questions instead (a 20-second clock,
+The networks without a game yet ask three quick questions instead (a 30-second clock,
 two lives), until theirs is built. Losing is **You died**, with what that would mean in
 a real network. A win
 lifts the clouds, pops the landmarks back up and shows **You unlocked …** with why
