@@ -115,6 +115,12 @@ export function initQuest(hooks) {
     hooks.focusMajor(id);
     openCard({ kind: 'taunt', id });
   }
+  // the questions missed in a challenge, with what was picked and the right answer
+  const reviewOf = (c) => (!c?.wrong?.length ? '' : `<dl class="q-review"><dt>${hooks.plain() ? 'Questions to look at again' : 'Review'}</dt>${c.wrong.map((w) => {
+    const q = say(c.questions[w.i]);
+    const yours = w.pick == null ? (hooks.plain() ? 'No answer: the time ran out' : 'No answer (time-out)') : esc(q.a[w.pick]);
+    return `<dd><b>${esc(q.q)}</b><span class="no">✗ ${hooks.plain() ? 'You said' : 'Yours'}: ${yours}</span><span class="yes">✓ ${hooks.plain() ? 'Right answer' : 'Correct'}: ${esc(q.a[0])}</span></dd>`;
+  }).join('')}</dl>`);
   // the game a card plays: the chapter's own, or the fight with Lord Lag
   const gameOf = (v) => (v.boss ? BOSS : MINIGAMES[v.id]);
   // a chapter with a mini-game plays it; the others still ask their three questions
@@ -153,6 +159,7 @@ export function initQuest(hooks) {
         ${v.boss ? `<div class="q-villain"><span class="q-face" aria-hidden="true">😈</span><div><span class="q-k">The final fight</span><h3>${esc(game.name[words])}</h3></div></div>`
           : `<span class="q-k">Win back ${name} · mini-game</span>
         <h3>🎮 ${esc(game.name[words])}</h3>`}
+        ${v.review ? `<p class="q-sum">✓ ${hooks.plain() ? 'Final exam passed!' : 'Exam passed.'}</p>${reviewOf(v.review)}` : ''}
         <p class="q-say">${esc(game.how[words])}</p>
         <p class="q-sum">Goal: <b>${esc(game.goal[words])}</b></p>
         <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="go">Start ▶</button></div>`;
@@ -184,6 +191,7 @@ export function initQuest(hooks) {
         <h3>You unlocked ${name}</h3>
         <p class="q-say">${esc(say(ch.win))}</p>
         ${v.st && game?.summary ? `<dl><dt>Your game</dt><dd>${esc(game.summary(v.st, words))}</dd></dl>` : ''}
+        ${v.boss ? '' : reviewOf(v.review)}
         <dl><dt>Why you won</dt><dd>${esc(say(ch.why))}</dd><dt>In a real network</dt><dd>${esc(say(ch.recap))}</dd></dl>
         <p class="q-sum">+${v.points.toLocaleString('en')} pts${v.flawless ? ' · flawless bonus' : ''} · you are now <b>${esc(rankOf(story))}</b></p>
         ${ended ? `<div class="q-levelup"><b>🏁 Level ${lvl.n} complete: ${esc(say(lvl.name))}</b>
@@ -197,6 +205,7 @@ export function initQuest(hooks) {
         <div class="q-villain"><span class="q-face" aria-hidden="true">${ch.villain.face}</span>
           <div><span class="q-k">This round goes to ${esc(v.boss ? 'Lord Lag' : ch.villain.name)}</span><h3>You died${v.exam ? ' in the exam' : v.boss ? ' in the final fight' : ''}</h3></div></div>
         <p class="q-say">${esc(say(ch.lose))}${v.exam ? ` ${hooks.plain() ? 'Your game still counts: only the exam starts again.' : 'The game result stands; retake the exam.'}` : v.boss ? ` ${hooks.plain() ? 'Your exam still counts: only the fight starts again.' : 'The exam stands; the fight restarts.'}` : ''}</p>
+        ${reviewOf(v.review)}
         <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : v.boss ? 'boss' : 'begin'}">Try again</button></div>`;
     } else if (v.kind === 'locked') {
       const next = nextChapter(story);
@@ -277,23 +286,23 @@ export function initQuest(hooks) {
   }
   function endGame(id, res, st) {
     if (!view || view.kind !== 'game' || view.id !== id) return;
-    const boss = view.boss && { carry: view.carry, flawless: view.flawless };
+    const boss = view.boss && { carry: view.carry, flawless: view.flawless, review: view.review };
     stopGame();
     if (!res.won) { openCard({ kind: 'lost', id, boss }); return; }
     const points = res.points + (res.flawless ? FLAWLESS_BONUS : 0);
     // the fight with Lord Lag: the chapter is banked with everything before it
-    if (boss) { bank(id, boss.carry + points, boss.flawless && res.flawless, st, true); return; }
+    if (boss) { bank(id, boss.carry + points, boss.flawless && res.flawless, st, true, boss.review); return; }
     // the last stop of a level has its final exam still to come
     if (examAt(id)) { openCard({ kind: 'exam', id, carry: points, flawless: res.flawless, st }); return; }
     bank(id, points, res.flawless, st);
   }
   // a network won: it unlocks, its points join the score, and the win card says why
-  function bank(id, points, flawless, st = null, boss = false) {
+  function bank(id, points, flawless, st = null, boss = false, review = null) {
     winChapter(story, { id, over: 'won', points });
     save();
     applyLocks(id);
     renderBar();
-    openCard({ kind: 'won', id, points, flawless, st, boss });
+    openCard({ kind: 'won', id, points, flawless, st, boss, review });
   }
 
   function startTimer() {
@@ -312,11 +321,11 @@ export function initQuest(hooks) {
     const res = answer(c, pos, seconds);
     if (c.over === 'won') {
       const ex = view.exam;
-      if (ex && levelOf(c.id).boss) openCard({ kind: 'how', id: c.id, boss: true, carry: ex.carry + c.points, flawless: ex.flawless && !c.mistakes });
-      else if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st);
-      else bank(c.id, c.points, !c.mistakes);
+      if (ex && levelOf(c.id).boss) openCard({ kind: 'how', id: c.id, boss: true, carry: ex.carry + c.points, flawless: ex.flawless && !c.mistakes, review: c });
+      else if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st, false, c);
+      else bank(c.id, c.points, !c.mistakes, null, false, c);
     } else if (c.over === 'lost') {
-      openCard({ kind: 'lost', id: c.id, exam: view.exam });
+      openCard({ kind: 'lost', id: c.id, exam: view.exam, review: c });
     } else {
       view.last = { ...res, timeout: pos == null };
       renderCard();
@@ -332,13 +341,14 @@ export function initQuest(hooks) {
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
     else if (what === 'next') { if (next) taunt(next); }
     else if (what === 'begin' && view) begin(view.id);
-    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id, boss: view.boss, carry: view.carry, flawless: view.flawless });
-    else if (what === 'boss' && view) openCard({ kind: 'how', id: view.id, boss: true, carry: view.boss.carry, flawless: view.boss.flawless });
+    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id, boss: view.boss, carry: view.carry, flawless: view.flawless, review: view.review });
+    else if (what === 'boss' && view) openCard({ kind: 'how', id: view.id, boss: true, carry: view.boss.carry, flawless: view.boss.flawless, review: view.boss.review });
     else if (what === 'exam' && view) {
       const ex = view.exam ?? { carry: view.carry, flawless: view.flawless, st: view.st };
       openCard({ kind: 'question', id: view.id, c: startChallenge(view.id, Math.random, examAt(view.id)), last: null, exam: ex });
     }
-    else if (what === 'quit' && view) openCard({ kind: 'lost', id: view.id });
+    // giving up the final fight keeps the exam already passed
+    else if (what === 'quit' && view) openCard({ kind: 'lost', id: view.id, boss: view.boss && { carry: view.carry, flawless: view.flawless, review: view.review } });
     else if (what === 'later') closeCard();
     else if (what === 'enter' && view) { const id = view.id; closeCard(); hooks.openMajor(id); }
     else if (what === 'done') openCard({ kind: 'done', id: STORY_ORDER.at(-1) });

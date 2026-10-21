@@ -371,6 +371,11 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .q-levelup > b:first-child { font: 400 19px/1.1 var(--display); letter-spacing: 0.01em; }
 .qcard dl dt:not(:first-child) { margin-top: 6px; }
 .q-lanes button:disabled { opacity: 0.35; box-shadow: none; }
+.q-review { display: grid; gap: 6px; border: 2px solid #e6a23c; background: color-mix(in srgb, #ffc43d 14%, var(--paper)) !important; }
+.q-review dd { display: grid; gap: 1px; margin: 0; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--muted) 50%, transparent); }
+.q-review dd:first-of-type { border-top: 0; padding-top: 0; }
+.q-review .no { color: #c2263a; font-weight: 700; }
+.q-review .yes { color: #12825a; font-weight: 800; }
 .q-news { padding: 8px 10px; border: var(--rule); border-radius: var(--radius-s); background: color-mix(in srgb, #2f80ed 12%, var(--paper)); font-weight: 800; }
 
 .qcard[data-kind="game"] { width: min(760px, calc(100% - 32px)); }
@@ -537,6 +542,9 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 [data-mode="engineer"] .major.locked .go { background: transparent; }
 [data-mode="engineer"] .q-levelup { background: #2a2210; border-color: #7a6020; color: #ffe2a0; }
 [data-mode="engineer"] .q-levelup > b:first-child { font: 600 16px/1.2 var(--body); }
+[data-mode="engineer"] .q-review { background: #2a2210 !important; border-color: #7a6020; }
+[data-mode="engineer"] .q-review .no { color: #ff8a94; }
+[data-mode="engineer"] .q-review .yes { color: #4fd59a; }
 
 </style>
 <script type="importmap">
@@ -3802,6 +3810,7 @@ const storyDone = (s) => s.unlocked.length === STORY_ORDER.length;
 function startChallenge(id, random = Math.random, questions = STORY[id].questions) {
   return {
     id, questions, i: 0, lives: STORY_LIVES, points: 0, mistakes: 0, over: null,
+    wrong: [],          // the questions missed, for the review at the end: { i, pick } (pick null: time ran out)
     order: questions.map(() => shuffle([0, 1, 2], random)),
   };
 }
@@ -3812,7 +3821,7 @@ function answer(c, pick, seconds) {
   const right = pick != null && c.order[c.i][pick] === 0;
   const points = answerPoints(right, seconds);
   c.points += points;
-  if (!right) { c.mistakes++; c.lives--; }
+  if (!right) { c.mistakes++; c.lives--; c.wrong.push({ i: c.i, pick: pick == null ? null : c.order[c.i][pick] }); }
   if (c.lives <= 0) c.over = 'lost';
   else if (++c.i >= c.questions.length) {
     c.over = 'won';
@@ -4101,7 +4110,7 @@ function miss(s, f) {
 // router you pick the next hop; elephants jam different links each race, so read the
 // map before you go. Lord Lag always takes the shortest way (the IGP path). In the last
 // race a fibre is cut in front of you, and you have to find another way round.
-const RACE = { races: 3, need: 2, speed: 0.4, reconverge: 1.5, think: 0.15 };
+const RACE = { races: 3, need: 2, speed: 0.42, reconverge: 1.5, think: 0.15, lag: 1.15 };
 const RNODES = {
   gw: { x: 0.08, y: 0.55, plain: 'Gateway Bay', sid: 16001 },
   c1: { x: 0.36, y: 0.78, plain: 'Coreburg 1', sid: 16002 },
@@ -4154,15 +4163,16 @@ function raceLead(s) {
 function raceMove(s, r, dt) {
   if (r.done || !r.to) return;
   const jam = s.jam[rkey(r.at, r.to)] ?? 0;
-  r.p += (RACE.speed / (1 + 3 * jam)) * dt / rlen(r.at, r.to);
+  // Lord Lag's packet is a little quicker than yours: only a good route beats him
+  r.p += ((r === s.lag ? RACE.lag : 1) * RACE.speed / (1 + 3 * jam)) * dt / rlen(r.at, r.to);
   if (r.p >= 1) { r.at = r.to; r.to = null; r.p = 0; r.visited.add(r.at); if (r.at === 'ed') r.done = true; }
 }
 const PacketRace = {
   id: 'race',
   name: { plain: 'Packet Race', eng: 'Packet Race' },
   how: {
-    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3); the race slows right down while you choose. Elephants 🐘 jam different roads each race, so look before you go. Lord Lag always takes the shortest road. Win two of the three races!',
-    eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path. In race 3 a link fails: reroute. Win two of three.',
+    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3); the race slows right down while you choose. Elephants 🐘 jam different roads each race, so look before you go. Lord Lag\'s packet is a little faster than yours, and always takes the shortest road. Win two of the three races!',
+    eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path, a little faster than you. In race 3 a link fails: reroute. Win two of three.',
   },
   goal: { plain: 'Three races: beat Lord Lag in at least two', eng: 'Three races to Edgewater: win at least two' },
   laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
@@ -4314,12 +4324,13 @@ const PacketRace = {
 // ---------------------------------------------------------------- Repeater Rescue (submarine)
 // Light crosses the ocean through repeaters on the seabed. One at a time they start to
 // lose power and blink red: tap them before they go dark. Then the Anchor Dragger cuts the
-// West cable, and the island's traffic has to move to the South cable while the repair
+// North cable, and the island's traffic has to move to the South cable while the repair
 // ship sails out, with the South cable's repeaters to look after in turn.
 const REP = { power: 22, decide: 14, ship: 14, drain: 0.16, every: 2.6, perCable: 6, lives: 3 };
+// two cables to the island, named on the board so the choice after the cut is clear
 const REP_CABLES = [
-  { from: 'Gateway Bay', to: 'Coherent Isle West', y: 0.3 },
-  { from: 'Lightmoor', to: 'Coherent Isle South', y: 0.74 },
+  { from: 'Gateway Bay', to: 'Coherent Isle West', y: 0.3, name: { plain: 'North cable', eng: 'North system' } },
+  { from: 'Lightmoor', to: 'Coherent Isle South', y: 0.74, name: { plain: 'South cable', eng: 'South system' } },
 ];
 const REP_CHOICES = [
   { key: 'move', right: true, plain: 'Move it to the South cable', eng: 'Restore onto the South system' },
@@ -4336,8 +4347,8 @@ const RepeaterRescue = {
   id: 'repeaters',
   name: { plain: 'Repeater Rescue', eng: 'Repeater Rescue' },
   how: {
-    plain: 'Light crosses the ocean through boosters on the sea floor. When one blinks red it is running out of power: tap it (or press 1, 2, 3 for the west, middle or east of the sea) before it goes dark. Then watch out for the anchor!',
-    eng: 'The signal crosses the ocean through powered repeaters. A repeater blinking red is losing its power feed: tap it (or 1, 2, 3 for the west, middle or east third) before it drops. Then the Anchor Dragger cuts a cable: restore the island\'s traffic.',
+    plain: 'Two cables cross the ocean to Coherent Isle, the North cable and the South cable, with boosters along the sea floor. When a booster blinks red it is running out of power: tap it (or press 1, 2, 3 for the west, middle or east of the sea) before it goes dark. Then watch out for the anchor!',
+    eng: 'Two subsea systems land on Coherent Isle, North and South, each a chain of powered repeaters. A repeater blinking red is losing its power feed: tap it (or 1, 2, 3 for the west, middle or east third) before it drops. Then the Anchor Dragger cuts a system: restore the island\'s traffic.',
   },
   goal: { plain: 'Keep the light crossing, and the island online', eng: 'Keep the repeaters powered and restore the island' },
   laneNames: { plain: ['West', 'Middle', 'East'], eng: ['West third', 'Middle third', 'East third'] },
@@ -4372,7 +4383,7 @@ const RepeaterRescue = {
     if (s.phase === 'power' && s.pt >= s.len) {
       s.phase = 'anchor'; s.pt = 0;
       for (const r of s.reps) { r.power = 1; r.drain = 0; }
-      float(s, 1, '⚓ The anchor cut the West cable!', false);
+      float(s, 1, '⚓ The anchor cut the North cable!', false);
     } else if (s.phase === 'anchor' && s.pt >= REP.decide) {
       s.over = 'lost'; s.wrong = 'late';
     } else if (s.phase === 'ship' && s.pt >= REP.ship) {
@@ -4411,8 +4422,8 @@ const RepeaterRescue = {
   summary(s, words) {
     const t = s.decided != null ? s.decided.toFixed(1) : null;
     return words === 'plain'
-      ? `You powered up ${s.fixed} boosters on the sea floor${s.dark ? ` and lost ${s.dark}` : ' without letting one go dark'}. When the anchor cut the West cable, you moved the island to the South cable in ${t} seconds, and the repair ship fixed the cut.`
-      : `${s.fixed} repeater power faults cleared, ${s.dark} dropped. After the cut on the West system, traffic was restored onto the South system in ${t} s and held while the cable ship made the repair.`;
+      ? `You powered up ${s.fixed} boosters on the sea floor${s.dark ? ` and lost ${s.dark}` : ' without letting one go dark'}. When the anchor cut the North cable, you moved the island to the South cable in ${t} seconds, and the repair ship fixed the cut.`
+      : `${s.fixed} repeater power faults cleared, ${s.dark} dropped. After the cut on the North system, traffic was restored onto the South system in ${t} s and held while the cable ship made the repair.`;
   },
   // the seabed: where each cable runs, as x and y for u from 0 (left shore) to 1 (the island)
   at(c, u, w, h) {
@@ -4448,6 +4459,11 @@ const RepeaterRescue = {
       // light pulses along a cable that works
       if (!cut) for (let k = 0; k < 6; k++) { const u = ((s.t * 0.25 + k / 6) % 1); const [x, y] = RepeaterRescue.at(ci, u, w, h); g.fillStyle = live ? theme.gold : theme.muted; g.globalAlpha = live ? 0.9 : 0.35; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.globalAlpha = 1; }
       if (cut) { const [x, y] = RepeaterRescue.at(0, 0.45, w, h); emoji(g, '✂', x, y + 2, 20); emoji(g, '⚓', x + 18, y - 22, 24); }
+      const [nx, ny] = RepeaterRescue.at(ci, 0.62, w, h);
+      g.font = `800 12px ${theme.font}`; const nw = g.measureText(c.name[words]).width + 14;
+      g.fillStyle = live ? theme.accent : theme.paper; roundRect(g, nx - nw / 2, ny + 18, nw, 20, 10); g.fill();
+      g.strokeStyle = theme.ink; g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = live ? '#ffffff' : theme.ink; g.textAlign = 'center'; g.fillText(`${c.name[words]}${cut ? ' ✂' : ''}`, nx, ny + 32);
     });
     for (const r of s.reps) {
       const [x, y] = RepeaterRescue.at(r.cable, r.u, w, h);
@@ -5008,6 +5024,12 @@ function initQuest(hooks) {
     hooks.focusMajor(id);
     openCard({ kind: 'taunt', id });
   }
+  // the questions missed in a challenge, with what was picked and the right answer
+  const reviewOf = (c) => (!c?.wrong?.length ? '' : `<dl class="q-review"><dt>${hooks.plain() ? 'Questions to look at again' : 'Review'}</dt>${c.wrong.map((w) => {
+    const q = say(c.questions[w.i]);
+    const yours = w.pick == null ? (hooks.plain() ? 'No answer: the time ran out' : 'No answer (time-out)') : esc(q.a[w.pick]);
+    return `<dd><b>${esc(q.q)}</b><span class="no">✗ ${hooks.plain() ? 'You said' : 'Yours'}: ${yours}</span><span class="yes">✓ ${hooks.plain() ? 'Right answer' : 'Correct'}: ${esc(q.a[0])}</span></dd>`;
+  }).join('')}</dl>`);
   // the game a card plays: the chapter's own, or the fight with Lord Lag
   const gameOf = (v) => (v.boss ? BOSS : MINIGAMES[v.id]);
   // a chapter with a mini-game plays it; the others still ask their three questions
@@ -5046,6 +5068,7 @@ function initQuest(hooks) {
         ${v.boss ? `<div class="q-villain"><span class="q-face" aria-hidden="true">😈</span><div><span class="q-k">The final fight</span><h3>${esc(game.name[words])}</h3></div></div>`
           : `<span class="q-k">Win back ${name} · mini-game</span>
         <h3>🎮 ${esc(game.name[words])}</h3>`}
+        ${v.review ? `<p class="q-sum">✓ ${hooks.plain() ? 'Final exam passed!' : 'Exam passed.'}</p>${reviewOf(v.review)}` : ''}
         <p class="q-say">${esc(game.how[words])}</p>
         <p class="q-sum">Goal: <b>${esc(game.goal[words])}</b></p>
         <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="go">Start ▶</button></div>`;
@@ -5077,6 +5100,7 @@ function initQuest(hooks) {
         <h3>You unlocked ${name}</h3>
         <p class="q-say">${esc(say(ch.win))}</p>
         ${v.st && game?.summary ? `<dl><dt>Your game</dt><dd>${esc(game.summary(v.st, words))}</dd></dl>` : ''}
+        ${v.boss ? '' : reviewOf(v.review)}
         <dl><dt>Why you won</dt><dd>${esc(say(ch.why))}</dd><dt>In a real network</dt><dd>${esc(say(ch.recap))}</dd></dl>
         <p class="q-sum">+${v.points.toLocaleString('en')} pts${v.flawless ? ' · flawless bonus' : ''} · you are now <b>${esc(rankOf(story))}</b></p>
         ${ended ? `<div class="q-levelup"><b>🏁 Level ${lvl.n} complete: ${esc(say(lvl.name))}</b>
@@ -5090,6 +5114,7 @@ function initQuest(hooks) {
         <div class="q-villain"><span class="q-face" aria-hidden="true">${ch.villain.face}</span>
           <div><span class="q-k">This round goes to ${esc(v.boss ? 'Lord Lag' : ch.villain.name)}</span><h3>You died${v.exam ? ' in the exam' : v.boss ? ' in the final fight' : ''}</h3></div></div>
         <p class="q-say">${esc(say(ch.lose))}${v.exam ? ` ${hooks.plain() ? 'Your game still counts: only the exam starts again.' : 'The game result stands; retake the exam.'}` : v.boss ? ` ${hooks.plain() ? 'Your exam still counts: only the fight starts again.' : 'The exam stands; the fight restarts.'}` : ''}</p>
+        ${reviewOf(v.review)}
         <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : v.boss ? 'boss' : 'begin'}">Try again</button></div>`;
     } else if (v.kind === 'locked') {
       const next = nextChapter(story);
@@ -5170,23 +5195,23 @@ function initQuest(hooks) {
   }
   function endGame(id, res, st) {
     if (!view || view.kind !== 'game' || view.id !== id) return;
-    const boss = view.boss && { carry: view.carry, flawless: view.flawless };
+    const boss = view.boss && { carry: view.carry, flawless: view.flawless, review: view.review };
     stopGame();
     if (!res.won) { openCard({ kind: 'lost', id, boss }); return; }
     const points = res.points + (res.flawless ? FLAWLESS_BONUS : 0);
     // the fight with Lord Lag: the chapter is banked with everything before it
-    if (boss) { bank(id, boss.carry + points, boss.flawless && res.flawless, st, true); return; }
+    if (boss) { bank(id, boss.carry + points, boss.flawless && res.flawless, st, true, boss.review); return; }
     // the last stop of a level has its final exam still to come
     if (examAt(id)) { openCard({ kind: 'exam', id, carry: points, flawless: res.flawless, st }); return; }
     bank(id, points, res.flawless, st);
   }
   // a network won: it unlocks, its points join the score, and the win card says why
-  function bank(id, points, flawless, st = null, boss = false) {
+  function bank(id, points, flawless, st = null, boss = false, review = null) {
     winChapter(story, { id, over: 'won', points });
     save();
     applyLocks(id);
     renderBar();
-    openCard({ kind: 'won', id, points, flawless, st, boss });
+    openCard({ kind: 'won', id, points, flawless, st, boss, review });
   }
 
   function startTimer() {
@@ -5205,11 +5230,11 @@ function initQuest(hooks) {
     const res = answer(c, pos, seconds);
     if (c.over === 'won') {
       const ex = view.exam;
-      if (ex && levelOf(c.id).boss) openCard({ kind: 'how', id: c.id, boss: true, carry: ex.carry + c.points, flawless: ex.flawless && !c.mistakes });
-      else if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st);
-      else bank(c.id, c.points, !c.mistakes);
+      if (ex && levelOf(c.id).boss) openCard({ kind: 'how', id: c.id, boss: true, carry: ex.carry + c.points, flawless: ex.flawless && !c.mistakes, review: c });
+      else if (ex) bank(c.id, ex.carry + c.points, ex.flawless && !c.mistakes, ex.st, false, c);
+      else bank(c.id, c.points, !c.mistakes, null, false, c);
     } else if (c.over === 'lost') {
-      openCard({ kind: 'lost', id: c.id, exam: view.exam });
+      openCard({ kind: 'lost', id: c.id, exam: view.exam, review: c });
     } else {
       view.last = { ...res, timeout: pos == null };
       renderCard();
@@ -5225,13 +5250,14 @@ function initQuest(hooks) {
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
     else if (what === 'next') { if (next) taunt(next); }
     else if (what === 'begin' && view) begin(view.id);
-    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id, boss: view.boss, carry: view.carry, flawless: view.flawless });
-    else if (what === 'boss' && view) openCard({ kind: 'how', id: view.id, boss: true, carry: view.boss.carry, flawless: view.boss.flawless });
+    else if (what === 'go' && view) openCard({ kind: 'game', id: view.id, boss: view.boss, carry: view.carry, flawless: view.flawless, review: view.review });
+    else if (what === 'boss' && view) openCard({ kind: 'how', id: view.id, boss: true, carry: view.boss.carry, flawless: view.boss.flawless, review: view.boss.review });
     else if (what === 'exam' && view) {
       const ex = view.exam ?? { carry: view.carry, flawless: view.flawless, st: view.st };
       openCard({ kind: 'question', id: view.id, c: startChallenge(view.id, Math.random, examAt(view.id)), last: null, exam: ex });
     }
-    else if (what === 'quit' && view) openCard({ kind: 'lost', id: view.id });
+    // giving up the final fight keeps the exam already passed
+    else if (what === 'quit' && view) openCard({ kind: 'lost', id: view.id, boss: view.boss && { carry: view.carry, flawless: view.flawless, review: view.review } });
     else if (what === 'later') closeCard();
     else if (what === 'enter' && view) { const id = view.id; closeCard(); hooks.openMajor(id); }
     else if (what === 'done') openCard({ kind: 'done', id: STORY_ORDER.at(-1) });

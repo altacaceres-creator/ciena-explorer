@@ -258,7 +258,7 @@ function miss(s, f) {
 // router you pick the next hop; elephants jam different links each race, so read the
 // map before you go. Lord Lag always takes the shortest way (the IGP path). In the last
 // race a fibre is cut in front of you, and you have to find another way round.
-const RACE = { races: 3, need: 2, speed: 0.4, reconverge: 1.5, think: 0.15 };
+const RACE = { races: 3, need: 2, speed: 0.42, reconverge: 1.5, think: 0.15, lag: 1.15 };
 const RNODES = {
   gw: { x: 0.08, y: 0.55, plain: 'Gateway Bay', sid: 16001 },
   c1: { x: 0.36, y: 0.78, plain: 'Coreburg 1', sid: 16002 },
@@ -311,15 +311,16 @@ function raceLead(s) {
 function raceMove(s, r, dt) {
   if (r.done || !r.to) return;
   const jam = s.jam[rkey(r.at, r.to)] ?? 0;
-  r.p += (RACE.speed / (1 + 3 * jam)) * dt / rlen(r.at, r.to);
+  // Lord Lag's packet is a little quicker than yours: only a good route beats him
+  r.p += ((r === s.lag ? RACE.lag : 1) * RACE.speed / (1 + 3 * jam)) * dt / rlen(r.at, r.to);
   if (r.p >= 1) { r.at = r.to; r.to = null; r.p = 0; r.visited.add(r.at); if (r.at === 'ed') r.done = true; }
 }
 const PacketRace = {
   id: 'race',
   name: { plain: 'Packet Race', eng: 'Packet Race' },
   how: {
-    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3); the race slows right down while you choose. Elephants 🐘 jam different roads each race, so look before you go. Lord Lag always takes the shortest road. Win two of the three races!',
-    eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path. In race 3 a link fails: reroute. Win two of three.',
+    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3); the race slows right down while you choose. Elephants 🐘 jam different roads each race, so look before you go. Lord Lag\'s packet is a little faster than yours, and always takes the shortest road. Win two of the three races!',
+    eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path, a little faster than you. In race 3 a link fails: reroute. Win two of three.',
   },
   goal: { plain: 'Three races: beat Lord Lag in at least two', eng: 'Three races to Edgewater: win at least two' },
   laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
@@ -471,12 +472,13 @@ const PacketRace = {
 // ---------------------------------------------------------------- Repeater Rescue (submarine)
 // Light crosses the ocean through repeaters on the seabed. One at a time they start to
 // lose power and blink red: tap them before they go dark. Then the Anchor Dragger cuts the
-// West cable, and the island's traffic has to move to the South cable while the repair
+// North cable, and the island's traffic has to move to the South cable while the repair
 // ship sails out, with the South cable's repeaters to look after in turn.
 const REP = { power: 22, decide: 14, ship: 14, drain: 0.16, every: 2.6, perCable: 6, lives: 3 };
+// two cables to the island, named on the board so the choice after the cut is clear
 const REP_CABLES = [
-  { from: 'Gateway Bay', to: 'Coherent Isle West', y: 0.3 },
-  { from: 'Lightmoor', to: 'Coherent Isle South', y: 0.74 },
+  { from: 'Gateway Bay', to: 'Coherent Isle West', y: 0.3, name: { plain: 'North cable', eng: 'North system' } },
+  { from: 'Lightmoor', to: 'Coherent Isle South', y: 0.74, name: { plain: 'South cable', eng: 'South system' } },
 ];
 const REP_CHOICES = [
   { key: 'move', right: true, plain: 'Move it to the South cable', eng: 'Restore onto the South system' },
@@ -493,8 +495,8 @@ const RepeaterRescue = {
   id: 'repeaters',
   name: { plain: 'Repeater Rescue', eng: 'Repeater Rescue' },
   how: {
-    plain: 'Light crosses the ocean through boosters on the sea floor. When one blinks red it is running out of power: tap it (or press 1, 2, 3 for the west, middle or east of the sea) before it goes dark. Then watch out for the anchor!',
-    eng: 'The signal crosses the ocean through powered repeaters. A repeater blinking red is losing its power feed: tap it (or 1, 2, 3 for the west, middle or east third) before it drops. Then the Anchor Dragger cuts a cable: restore the island\'s traffic.',
+    plain: 'Two cables cross the ocean to Coherent Isle, the North cable and the South cable, with boosters along the sea floor. When a booster blinks red it is running out of power: tap it (or press 1, 2, 3 for the west, middle or east of the sea) before it goes dark. Then watch out for the anchor!',
+    eng: 'Two subsea systems land on Coherent Isle, North and South, each a chain of powered repeaters. A repeater blinking red is losing its power feed: tap it (or 1, 2, 3 for the west, middle or east third) before it drops. Then the Anchor Dragger cuts a system: restore the island\'s traffic.',
   },
   goal: { plain: 'Keep the light crossing, and the island online', eng: 'Keep the repeaters powered and restore the island' },
   laneNames: { plain: ['West', 'Middle', 'East'], eng: ['West third', 'Middle third', 'East third'] },
@@ -529,7 +531,7 @@ const RepeaterRescue = {
     if (s.phase === 'power' && s.pt >= s.len) {
       s.phase = 'anchor'; s.pt = 0;
       for (const r of s.reps) { r.power = 1; r.drain = 0; }
-      float(s, 1, '⚓ The anchor cut the West cable!', false);
+      float(s, 1, '⚓ The anchor cut the North cable!', false);
     } else if (s.phase === 'anchor' && s.pt >= REP.decide) {
       s.over = 'lost'; s.wrong = 'late';
     } else if (s.phase === 'ship' && s.pt >= REP.ship) {
@@ -568,8 +570,8 @@ const RepeaterRescue = {
   summary(s, words) {
     const t = s.decided != null ? s.decided.toFixed(1) : null;
     return words === 'plain'
-      ? `You powered up ${s.fixed} boosters on the sea floor${s.dark ? ` and lost ${s.dark}` : ' without letting one go dark'}. When the anchor cut the West cable, you moved the island to the South cable in ${t} seconds, and the repair ship fixed the cut.`
-      : `${s.fixed} repeater power faults cleared, ${s.dark} dropped. After the cut on the West system, traffic was restored onto the South system in ${t} s and held while the cable ship made the repair.`;
+      ? `You powered up ${s.fixed} boosters on the sea floor${s.dark ? ` and lost ${s.dark}` : ' without letting one go dark'}. When the anchor cut the North cable, you moved the island to the South cable in ${t} seconds, and the repair ship fixed the cut.`
+      : `${s.fixed} repeater power faults cleared, ${s.dark} dropped. After the cut on the North system, traffic was restored onto the South system in ${t} s and held while the cable ship made the repair.`;
   },
   // the seabed: where each cable runs, as x and y for u from 0 (left shore) to 1 (the island)
   at(c, u, w, h) {
@@ -605,6 +607,11 @@ const RepeaterRescue = {
       // light pulses along a cable that works
       if (!cut) for (let k = 0; k < 6; k++) { const u = ((s.t * 0.25 + k / 6) % 1); const [x, y] = RepeaterRescue.at(ci, u, w, h); g.fillStyle = live ? theme.gold : theme.muted; g.globalAlpha = live ? 0.9 : 0.35; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.globalAlpha = 1; }
       if (cut) { const [x, y] = RepeaterRescue.at(0, 0.45, w, h); emoji(g, '✂', x, y + 2, 20); emoji(g, '⚓', x + 18, y - 22, 24); }
+      const [nx, ny] = RepeaterRescue.at(ci, 0.62, w, h);
+      g.font = `800 12px ${theme.font}`; const nw = g.measureText(c.name[words]).width + 14;
+      g.fillStyle = live ? theme.accent : theme.paper; roundRect(g, nx - nw / 2, ny + 18, nw, 20, 10); g.fill();
+      g.strokeStyle = theme.ink; g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = live ? '#ffffff' : theme.ink; g.textAlign = 'center'; g.fillText(`${c.name[words]}${cut ? ' ✂' : ''}`, nx, ny + 32);
     });
     for (const r of s.reps) {
       const [x, y] = RepeaterRescue.at(r.cable, r.u, w, h);
