@@ -171,7 +171,7 @@ for (const n of world.nodes) {
 const halos = {}, shades = {};
 {
   const hex = new THREE.CircleGeometry(1.7, 6);
-  const puff = new THREE.IcosahedronGeometry(1, 1).toNonIndexed();
+  const puff = new THREE.IcosahedronGeometry(1, 1);      // already one vertex per face corner: flat-shaded
   puff.computeVertexNormals();   // overlapping, so the tint reads as a wash, not dots
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), qx = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
   const one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();

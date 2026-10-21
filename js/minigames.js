@@ -258,7 +258,7 @@ function miss(s, f) {
 // router you pick the next hop; elephants jam different links each race, so read the
 // map before you go. Lord Lag always takes the shortest way (the IGP path). In the last
 // race a fibre is cut in front of you, and you have to find another way round.
-const RACE = { races: 3, need: 2, speed: 0.4, reconverge: 1.5, think: 0.15 };
+const RACE = { races: 3, need: 2, speed: 0.42, reconverge: 1.5, think: 0.15, lag: 1.15 };
 const RNODES = {
   gw: { x: 0.08, y: 0.55, plain: 'Gateway Bay', sid: 16001 },
   c1: { x: 0.36, y: 0.78, plain: 'Coreburg 1', sid: 16002 },
@@ -311,15 +311,16 @@ function raceLead(s) {
 function raceMove(s, r, dt) {
   if (r.done || !r.to) return;
   const jam = s.jam[rkey(r.at, r.to)] ?? 0;
-  r.p += (RACE.speed / (1 + 3 * jam)) * dt / rlen(r.at, r.to);
+  // Lord Lag's packet is a little quicker than yours: only a good route beats him
+  r.p += ((r === s.lag ? RACE.lag : 1) * RACE.speed / (1 + 3 * jam)) * dt / rlen(r.at, r.to);
   if (r.p >= 1) { r.at = r.to; r.to = null; r.p = 0; r.visited.add(r.at); if (r.at === 'ed') r.done = true; }
 }
 const PacketRace = {
   id: 'race',
   name: { plain: 'Packet Race', eng: 'Packet Race' },
   how: {
-    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3); the race slows right down while you choose. Elephants 🐘 jam different roads each race, so look before you go. Lord Lag always takes the shortest road. Win two of the three races!',
-    eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path. In race 3 a link fails: reroute. Win two of three.',
+    plain: 'Your video call races Lord Lag\'s packet from Gateway Bay to Edgewater. At each router, tap where to go next (or press 1, 2, 3); the race slows right down while you choose. Elephants 🐘 jam different roads each race, so look before you go. Lord Lag\'s packet is a little faster than yours, and always takes the shortest road. Win two of the three races!',
+    eng: 'Your EF video packet races Lord Lag\'s from the Gateway Bay PE to Edgewater. At each node pick the next segment (1, 2, 3): you are the SR-TE head end. Elephant flows load different links each race; Lord Lag follows the IGP shortest path, a little faster than you. In race 3 a link fails: reroute. Win two of three.',
   },
   goal: { plain: 'Three races: beat Lord Lag in at least two', eng: 'Three races to Edgewater: win at least two' },
   laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
@@ -471,12 +472,13 @@ const PacketRace = {
 // ---------------------------------------------------------------- Repeater Rescue (submarine)
 // Light crosses the ocean through repeaters on the seabed. One at a time they start to
 // lose power and blink red: tap them before they go dark. Then the Anchor Dragger cuts the
-// West cable, and the island's traffic has to move to the South cable while the repair
+// North cable, and the island's traffic has to move to the South cable while the repair
 // ship sails out, with the South cable's repeaters to look after in turn.
 const REP = { power: 22, decide: 14, ship: 14, drain: 0.16, every: 2.6, perCable: 6, lives: 3 };
+// two cables to the island, named on the board so the choice after the cut is clear
 const REP_CABLES = [
-  { from: 'Gateway Bay', to: 'Coherent Isle West', y: 0.3 },
-  { from: 'Lightmoor', to: 'Coherent Isle South', y: 0.74 },
+  { from: 'Gateway Bay', to: 'Coherent Isle West', y: 0.3, name: { plain: 'North cable', eng: 'North system' } },
+  { from: 'Lightmoor', to: 'Coherent Isle South', y: 0.74, name: { plain: 'South cable', eng: 'South system' } },
 ];
 const REP_CHOICES = [
   { key: 'move', right: true, plain: 'Move it to the South cable', eng: 'Restore onto the South system' },
@@ -493,8 +495,8 @@ const RepeaterRescue = {
   id: 'repeaters',
   name: { plain: 'Repeater Rescue', eng: 'Repeater Rescue' },
   how: {
-    plain: 'Light crosses the ocean through boosters on the sea floor. When one blinks red it is running out of power: tap it (or press 1, 2, 3 for the west, middle or east of the sea) before it goes dark. Then watch out for the anchor!',
-    eng: 'The signal crosses the ocean through powered repeaters. A repeater blinking red is losing its power feed: tap it (or 1, 2, 3 for the west, middle or east third) before it drops. Then the Anchor Dragger cuts a cable: restore the island\'s traffic.',
+    plain: 'Two cables cross the ocean to Coherent Isle, the North cable and the South cable, with boosters along the sea floor. When a booster blinks red it is running out of power: tap it (or press 1, 2, 3 for the west, middle or east of the sea) before it goes dark. Then watch out for the anchor!',
+    eng: 'Two subsea systems land on Coherent Isle, North and South, each a chain of powered repeaters. A repeater blinking red is losing its power feed: tap it (or 1, 2, 3 for the west, middle or east third) before it drops. Then the Anchor Dragger cuts a system: restore the island\'s traffic.',
   },
   goal: { plain: 'Keep the light crossing, and the island online', eng: 'Keep the repeaters powered and restore the island' },
   laneNames: { plain: ['West', 'Middle', 'East'], eng: ['West third', 'Middle third', 'East third'] },
@@ -529,7 +531,7 @@ const RepeaterRescue = {
     if (s.phase === 'power' && s.pt >= s.len) {
       s.phase = 'anchor'; s.pt = 0;
       for (const r of s.reps) { r.power = 1; r.drain = 0; }
-      float(s, 1, '⚓ The anchor cut the West cable!', false);
+      float(s, 1, '⚓ The anchor cut the North cable!', false);
     } else if (s.phase === 'anchor' && s.pt >= REP.decide) {
       s.over = 'lost'; s.wrong = 'late';
     } else if (s.phase === 'ship' && s.pt >= REP.ship) {
@@ -568,8 +570,8 @@ const RepeaterRescue = {
   summary(s, words) {
     const t = s.decided != null ? s.decided.toFixed(1) : null;
     return words === 'plain'
-      ? `You powered up ${s.fixed} boosters on the sea floor${s.dark ? ` and lost ${s.dark}` : ' without letting one go dark'}. When the anchor cut the West cable, you moved the island to the South cable in ${t} seconds, and the repair ship fixed the cut.`
-      : `${s.fixed} repeater power faults cleared, ${s.dark} dropped. After the cut on the West system, traffic was restored onto the South system in ${t} s and held while the cable ship made the repair.`;
+      ? `You powered up ${s.fixed} boosters on the sea floor${s.dark ? ` and lost ${s.dark}` : ' without letting one go dark'}. When the anchor cut the North cable, you moved the island to the South cable in ${t} seconds, and the repair ship fixed the cut.`
+      : `${s.fixed} repeater power faults cleared, ${s.dark} dropped. After the cut on the North system, traffic was restored onto the South system in ${t} s and held while the cable ship made the repair.`;
   },
   // the seabed: where each cable runs, as x and y for u from 0 (left shore) to 1 (the island)
   at(c, u, w, h) {
@@ -605,6 +607,11 @@ const RepeaterRescue = {
       // light pulses along a cable that works
       if (!cut) for (let k = 0; k < 6; k++) { const u = ((s.t * 0.25 + k / 6) % 1); const [x, y] = RepeaterRescue.at(ci, u, w, h); g.fillStyle = live ? theme.gold : theme.muted; g.globalAlpha = live ? 0.9 : 0.35; g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); g.globalAlpha = 1; }
       if (cut) { const [x, y] = RepeaterRescue.at(0, 0.45, w, h); emoji(g, '✂', x, y + 2, 20); emoji(g, '⚓', x + 18, y - 22, 24); }
+      const [nx, ny] = RepeaterRescue.at(ci, 0.62, w, h);
+      g.font = `800 12px ${theme.font}`; const nw = g.measureText(c.name[words]).width + 14;
+      g.fillStyle = live ? theme.accent : theme.paper; roundRect(g, nx - nw / 2, ny + 18, nw, 20, 10); g.fill();
+      g.strokeStyle = theme.ink; g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = live ? '#ffffff' : theme.ink; g.textAlign = 'center'; g.fillText(`${c.name[words]}${cut ? ' ✂' : ''}`, nx, ny + 32);
     });
     for (const r of s.reps) {
       const [x, y] = RepeaterRescue.at(r.cable, r.u, w, h);
@@ -944,34 +951,505 @@ const MeshRescue = {
   },
 };
 
-// ---------------------------------------------------------------- The fight with Lord Lag
-// The finale: three short rounds of games already played, a packet tetris, a race with a
-// fibre cut, and a storm on the long haul, with Lord Lag taunting between rounds. Each
-// round won knocks off one of his three hearts.
-const BOSS_ROUNDS = [
-  { game: PacketTetris, opts: { goal: 8 }, taunt: { plain: 'Let\'s see you sort THIS, apprentice! Elephants first!', eng: 'Round one: queue this, if you can. My elephant flows are already on the uplink.' } },
-  { game: PacketRace, opts: { first: 2, races: 1, need: 1 }, taunt: { plain: 'Lucky! Now race me, and mind the cut fibre!', eng: 'Round two: one race, one fibre cut. My IGP against your head end.' } },
-  { game: MeshRescue, opts: { cuts: 2 }, taunt: { plain: 'Enough! My storm will cut you off for good!', eng: 'Final round: a storm on the long haul. Restore that, Chief.' } },
+// ---------------------------------------------------------------- Last Mile Dash (home fibre)
+// Homes on three streets of Popcorn Hill ask for shows, and the buffering wheel starts
+// to spin. Tap a street to serve its oldest request from the Couchwave cache. A title the
+// cache doesn't have yet goes all the way to the origin once; after that it is cached,
+// and everyone who asks for it again gets it straight away.
+const LMD = { goal: 14, lives: 3, wait: 8, fetch: 2.6, every: 2.1 };
+const LMD_STREETS = { plain: ['Maple Street', 'Popcorn Lane', 'Sofa Avenue'], eng: ['Splitter 1', 'Splitter 2', 'Splitter 3'] };
+const LMD_TITLES = [
+  { icon: '🎬', plain: 'The premiere', eng: 'Premiere' },
+  { icon: '🦖', plain: 'Dino Docs', eng: 'Dino Docs' },
+  { icon: '🚀', plain: 'Space Race', eng: 'Space Race' },
+  { icon: '🐙', plain: 'Deep Sea', eng: 'Deep Sea' },
+  { icon: '🎸', plain: 'Rock Night', eng: 'Rock Night' },
+];
+const LastMileDash = {
+  id: 'lastmile',
+  name: { plain: 'Last Mile Dash', eng: 'Last Mile Dash' },
+  how: {
+    plain: 'Homes on three streets want to watch something. Tap a street (or press 1, 2, 3) to send its oldest request a show from the Couchwave copy nearby. A show the copy doesn\'t have yet must come from far away the first time, and then it is kept for everyone. Serve them before the buffering wheel fills!',
+    eng: 'Subscribers behind three splitters request titles. Tap a splitter (1, 2, 3) to serve its oldest request from the Couchwave cache. A miss is fetched from the origin once and cached, so every later request for it is a hit. Serve before the player buffers out.',
+  },
+  goal: { plain: `Start ${LMD.goal} shows before three homes give up`, eng: `Serve ${LMD.goal} streams, three abandoned sessions and you're out` },
+  laneNames: LMD_STREETS,
+  start(random = Math.random, opts = {}) {
+    return {
+      goal: opts.goal ?? LMD.goal, t: 0, random, reqs: [], next: 0.6, cached: new Set([0]), fetching: [],
+      served: 0, hits: 0, misses: 0, gaveUp: 0, lives: LMD.lives, score: 0, fx: [], over: null,
+    };
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.3);
+    if ((s.next -= dt) <= 0) {
+      // the premiere is what most homes want; the rest is a mix
+      const title = s.random() < 0.45 ? 0 : 1 + Math.floor(s.random() * (LMD_TITLES.length - 1));
+      const lane = Math.floor(s.random() * 3);
+      if (s.reqs.filter((r) => r.lane === lane).length < 3) s.reqs.push({ lane, title, t: 0, slot: s.reqs.filter((r) => r.lane === lane).length });
+      s.next = LMD.every * (0.8 + 0.4 * s.random());
+    }
+    for (const r of s.reqs) r.t += dt;
+    // a title on its way from the origin lands in the cache, and its request plays
+    for (const f of s.fetching) f.t += dt;
+    for (const f of s.fetching.filter((x) => x.t >= LMD.fetch)) {
+      s.fetching.splice(s.fetching.indexOf(f), 1);
+      s.cached.add(f.title);
+      const r = s.reqs.indexOf(f.req);
+      if (r >= 0) { s.reqs.splice(r, 1); s.served++; s.score += 15; float(s, f.req.lane, `${LMD_TITLES[f.title].icon} cached for next time`, true); }
+    }
+    for (const r of s.reqs.filter((x) => x.t >= LMD.wait)) {
+      s.reqs.splice(s.reqs.indexOf(r), 1);
+      s.fetching = s.fetching.filter((f) => f.req !== r);
+      s.lives--; s.gaveUp++; float(s, r.lane, 'Buffering… they gave up', false);
+    }
+    if (s.lives <= 0) s.over = 'lost';
+    else if (s.served >= s.goal) s.over = 'won';
+  },
+  press(s, lane) {
+    if (s.over) return;
+    const r = s.reqs.filter((x) => x.lane === lane && !s.fetching.some((f) => f.req === x)).sort((a, b) => b.t - a.t)[0];
+    if (!r) return;
+    if (s.cached.has(r.title)) {
+      s.reqs.splice(s.reqs.indexOf(r), 1);
+      s.served++; s.hits++;
+      const pts = 20 + Math.round((1 - r.t / LMD.wait) * 10);
+      s.score += pts; float(s, lane, `🍿 Playing! +${pts}`, true);
+    } else {
+      s.misses++;
+      s.fetching.push({ req: r, title: r.title, t: 0 });
+      float(s, lane, 'Not here yet: fetching it from far away…', false);
+    }
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 40 : 0, flawless: s.gaveUp === 0 };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You started ${s.served} shows: ${s.hits} came straight from the copy nearby, and ${s.misses} had to come from far away once, then stayed close for everyone else. ${s.gaveUp ? `${s.gaveUp} home${s.gaveUp === 1 ? '' : 's'} gave up waiting.` : 'Not one home gave up waiting.'}`
+      : `${s.served} streams served: ${s.hits} cache hits, ${s.misses} misses fetched from the origin and cached; ${s.gaveUp} abandoned session${s.gaveUp === 1 ? '' : 's'}. Hit ratio ${Math.round((100 * s.hits) / Math.max(1, s.hits + s.misses))}%.`;
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    hud(g, w, theme, `${s.served} / ${s.goal} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(LMD.lives - Math.max(0, s.lives))}`, s.served / s.goal, s.score, null);
+    const top = 34, rowH = (h - top - 8) / 3, cx = 70;
+    // the cache, with the titles it holds, and the origin far away
+    g.fillStyle = theme.well; roundRect(g, 8, top + 6, 110, h - top - 20, 10); g.fill();
+    g.fillStyle = theme.ink; g.font = `800 11px ${theme.font}`; g.textAlign = 'center';
+    g.fillText(words === 'plain' ? 'Couchwave copy' : 'Couchwave cache', 63, top + 22);
+    [...s.cached].forEach((t, i) => emoji(g, LMD_TITLES[t].icon, 32 + (i % 3) * 30, top + 46 + Math.floor(i / 3) * 30, 22));
+    g.fillStyle = theme.muted; g.font = `800 11px ${theme.font}`; g.textAlign = 'right'; g.fillText(words === 'plain' ? 'far away 🌍' : 'origin 🌍', w - 10, top + 18);
+    for (let i = 0; i < 3; i++) {
+      const y = top + rowH * (i + 0.5);
+      g.strokeStyle = theme.muted; g.lineWidth = 3; g.beginPath(); g.moveTo(118, y); g.lineTo(w - 20, y); g.stroke();
+      g.fillStyle = theme.muted; g.font = `700 11px ${theme.font}`; g.textAlign = 'left';
+      g.fillText(`${i + 1} · ${LMD_STREETS[words][i]}`, 128, y - rowH * 0.32);
+      for (let k = 0; k < 3; k++) emoji(g, '🏠', 190 + k * ((w - 230) / 3) + (w - 230) / 6, y + 4, Math.min(30, rowH * 0.5));
+    }
+    for (const r of s.reqs) {
+      const y = top + rowH * (r.lane + 0.5), x = 190 + r.slot * ((w - 230) / 3) + (w - 230) / 6;
+      const fetching = s.fetching.find((f) => f.req === r);
+      // the bubble over the home: the title, and the buffering wheel filling up
+      g.fillStyle = theme.paper; g.beginPath(); g.arc(x, y - 26, 16, 0, 7); g.fill();
+      g.strokeStyle = r.t / LMD.wait > 0.7 ? theme.bad : theme.ink; g.lineWidth = 2; g.stroke();
+      emoji(g, LMD_TITLES[r.title].icon, x, y - 26, 16);
+      g.strokeStyle = theme.bad; g.lineWidth = 3; g.beginPath(); g.arc(x, y - 26, 20, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (r.t / LMD.wait)); g.stroke();
+      if (fetching) {
+        const k = fetching.t / LMD.fetch, ox = w - 30, oy = top + 14;
+        g.setLineDash([5, 5]); g.strokeStyle = theme.accent; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y - 26); g.lineTo(ox, oy); g.stroke(); g.setLineDash([]);
+        const p = k < 0.5 ? k * 2 : 2 - k * 2;
+        g.fillStyle = theme.accent; g.beginPath(); g.arc(x + (ox - x) * p, y - 26 + (oy - y + 26) * p, 5, 0, 7); g.fill();
+      }
+    }
+    floats(g, s, (lane) => [w / 2, top + rowH * (lane + 0.5) + rowH * 0.36], theme);
+  },
+  laneAt(x, y, w, h) { const top = 34; return y < top ? null : Math.min(2, Math.floor(((y - top) / (h - top - 8)) * 3)); },
+};
+
+// ---------------------------------------------------------------- Storm Chaser (business access)
+// Someone at a Tidewell office plugs a cable into two sockets of the same switch: a loop.
+// Every broadcast now comes back twice, then four times, and the links fill up. Block
+// one link in each loop before the storm reaches 100%, without cutting an office off.
+const STORM = { lives: 3, double: 3.4 };
+const STORM_ROUNDS = [
+  {
+    nodes: { m: [0.5, 0.18, 'Main switch'], a: [0.22, 0.6, 'Floor 1'], b: [0.78, 0.6, 'Floor 2'], p: [0.1, 0.92, 'Printers'], l: [0.9, 0.92, 'Lab'] },
+    links: [['m', 'a'], ['m', 'b'], ['a', 'b'], ['a', 'p'], ['b', 'l']],
+  },
+  {
+    nodes: { m: [0.5, 0.15, 'Main switch'], a: [0.18, 0.5, 'Sales'], b: [0.5, 0.55, 'Reception'], c: [0.82, 0.5, 'Support'], d: [0.34, 0.92, 'Meeting rooms'], e: [0.82, 0.92, 'Kitchen'] },
+    links: [['m', 'a'], ['m', 'b'], ['m', 'c'], ['a', 'b'], ['b', 'd'], ['a', 'd'], ['c', 'e']],
+  },
+  {
+    nodes: { m: [0.5, 0.15, 'Main switch'], a: [0.15, 0.45, 'Floor 1'], b: [0.85, 0.45, 'Floor 2'], c: [0.3, 0.88, 'Floor 3'], d: [0.7, 0.88, 'Floor 4'], x: [0.5, 0.55, 'Server room'] },
+    links: [['m', 'a'], ['m', 'b'], ['a', 'c'], ['b', 'd'], ['c', 'd'], ['m', 'x'], ['x', 'c'], ['x', 'd']],
+  },
+];
+const skey = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+// is the office network still in one piece without these links?
+function stormConnected(r, blocked) {
+  const ids = Object.keys(r.nodes), seen = new Set([ids[0]]), todo = [ids[0]];
+  while (todo.length) {
+    const n = todo.pop();
+    for (const [a, b] of r.links) { if (blocked.has(skey(a, b))) continue; const m = a === n ? b : b === n ? a : null; if (m && !seen.has(m)) { seen.add(m); todo.push(m); } }
+  }
+  return seen.size === ids.length;
+}
+// loops left: a connected network with more links than a tree has
+const stormLoops = (r, blocked) => r.links.filter(([a, b]) => !blocked.has(skey(a, b))).length - (Object.keys(r.nodes).length - 1);
+// the links on offer: one that breaks a loop and two that would cut an office off, mixed
+function stormOffer(s) {
+  const r = STORM_ROUNDS[s.round], live = r.links.filter(([a, b]) => !s.blocked.has(skey(a, b)));
+  const good = live.filter(([a, b]) => stormConnected(r, new Set([...s.blocked, skey(a, b)])));
+  const bad = live.filter(([a, b]) => !stormConnected(r, new Set([...s.blocked, skey(a, b)])));
+  const pick = (arr, k) => mixUp(arr, s.random).slice(0, k);
+  s.offer = mixUp([...pick(good, 1), ...pick(bad, 2)], s.random).map(([a, b]) => skey(a, b));
+}
+const StormChaser = {
+  id: 'storm',
+  name: { plain: 'Storm Chaser', eng: 'Storm Chaser' },
+  how: {
+    plain: 'A cable plugged in twice made a loop: every message comes back again and again, and the office network fills up. Pick a link to switch off (tap it, or press 1, 2, 3) to break the loop before the storm hits 100%. But don\'t cut an office off!',
+    eng: 'A patch cable has closed a loop and a broadcast storm is building. Block one link per loop (1, 2, 3), as STP or a G.8032 RPL would, before the links saturate, without partitioning the network.',
+  },
+  goal: { plain: 'Calm three storms', eng: 'Clear three broadcast storms' },
+  laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
+  start(random = Math.random, opts = {}) {
+    const s = { rounds: opts.rounds ?? STORM_ROUNDS.length, t: 0, random, round: 0, load: 1, blocked: new Set(), offer: [], lives: STORM.lives, calmed: 0, cutOff: 0, peak: 0, between: 0, score: 0, fx: [], over: null };
+    stormOffer(s);
+    return s;
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.between > 0) {
+      if ((s.between -= dt) <= 0) {
+        if (s.round + 1 >= s.rounds) { s.over = 'won'; return; }
+        s.round++; s.blocked = new Set(); s.load = 1; stormOffer(s); float(s, 1, `Storm ${s.round + 1}!`, false);
+      }
+      return;
+    }
+    // the storm doubles every couple of seconds while a loop is left
+    s.load = Math.min(100, s.load * Math.pow(2, dt / STORM.double));
+    s.peak = Math.max(s.peak, s.load);
+    if (s.load >= 100) {
+      s.lives--; float(s, 1, 'Every port at 100%!', false);
+      s.blocked = new Set(); s.load = 1; stormOffer(s);
+      if (s.lives <= 0) s.over = 'lost';
+    }
+  },
+  press(s, lane) {
+    if (s.over || s.between > 0) return;
+    const k = s.offer[lane];
+    if (!k) return;
+    const r = STORM_ROUNDS[s.round], next = new Set([...s.blocked, k]);
+    if (!stormConnected(r, next)) {
+      s.lives--; s.cutOff++;
+      const [a, b] = k.split('-');
+      float(s, 1, `That cut ${r.nodes[stormConnected(r, new Set([k])) ? a : b][2]} off!`, false);
+      if (s.lives <= 0) s.over = 'lost'; else stormOffer(s);
+      return;
+    }
+    s.blocked = next;
+    if (stormLoops(r, next) > 0) { float(s, 1, 'One loop broken, there is another!', true); s.load = Math.max(1, s.load / 2); stormOffer(s); return; }
+    s.calmed++;
+    const pts = 100 + Math.round((100 - s.load) / 2);
+    s.score += pts; float(s, 1, `Storm calmed! +${pts}`, true);
+    s.load = 1; s.offer = []; s.between = 1.4;
+  },
+  // would blocking this link keep every office connected?
+  safe: (s, k) => stormConnected(STORM_ROUNDS[s.round], new Set([...s.blocked, k])),
+  lanes(s, words) {
+    const r = STORM_ROUNDS[s.round];
+    return [0, 1, 2].map((i) => { const k = s.offer[i]; if (!k) return '—'; const [a, b] = k.split('-'); return r.nodes[a] && r.nodes[b] ? `${words === 'plain' ? 'Switch off' : 'Block'} ${r.nodes[a][2]} – ${r.nodes[b][2]}` : '—'; });
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 40 : 0, flawless: s.cutOff === 0 && s.lives === STORM.lives };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You calmed ${s.calmed} storm${s.calmed === 1 ? '' : 's'} by switching off one link in each loop. The worst one reached ${Math.round(s.peak)}% before you stopped it${s.cutOff ? `, and ${s.cutOff} time${s.cutOff === 1 ? '' : 's'} you cut an office off by mistake` : ', and no office was ever cut off'}.`
+      : `${s.calmed} broadcast storm${s.calmed === 1 ? '' : 's'} cleared by blocking one link per loop; peak load ${Math.round(s.peak)}%; ${s.cutOff} partition${s.cutOff === 1 ? '' : 's'} caused.`;
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    hud(g, w, theme, `${words === 'plain' ? 'Storm' : 'Load'} ${Math.round(s.load)}% · ${s.round + 1} / ${s.rounds} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(STORM.lives - Math.max(0, s.lives))}`, s.load / 100, s.score, null);
+    const r = STORM_ROUNDS[s.round], top = 40, P = (n) => [20 + (w - 40) * r.nodes[n][0], top + (h - top - 26) * r.nodes[n][1]];
+    r.links.forEach(([a, b]) => {
+      const [ax, ay] = P(a), [bx, by] = P(b), k = skey(a, b), blocked = s.blocked.has(k), offer = s.offer.indexOf(k);
+      const busy = !blocked && s.between <= 0;
+      g.strokeStyle = blocked ? theme.muted : busy && s.load > 40 ? theme.bad : theme.ink; g.lineWidth = blocked ? 2 : 3 + (busy ? s.load / 25 : 0);
+      g.setLineDash(blocked ? [6, 6] : []); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.setLineDash([]);
+      // broadcast copies racing round, more of them as the storm grows
+      if (busy) for (let k2 = 0; k2 < Math.min(8, Math.ceil(s.load / 12)); k2++) { const u = (s.t * 0.9 + k2 / 8) % 1; g.fillStyle = theme.gold; g.beginPath(); g.arc(ax + (bx - ax) * u, ay + (by - ay) * u, 3, 0, 7); g.fill(); }
+      if (blocked) emoji(g, '⛔', (ax + bx) / 2, (ay + by) / 2, 16);
+      if (offer >= 0) { const mx = (ax + bx) / 2, my = (ay + by) / 2; g.fillStyle = theme.accent; g.beginPath(); g.arc(mx, my, 13, 0, 7); g.fill(); g.fillStyle = '#ffffff'; g.font = `800 13px ${theme.font}`; g.textAlign = 'center'; g.fillText(String(offer + 1), mx, my + 5); }
+    });
+    for (const n of Object.keys(r.nodes)) {
+      const [x, y] = P(n), lbl = r.nodes[n][2];
+      g.font = `800 11px ${theme.font}`; const tw = g.measureText(lbl).width;
+      g.fillStyle = theme.paper; roundRect(g, x - tw / 2 - 8, y - 11, tw + 16, 22, 7); g.fill();
+      g.strokeStyle = theme.ink; g.lineWidth = 2; g.stroke();
+      g.fillStyle = theme.ink; g.textAlign = 'center'; g.fillText(lbl, x, y + 4);
+    }
+    if (s.round === 0 && s.t < 4) emoji(g, '📢', w - 30, top + 20, 26);
+    floats(g, s, () => [w / 2, top + 6], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    if (!s) return null;
+    const r = STORM_ROUNDS[s.round], top = 40, P = (n) => [20 + (w - 40) * r.nodes[n][0], top + (h - top - 26) * r.nodes[n][1]];
+    let best = null, bd = 40;
+    s.offer.forEach((k, i) => { const [a, b] = k.split('-'), [ax, ay] = P(a), [bx, by] = P(b); const d = Math.hypot((ax + bx) / 2 - x, (ay + by) / 2 - y); if (d < bd) { bd = d; best = i; } });
+    return best;
+  },
+};
+
+// ---------------------------------------------------------------- Stop the Fiber Cut (xhaul ring)
+// Backhoe Bob's crew is digging all round the cell sites' fibre ring. Tap each digger
+// before it reaches the fibre ("call before you dig"). In the end one gets through and
+// cuts the ring: open the ring's spare link (the RPL) so traffic goes the other way round.
+const CUT = { stop: 8, lives: 3, dig: 6, every: 1.9, decide: 12 };
+const CUT_SITES = ['Labelbrook', 'Spinehill', 'Framefield', 'Edgewater', 'Leafdale', 'Gateway Bay'];
+const CUT_CHOICES = [
+  { key: 'rpl', right: true, plain: 'Open the spare link', eng: 'Unblock the RPL' },
+  { key: 'wait', plain: 'Wait for the repair crew', eng: 'Wait for the splice crew' },
+  { key: 'reboot', plain: 'Restart the towers', eng: 'Reboot the cell sites' },
+];
+const cutSector = (a) => Math.min(2, Math.floor(((a + Math.PI) / (2 * Math.PI)) * 3));
+const StopTheFiberCut = {
+  id: 'fibercut',
+  name: { plain: 'Stop the Fiber Cut', eng: 'Stop the Fiber Cut' },
+  how: {
+    plain: 'Backhoe Bob\'s crew is digging near the fibre ring that joins the phone towers. Tap a digger (or press 1, 2, 3 for the west, middle or east of the ring) before it reaches the fibre. Then, if one gets through, keep the towers connected!',
+    eng: 'Diggers are closing in on the xhaul ring. Stop each one (tap, or 1, 2, 3 for a third of the ring) before it hits the fibre: call before you dig. When the ring is cut anyway, restore it the G.8032 way.',
+  },
+  goal: { plain: `Stop ${CUT.stop} diggers, then save the ring`, eng: `Stop ${CUT.stop} diggers, then protect the ring` },
+  laneNames: { plain: ['West', 'Middle', 'East'], eng: ['West arc', 'Middle arc', 'East arc'] },
+  start(random = Math.random, opts = {}) {
+    return {
+      goal: opts.goal ?? CUT.stop, t: 0, random, phase: 'dig', pt: 0, diggers: [], next: 1, stopped: 0, hits: 0, lives: CUT.lives,
+      cutAt: null, choices: mixUp(CUT_CHOICES, random), decided: null, score: 0, fx: [], over: null,
+    };
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt; s.pt += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.phase === 'dig') {
+      if ((s.next -= dt) <= 0 && s.diggers.length < 3) {
+        s.diggers.push({ a: -Math.PI + s.random() * 2 * Math.PI, p: 0 });
+        s.next = CUT.every * (0.8 + 0.5 * s.random());
+      }
+      for (const d of s.diggers) d.p += dt / CUT.dig;
+      for (const d of s.diggers.filter((x) => x.p >= 1)) {
+        s.diggers.splice(s.diggers.indexOf(d), 1);
+        s.lives--; s.hits++; float(s, cutSector(d.a), 'Bob hit the fibre!', false);
+      }
+      if (s.stopped >= s.goal) {
+        // one last digger gets through anyway, on the far side from the spare link
+        s.phase = 'cut'; s.pt = 0; s.diggers = []; s.cutAt = Math.PI * 0.25;
+        float(s, 1, '🚜 One got through: the ring is cut!', false);
+      }
+    } else if (s.phase === 'cut' && s.pt >= CUT.decide) { s.over = 'lost'; s.wrong = 'late'; }
+    if (s.lives <= 0) s.over = 'lost';
+  },
+  press(s, lane) {
+    if (s.over) return;
+    if (s.phase === 'cut') {
+      const c = s.choices[lane];
+      if (!c) return;
+      if (!c.right) { s.over = 'lost'; s.wrong = c.key; return; }
+      s.decided = s.pt; s.score += 150 + Math.round((CUT.decide - s.pt) * 8);
+      float(s, 1, `Back up in ${Math.round(20 + s.pt * 2)} ms!`, true);
+      s.over = 'won';
+      return;
+    }
+    // a tap on a digger (10 + its index), or a third of the ring: the closest there
+    const d = lane >= 10 ? s.diggers[lane - 10] : s.diggers.filter((x) => cutSector(x.a) === lane).sort((a, b) => b.p - a.p)[0];
+    if (!d) return;
+    s.diggers.splice(s.diggers.indexOf(d), 1);
+    s.stopped++;
+    const pts = 20 + Math.round((1 - d.p) * 10);
+    s.score += pts; float(s, cutSector(d.a), '✋ Call before you dig!', true);
+  },
+  lanes(s, words) { return s.phase === 'cut' ? s.choices.map((c) => c[words]) : StopTheFiberCut.laneNames[words]; },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 40 : 0, flawless: s.hits === 0 };
+  },
+  summary(s, words) {
+    const ms = s.decided != null ? Math.round(20 + s.decided * 2) : null;
+    return words === 'plain'
+      ? `You stopped ${s.stopped} diggers before they reached the fibre${s.hits ? `, and ${s.hits} got through` : ''}. When the ring was cut anyway, you opened the spare link and the towers were talking again in ${ms} milliseconds, going the other way round.`
+      : `${s.stopped} excavations stopped, ${s.hits} fibre strike${s.hits === 1 ? '' : 's'}. After the cut, the RPL was unblocked and traffic restored round the ring in ${ms} ms, inside the G.8032 50 ms target.`;
+  },
+  // the ring, small enough that a digger at the edge of its approach still fits on the board
+  ring(w, h) { const top = 34, r = Math.min(w * 0.3, (h - top) * 0.3); return { cx: w / 2, cy: top + (h - top) / 2 + 4, r, reach: Math.min(70, (h - top) / 2 - r - 22) }; },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const label = s.phase === 'dig' ? `${s.stopped} / ${s.goal} ${words === 'plain' ? 'diggers stopped' : 'stopped'}` : (words === 'plain' ? 'The ring is cut!' : 'Ring failure');
+    hud(g, w, theme, `${label} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(CUT.lives - Math.max(0, s.lives))}`, s.phase === 'dig' ? s.stopped / s.goal : 1 - s.pt / CUT.decide, s.score, null);
+    const { cx, cy, r } = StopTheFiberCut.ring(w, h);
+    const rpl = -Math.PI * 0.75;    // the spare link, kept blocked until a failure
+    g.lineWidth = 5;
+    for (let k = 0; k < 60; k++) {
+      const a0 = -Math.PI + (k / 60) * 2 * Math.PI, a1 = a0 + (2 * Math.PI) / 60;
+      const nearRpl = Math.abs(((a0 - rpl + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < 0.22;
+      const nearCut = s.cutAt != null && Math.abs(((a0 - s.cutAt + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < 0.1;
+      g.strokeStyle = nearCut ? theme.bad : nearRpl && !(s.over === 'won') ? theme.muted : theme.accent;
+      g.setLineDash(nearRpl && s.over !== 'won' ? [5, 5] : []);
+      if (!nearCut) { g.beginPath(); g.arc(cx, cy, r, a0, a1); g.stroke(); }
+    }
+    g.setLineDash([]);
+    emoji(g, '⛔', cx + r * Math.cos(rpl), cy + r * Math.sin(rpl), 16);
+    g.fillStyle = theme.muted; g.font = `700 10px ${theme.font}`; g.textAlign = 'center';
+    g.fillText(words === 'plain' ? 'spare link' : 'RPL', cx + r * Math.cos(rpl), cy + r * Math.sin(rpl) - 14);
+    if (s.cutAt != null) emoji(g, '✂', cx + r * Math.cos(s.cutAt), cy + r * Math.sin(s.cutAt), 20);
+    CUT_SITES.forEach((n, i) => {
+      const a = -Math.PI + ((i + 0.5) / CUT_SITES.length) * 2 * Math.PI, x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+      emoji(g, '📡', x, y, 20);
+      g.fillStyle = theme.ink; g.font = `800 10px ${theme.font}`; g.textAlign = 'center'; g.fillText(n, x, y + 22);
+    });
+    const { reach } = StopTheFiberCut.ring(w, h);
+    for (const d of s.diggers) {
+      const dist = r + 18 + (1 - d.p) * reach;
+      const x = cx + dist * Math.cos(d.a), y = cy + dist * Math.sin(d.a);
+      emoji(g, '🚜', x, y, 24);
+      g.strokeStyle = theme.bad; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 17, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * d.p); g.stroke();
+    }
+    // the sync heartbeats: steady while the ring is whole, silent across the cut
+    if (s.phase === 'cut' && s.over !== 'won') { g.fillStyle = theme.bad; g.font = `800 13px ${theme.font}`; g.textAlign = 'center'; g.fillText(words === 'plain' ? 'Towers cut off!' : 'CFM: loss of continuity', cx, cy + 5); }
+    else if (s.over === 'won') { g.fillStyle = theme.good; g.font = `800 13px ${theme.font}`; g.textAlign = 'center'; g.fillText(words === 'plain' ? 'The other way round ✓' : 'Traffic on the RPL ✓', cx, cy + 5); }
+    floats(g, s, (lane) => [w * (0.25 + lane * 0.25), 52], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    if (!s || s.phase !== 'dig') return null;
+    const { cx, cy, r, reach } = StopTheFiberCut.ring(w, h);
+    let best = null, bd = 40;
+    s.diggers.forEach((d, i) => { const dist = r + 18 + (1 - d.p) * reach; const dd = Math.hypot(cx + dist * Math.cos(d.a) - x, cy + dist * Math.sin(d.a) - y); if (dd < bd) { bd = dd; best = 10 + i; } });
+    return best;
+  },
+};
+
+// ---------------------------------------------------------------- Cable Layer (undersea cables)
+// A cable ship lays a new cable from Lightmoor to Coherent Isle. The seabed slides past;
+// steer into the north, middle or south lane to keep the cable clear of underwater
+// volcanoes, rocky seamounts and fishing grounds, where anchors and trawls would catch it.
+const LAY = { length: 34, lives: 3, speed: 0.1, every: 1.8 };
+const LAY_HAZARDS = [
+  { icon: '🌋', plain: 'an underwater volcano', eng: 'volcanic vent' },
+  { icon: '🪨', plain: 'a rocky seamount', eng: 'seamount' },
+  { icon: '🎣', plain: 'fishing grounds', eng: 'trawling ground' },
+];
+const CableLayer = {
+  id: 'cablelayer',
+  name: { plain: 'Cable Layer', eng: 'Cable Layer' },
+  how: {
+    plain: 'You are on the ship laying a new cable across the ocean. Tap north, middle or south (or press 1, 2, 3) to steer the cable round underwater volcanoes, rocky mountains and fishing grounds, where anchors would catch it. The Kraken keeps stirring things up!',
+    eng: 'Lay a new subsea cable from Lightmoor to Coherent Isle. Steer between three corridors (1, 2, 3) to keep the route off volcanic vents, seamounts and trawling grounds, as the route survey would. The Kraken keeps stirring the seabed.',
+  },
+  goal: { plain: 'Lay the cable all the way to the island', eng: 'Complete the cable lay to the landing station' },
+  laneNames: { plain: ['North', 'Middle', 'South'], eng: ['North corridor', 'Middle corridor', 'South corridor'] },
+  start(random = Math.random, opts = {}) {
+    return { len: opts.seconds ?? LAY.length, t: 0, random, lane: 1, trail: [], hazards: [], next: 1.6, dodged: 0, hits: 0, lives: LAY.lives, score: 0, fx: [], over: null };
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.3);
+    // the seabed slides by: hazards come in from the right on one or two lanes
+    if ((s.next -= dt) <= 0 && s.t < s.len - 3) {
+      const free = Math.floor(s.random() * 3), two = s.random() < 0.35;
+      for (let l = 0; l < 3; l++) if (l !== free && (two || l === (free + 1) % 3)) s.hazards.push({ lane: l, x: 1.08, kind: Math.floor(s.random() * LAY_HAZARDS.length) });
+      s.next = LAY.every * (0.85 + 0.4 * s.random());
+    }
+    for (const z of s.hazards) z.x -= LAY.speed * dt * 2.2;
+    for (const z of s.hazards.filter((x) => !x.done && x.x < 0.2)) {
+      z.done = true;
+      if (z.lane === s.lane) { s.lives--; s.hits++; float(s, z.lane, `Ouch: ${LAY_HAZARDS[z.kind].plain}!`, false); }
+      else { s.dodged++; s.score += 15; }
+    }
+    s.hazards = s.hazards.filter((z) => z.x > -0.1);
+    if (Math.floor(s.t * 10) !== Math.floor((s.t - dt) * 10)) s.trail.push(s.lane);
+    if (s.lives <= 0) s.over = 'lost';
+    else if (s.t >= s.len) { s.over = 'won'; float(s, 1, '🏝 Landed at Coherent Isle!', true); }
+  },
+  press(s, lane) { if (!s.over && lane >= 0 && lane < 3) s.lane = lane; },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.hits === 0 };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You laid the cable all the way to Coherent Isle and steered round ${s.dodged} hazards on the seabed${s.hits ? `, though ${s.hits} caught the cable` : ', without a single scratch'}. Real cable routes are planned the same way, after a survey of the sea floor.`
+      : `Cable laid end to end; ${s.dodged} hazards avoided, ${s.hits} contact${s.hits === 1 ? '' : 's'}. The same job a marine route survey does before a lay.`;
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    hud(g, w, theme, `${words === 'plain' ? 'To the island' : 'Lay progress'} ${Math.round((100 * Math.min(s.t, s.len)) / s.len)}% · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(LAY.lives - Math.max(0, s.lives))}`, s.t / s.len, s.score, null);
+    const top = 34, rowH = (h - top - 8) / 3, X = (u) => 10 + (w - 20) * u, Y = (l) => top + rowH * (l + 0.5);
+    g.fillStyle = theme.sea; roundRect(g, 4, top + 2, w - 8, h - top - 6, 12); g.fill();
+    for (let l = 0; l < 3; l++) { g.fillStyle = theme.muted; g.font = `700 11px ${theme.font}`; g.textAlign = 'left'; g.fillText(`${l + 1} · ${CableLayer.laneNames[words][l]}`, 14, Y(l) - rowH * 0.32); }
+    // the cable already laid trails behind the ship
+    g.strokeStyle = theme.gold; g.lineWidth = 4; g.beginPath();
+    const n = Math.min(s.trail.length, 40);
+    for (let k = 0; k < n; k++) { const l = s.trail[s.trail.length - n + k], x = X(0.2 - (n - k) * 0.005); if (k) g.lineTo(x, Y(l)); else g.moveTo(x, Y(l)); }
+    g.lineTo(X(0.2), Y(s.lane)); g.stroke();
+    for (const z of s.hazards) emoji(g, LAY_HAZARDS[z.kind].icon, X(z.x), Y(z.lane), Math.min(30, rowH * 0.55));
+    emoji(g, '🚢', X(0.2), Y(s.lane) - 4, Math.min(34, rowH * 0.6));
+    if (s.t > s.len - 4) emoji(g, '🏝', X(0.95), Y(1), 34);
+    if (Math.sin(s.t * 0.7) > 0.6) emoji(g, '🦑', X(0.88), top + 18, 22);
+    floats(g, s, (lane) => [w / 2, Y(lane) - rowH * 0.25], theme);
+  },
+  laneAt(x, y, w, h) { const top = 34; return y < top ? null : Math.min(2, Math.floor(((y - top) / (h - top - 8)) * 3)); },
+};
+
+// ---------------------------------------------------------------- Level 5: the fight with Lord Lag
+// The last level is a recap of the whole Quest: one round for each level before it, in a
+// game from that level picked at random (so a replay can bring a different one), short
+// and a little meaner, with Lord Lag taunting between rounds. Each round won knocks off
+// one of his hearts.
+const SHORT = {
+  lastmile: { goal: 6 }, tetris: { goal: 8 }, storm: { rounds: 1 },
+  fibercut: { goal: 4 }, beat: { seconds: 15 }, race: { first: 2, races: 1, need: 1 },
+  repeaters: { seconds: 10 }, cablelayer: { seconds: 16 },
+  rainbow: { goal: 4 }, mesh: { cuts: 2 },
+};
+const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'race'], ['repeaters', 'cablelayer'], ['rainbow', 'mesh']];
+const BOSS_TAUNTS = [
+  { plain: 'Back to the city, apprentice. Let\'s see if you remember!', eng: 'Round one, the city network. Show me you still remember.' },
+  { plain: 'Lucky! Now the towers and the core. Faster!', eng: 'Round two: the towers and the core. Faster this time.' },
+  { plain: 'Down to the seabed with you!', eng: 'Round three: the subsea. My Kraken is waiting.' },
+  { plain: 'Enough! My last trick: the light itself!', eng: 'Final round: the optical layer. Restore that, Chief.' },
 ];
 const LordLagFight = {
   id: 'boss',
   name: { plain: 'The fight with Lord Lag', eng: 'The fight with Lord Lag' },
   how: {
-    plain: 'So you got this far, apprentice. Three rounds, three games you already know, a little faster and a little meaner: a packet tetris, a race with a cut fibre, and a storm. Win all three and Netlandia is yours!',
-    eng: 'Lord Lag\'s last stand: three short rounds, Packet Tetris, a Packet Race with a link failure, and Mesh Rescue in a storm. Win all three to bring Netlandia back for good.',
+    plain: 'So you got this far, apprentice. Four rounds, one from each level you played, a little faster and a little meaner. You never know which game I\'ll pick! Win them all and Netlandia is yours.',
+    eng: 'Lord Lag\'s last stand: four short rounds, one game from each level, picked at random. Win all four to bring Netlandia back for good.',
   },
-  goal: { plain: 'Win three rounds against Lord Lag', eng: 'Three rounds: win them all' },
+  goal: { plain: 'Win four rounds against Lord Lag', eng: 'Four rounds: win them all' },
   laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
-  start(random = Math.random) {
-    const s = { t: 0, random, round: 0, sub: null, between: 2.4, points: 0, results: [], fx: [], over: null };
-    return s;
+  start(random = Math.random, opts = {}) {
+    const picks = opts.picks ?? BOSS_LEVELS.map((games) => games[Math.floor(random() * games.length)]);
+    return { t: 0, random, picks, round: 0, sub: null, between: 2.4, points: 0, results: [], fx: [], over: null };
   },
-  game: (s) => BOSS_ROUNDS[s.round].game,
+  game: (s) => MINIGAMES[s.picks[s.round]],
   tick(s, dt) {
     if (s.over) return;
     s.t += dt;
     if (s.between > 0) {
-      if ((s.between -= dt) <= 0) { const r = BOSS_ROUNDS[s.round]; s.sub = r.game.start(s.random, r.opts); }
+      if ((s.between -= dt) <= 0) { const id = s.picks[s.round]; s.sub = MINIGAMES[id].start(s.random, SHORT[id]); }
       return;
     }
     const G = LordLagFight.game(s);
@@ -980,7 +1458,7 @@ const LordLagFight = {
     if (!res) return;
     if (!res.won) { s.over = 'lost'; return; }
     s.points += res.points; s.results.push({ game: G, st: s.sub, flawless: res.flawless });
-    if (s.round === BOSS_ROUNDS.length - 1) { s.over = 'won'; return; }
+    if (s.round === s.picks.length - 1) { s.over = 'won'; return; }
     s.round++; s.sub = null; s.between = 2.6;
   },
   press(s, lane) { if (!s.over && s.sub) LordLagFight.game(s).press(s.sub, lane); },
@@ -991,7 +1469,7 @@ const LordLagFight = {
   },
   result(s) {
     if (!s.over) return null;
-    return { won: s.over === 'won', points: s.over === 'won' ? s.points + 300 : 0, flawless: s.results.every((r) => r.flawless) };
+    return { won: s.over === 'won', points: s.over === 'won' ? s.points + 400 : 0, flawless: s.results.every((r) => r.flawless) };
   },
   summary(s, words) {
     const parts = s.results.map((r, i) => `${words === 'plain' ? 'Round' : 'R'}${words === 'plain' ? ' ' : ''}${i + 1}, ${r.game.name[words]}: ${r.game.summary(r.st, words)}`);
@@ -1002,16 +1480,16 @@ const LordLagFight = {
     else {
       // between rounds: Lord Lag himself, and what he has to say
       g.clearRect(0, 0, w, h);
-      emoji(g, '😈', w / 2, h * 0.36, 72);
+      emoji(g, '😈', w / 2, h * 0.34, 72);
       g.fillStyle = theme.ink; g.font = `800 16px ${theme.font}`; g.textAlign = 'center';
-      g.fillText(`Round ${s.round + 1} of ${BOSS_ROUNDS.length} · ${BOSS_ROUNDS[s.round].game.name[words]}`, w / 2, h * 0.62);
+      g.fillText(`Round ${s.round + 1} of ${s.picks.length} · ${MINIGAMES[s.picks[s.round]].name[words]}`, w / 2, h * 0.6);
       g.font = `700 14px ${theme.font}`; g.fillStyle = theme.muted;
-      g.fillText(`“${BOSS_ROUNDS[s.round].taunt[words]}”`, w / 2, h * 0.72, w - 40);
+      g.fillText(`“${BOSS_TAUNTS[s.round][words]}”`, w / 2, h * 0.7, w - 40);
     }
     // Lord Lag's hearts, one lost for every round you win
-    const left = BOSS_ROUNDS.length - s.results.length;
+    const left = s.picks.length - s.results.length;
     g.font = `800 13px ${theme.font}`; g.textAlign = 'right'; g.fillStyle = theme.bad;
-    g.fillText(`😈 ${'♥'.repeat(left)}${'♡'.repeat(BOSS_ROUNDS.length - left)}`, w - 10, h - 8);
+    g.fillText(`😈 ${'♥'.repeat(left)}${'♡'.repeat(s.picks.length - left)}`, w - 10, h - 8);
   },
   laneAt(x, y, w, h, s) { return s?.sub ? LordLagFight.game(s).laneAt(x, y, w, h, s.sub) : null; },
 };
@@ -1045,10 +1523,13 @@ function floats(g, s, at, theme) {
 }
 
 // Which chapter plays which game; the rest keep their questions for now.
-// The finale after the Level 2 exam.
+// The finale, Level 5.
 export const BOSS = LordLagFight;
 
+// Every game by its id; js/story.js says which network plays which.
 export const MINIGAMES = {
-  xhaul: KeepTheBeat, aggregation: PacketTetris, ipcore: PacketRace,
-  submarine: RepeaterRescue, metro: RainbowPacking, longhaul: MeshRescue,
+  lastmile: LastMileDash, tetris: PacketTetris, storm: StormChaser,
+  fibercut: StopTheFiberCut, beat: KeepTheBeat, race: PacketRace,
+  repeaters: RepeaterRescue, cablelayer: CableLayer,
+  rainbow: RainbowPacking, mesh: MeshRescue,
 };

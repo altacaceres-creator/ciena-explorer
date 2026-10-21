@@ -4,9 +4,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAJORS } from '../js/world.js';
 import {
-  STORY, STORY_ORDER, STORY_RANKS, STORY_LIVES, STORY_SECONDS, FLAWLESS_BONUS, answerPoints, newStory, loadStory,
-  nextChapter, isUnlocked, rankOf, storyDone, startChallenge, answer, winChapter, restartStory,
+  STORY, STAGES, STORY_ORDER, STORY_LEVELS, STORY_RANKS, STORY_LIVES, STORY_SECONDS, FLAWLESS_BONUS, answerPoints, newStory, loadStory,
+  nextChapter, nextStage, isUnlocked, rankOf, storyDone, bossNext, startChallenge, answer, winStage, winChapter, winFinal, restartStory,
+  levelOf, examAt,
 } from '../js/story.js';
+import { MINIGAMES } from '../js/minigames.js';
 
 test('the story unlocks every network exactly once, side B before the ocean before side A', () => {
   assert.deepEqual([...STORY_ORDER].sort(), MAJORS.map((m) => m.id).sort());
@@ -15,14 +17,22 @@ test('the story unlocks every network exactly once, side B before the ocean befo
   const sub = STORY_ORDER.indexOf('submarine');
   assert.ok(STORY_ORDER.slice(0, sub).every((id) => side[id] === 1), 'the packet world comes first');
   assert.ok(STORY_ORDER.slice(sub + 1).every((id) => side[id] === 0), 'the optical side comes after the crossing');
-  assert.equal(STORY_RANKS.length, STORY_ORDER.length + 1);
+  assert.equal(STORY_RANKS.length, STORY_ORDER.length + 2, 'a rank per network, plus the start and beating Lord Lag');
 });
 
-test('every chapter has a villain, both readings of every line, and three answers per question', () => {
+test('every network has its games, every game a villain, every line both readings, and three answers per question', () => {
+  const games = STORY_ORDER.flatMap((id) => STORY[id].stages);
+  assert.deepEqual([...games].sort(), Object.keys(MINIGAMES).sort(), 'each game is played at exactly one stop');
+  assert.deepEqual(Object.keys(STAGES).sort(), Object.keys(MINIGAMES).sort());
+  for (const gid of games) {
+    const st = STAGES[gid];
+    assert.ok(st.villain.name && st.villain.face, gid);
+    for (const k of ['taunt', 'lose', 'lesson']) assert.ok(st[k].plain && st[k].eng, `${gid}.${k}`);
+  }
   for (const id of STORY_ORDER) {
     const ch = STORY[id];
-    assert.ok(ch.villain.name && ch.villain.face, id);
-    for (const k of ['taunt', 'lose', 'win', 'why']) assert.ok(ch[k].plain && ch[k].eng, `${id}.${k}`);
+    assert.ok(ch.stages.length >= 1, id);
+    for (const k of ['win', 'why', 'recap']) assert.ok(ch[k].plain && ch[k].eng, `${id}.${k}`);
     assert.equal(ch.questions.length, 3, id);
     for (const q of ch.questions) {
       for (const r of ['plain', 'eng']) {
@@ -72,6 +82,7 @@ test('two mistakes end a challenge, a timeout counts as one, and a lost one scor
   assert.equal(c.lives, STORY_LIVES - 1);
   assert.equal(answer(c, null, STORY_SECONDS).right, false);
   assert.equal(c.over, 'lost');
+  assert.deepEqual(c.wrong, [{ i: 1, pick: c.order[1][wrong] }, { i: 2, pick: null }], 'the misses are kept for the review');
   assert.equal(answer(c, 0, 0).points, 0, 'nothing after the end');
   winChapter(s, c);
   assert.equal(s.unlocked.length, 0);
@@ -87,40 +98,59 @@ test('one mistake still wins, without the flawless bonus', () => {
   assert.equal(c.points, 2 * 150);
 });
 
-test('the whole story, then saved progress is checked and a restart keeps the best score', () => {
+test('the whole story: every stop, every network, then Lord Lag; saves are checked and a restart keeps the best score', () => {
   const s = newStory();
   for (const id of STORY_ORDER) {
     assert.equal(nextChapter(s), id);
-    const c = startChallenge(id);
-    for (let i = 0; i < 3; i++) answer(c, posOfRight(c), 5);
-    winChapter(s, c);
+    STORY[id].stages.forEach((gid, k) => {
+      assert.equal(nextStage(s), gid);
+      if (k < STORY[id].stages.length - 1) winStage(s, id, 100);
+    });
+    assert.ok(!isUnlocked(s, id), 'not before its last stop');
+    winStage(s, id, 100);                                   // the last stop is banked by winChapter, not here
+    assert.equal(nextStage(s), STORY[id].stages.at(-1));
+    winChapter(s, { id, over: 'won', points: 300 });
+    assert.ok(isUnlocked(s, id));
+    assert.equal(s.stage, 0);
   }
-  assert.ok(storyDone(s));
   assert.equal(nextChapter(s), null);
+  assert.ok(bossNext(s) && !storyDone(s), 'Lord Lag is still to beat');
+  assert.equal(rankOf(s), STORY_RANKS.at(-2));
+  winFinal(s, 1000);
+  assert.ok(storyDone(s) && !bossNext(s));
   assert.equal(rankOf(s), 'Chief of the NOC');
   const back = loadStory(JSON.parse(JSON.stringify(s)));
   assert.deepEqual(back, s);
-  // a save that skips a network, or names one that doesn't exist, keeps only the part in order
+  // a save that skips a network, names one that doesn't exist or a stop out of range keeps only what is in order
   assert.deepEqual(loadStory({ unlocked: [STORY_ORDER[0], STORY_ORDER[2], 'atlantis'], score: 400 }).unlocked, [STORY_ORDER[0]]);
+  assert.equal(loadStory({ unlocked: [], stage: 2 }).stage, 2);
+  assert.equal(loadStory({ unlocked: [], stage: 9 }).stage, 0);
+  assert.equal(loadStory({ unlocked: [STORY_ORDER[0]], final: true }).final, false, 'no final win without every network');
   assert.deepEqual(loadStory('nonsense'), newStory());
   const best = s.best;
   restartStory(s);
-  assert.deepEqual([s.unlocked, s.score, s.best], [[], 0, best]);
+  assert.deepEqual([s.unlocked, s.stage, s.final, s.score, s.best], [[], 0, false, 0, best]);
 });
 
-test('two levels: the packet world closes with a final exam at the core, then across the ocean', async () => {
-  const { STORY_LEVELS, levelOf, examAt } = await import('../js/story.js');
+test('five levels: four close with a final exam on their networks, the fifth is the fight with Lord Lag', () => {
+  assert.equal(STORY_LEVELS.length, 5);
   assert.deepEqual(STORY_LEVELS.flatMap((l) => l.chapters), STORY_ORDER);
-  assert.equal(levelOf('xhaul').n, 1);
-  assert.equal(levelOf('submarine').n, 2);
+  assert.deepEqual(STORY_LEVELS.map((l) => l.n), [1, 2, 3, 4, 5]);
+  assert.equal(levelOf('aggregation').n, 1);
+  assert.equal(levelOf('ipcore').n, 2);
+  assert.equal(levelOf('submarine').n, 3);
+  assert.equal(levelOf('longhaul').n, 4);
+  assert.ok(STORY_LEVELS[4].boss && !STORY_LEVELS[4].chapters.length);
   for (const l of STORY_LEVELS) assert.ok(l.name.plain && l.name.eng);
-  const exam = examAt('ipcore');
-  assert.equal(exam.length, 5, 'the core\'s three, plus one from the towers and one from the city');
-  assert.ok(STORY.ipcore.questions.every((q) => exam.includes(q)));
-  assert.equal(examAt('aggregation'), null);
-  assert.equal(examAt('longhaul').length, 5, 'level 2 closes with an exam too');
-  assert.ok(STORY_LEVELS[1].boss && !STORY_LEVELS[0].boss, 'and then the fight with Lord Lag');
+  for (const l of STORY_LEVELS.slice(0, 4)) {
+    const exam = examAt(l.chapters.at(-1));
+    assert.ok(exam.length >= 5, `level ${l.n} has a full exam`);
+    for (const id of l.chapters) assert.ok(STORY[id].questions.every((q) => exam.includes(q)), `level ${l.n} asks about ${id}`);
+    for (const q of exam) for (const r of ['plain', 'eng']) assert.equal(new Set(q[r].a).size, 3);
+    if (l.chapters.length > 1) assert.equal(examAt(l.chapters[0]), null, 'only at the level\'s last network');
+  }
   // an exam is a challenge like any other, just longer
+  const exam = examAt('ipcore');
   const c = startChallenge('ipcore', () => 0.999, exam);
   for (let i = 0; i < exam.length; i++) answer(c, c.order[c.i].indexOf(0), 0);
   assert.equal(c.over, 'won');

@@ -171,56 +171,61 @@ make sure it only touches sites and links that exist there.
 
 The first visit offers a choice: **Play the story** or **Explore freely**. In the
 story the planet starts under cloud. Lord Lag has switched Netlandia off, and each
-network is won back from one of his minions, in the order a phone's packets travel:
-the **cell towers** (the Jitterbugs), the **city's businesses and homes** (the Buffer
-Gremlin), the **core** (the Elephant Flows). That finishes the packet world on side B,
-and the **undersea cables** appear as a new discovery (the Anchor Dragger). Across the
-ocean wait the **metro optical ring** (the Spectrum Hog) and the **long-haul mesh**,
-where Lord Lag himself waits.
+network is won back stop by stop, in the order a phone's packets travel: the **city's
+businesses and homes**, the **cell towers**, the **core**. That finishes the packet
+world on side B, and the **undersea cables** appear as a new discovery. Across the
+ocean wait the **metro optical ring** and the **long-haul mesh**.
 
-Each network's challenge opens with the villain's taunt, then a mini-game on a board
-in the card, played by touch, click or the keys 1, 2 and 3:
+Every stop is a mini-game on a board in the card, played by touch, click or the keys
+1, 2 and 3, and each opens with the taunt of the villain who holds it. A won stop
+shows **Stop cleared** with the story of your game in numbers and what it means in a
+real network; a network is unlocked when its last stop is won. There are five levels:
 
-- **Keep the Beat** (cell towers): timing packets race from the hub to three towers;
-  tap each one as it reaches its tower, while the Jitterbugs make them surge and stall.
-  Misses let the towers drift out of sync.
-- **Packet Tetris** (city network): packets fall toward the uplink and stack up in the
-  queue you drop them in: calls and clocks in the fast lane (EF), work in business
-  (AF), the web and the elephant flows in best effort. The uplink serves EF first; a
-  call behind a backup, or an elephant in the fast lane, is a dropped call.
-- **Packet Race** (core): your video packet races Lord Lag's from Gateway Bay to
-  Edgewater three times. At each router you pick the next hop; the elephants jam a
-  different road each race, while Lord Lag always takes the shortest one. In the last
-  race a fibre is cut in front of you. Win two of the three.
+| level | networks | stops |
+|---|---|---|
+| 1. The city | city network | Last Mile Dash, Packet Tetris, Storm Chaser |
+| 2. The towers and the core | cell towers, core | Stop the Fiber Cut, Keep the Beat, Packet Race |
+| 3. Under the sea | undersea cables | Repeater Rescue, Cable Layer |
+| 4. The light | metro ring, long haul | Rainbow Packing, Mesh Rescue |
+| 5. The final fight | | Lord Lag |
 
-The networks come in two levels. **Level 1, the packet world** (towers, city, core)
-closes with a **final exam** after Packet Race: the core's three questions and one
-from each earlier stop. **Level 2, across the ocean** (undersea cables, light ring,
-long haul) closes the same way after Mesh Rescue, and then comes **the fight with Lord
-Lag**: three short rounds of games already played (a packet tetris, a race with a cut
-fibre, a storm), one of his three hearts gone for each round won. Every win card tells the story of your game in numbers, why you won, and a
-longer paragraph on what that means in a real network.
+- **Last Mile Dash**: homes ask for videos; send each one from the nearby cache when
+  it has it, or fetch it from far away, before the home gives up.
+- **Packet Tetris**: packets fall toward the uplink and stack up in the queue you drop
+  them in: calls and clocks in the fast lane (EF), work in business (AF), the web and
+  the elephant flows in best effort.
+- **Storm Chaser**: an office's switches are wired with loops; pick which links to block so
+  every floor is reached and no loop lets a broadcast storm run round.
+- **Stop the Fiber Cut**: diggers head for the ring's fibres; tap them before they cut,
+  and when one does, choose what the ring does about it.
+- **Keep the Beat**: timing packets race from the hub to three towers; tap each one as
+  it reaches its tower.
+- **Packet Race**: your video packet races Lord Lag's three times; at each router you
+  pick the next hop while the elephants jam a road and, in the last race, a fibre is cut.
+- **Repeater Rescue**: tap each repeater that blinks red before it loses power, then,
+  when the anchor cuts the north or south cable, move the island's traffic to the other.
+- **Cable Layer**: steer the new cable north, middle or south round underwater
+  volcanoes, seamounts and fishing grounds while the Kraken stirs the seabed.
+- **Rainbow Packing**: a tetris of light; columns are colours, rows the ring's spans,
+  and a request over two spans needs the same colours free on both.
+- **Mesh Rescue**: a storm cuts fibre after fibre; for each service that drops, pick
+  one of three ways round, with only two waves per fibre.
 
-- **Repeater Rescue** (undersea cables): light crosses the ocean through repeaters on
-  the seabed; tap each one that blinks red before it loses power, then, when the anchor
-  cuts a cable, move the island's traffic to its other cable while the repair ship sails.
-- **Rainbow Packing** (metro optical ring): a tetris of light. Columns are colours,
-  rows the ring's spans; move each request with ◀ ▶ and drop it, and a request over two
-  spans needs the same colours free on both. The Spectrum Hog grabs some too.
-- **Mesh Rescue** (long haul): a storm cuts fibre after fibre; for each service that
-  drops, pick one of three ways round, with only two waves per fibre, so think ahead.
+Levels 1 to 4 close with a **final exam** on their networks; when it is passed with a
+mistake, the card lists each question missed with the answer picked and the right one.
+**Level 5** is the fight with Lord Lag, a recap of everything: four short rounds, one
+game picked at random from each level, one of his hearts gone for each round won.
 
-The games are tuned to be easy: slow motion while you choose, wide targets, and a
-player who reacts in a second or two still wins. Losing is **You died**, with what that would mean in
-a real network. A win
-lifts the clouds, pops the landmarks back up and shows **You unlocked …** with why
-you won, and the scene can then be opened like any other. Points come from the game
-(or 100 a right answer plus up to 50 for speed), with 200 more for a flawless round, and every
-network won is a rank, from Apprentice to Chief of the NOC. Progress and the best
-score stay in the browser, the ☰ menu starts over or switches to free exploring,
-and both reading modes tell the story in their own words. The full plan, with every
-mini-game, is in [`docs/game-plan.md`](docs/game-plan.md).
-
+The games are tuned to be easy: slow motion while you choose, wide targets, and robot
+players that react in a second or two win most rounds. Losing is **You died**, with
+what that would mean in a real network, and a retry from that stop. A won network
+lifts the clouds, pops the landmarks back up and shows **You unlocked …**, and the
+scene can then be opened like any other. Points come from the games (or 100 a right
+answer plus up to 50 for speed), with 200 more for a flawless round, and every network
+won is a rank, from Apprentice to Chief of the NOC. Progress and the best score stay
+in the browser, the ☰ menu starts over or switches to free exploring, and both reading
+modes tell the story in their own words. The full plan is in
+[`docs/game-plan.md`](docs/game-plan.md).
 
 - Globe: drag (one finger on a phone) spins the planet in any direction; scroll or
   pinch zooms. **Side A / Side B** in the panel spins it round to the other country;
@@ -251,8 +256,8 @@ inlined, so it can be shared as one file.
 | `js/tech.js` | the technology topics for each network (Engineer mode) and the step player |
 | `js/basics.js` | the introduction-to-networking topics for each network (Explorer mode) |
 | `js/vocab.js` | the two reading modes: every name, label and sentence the HUD prints, in plain words and in the trade's |
-| `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, each chapter's villain, taunt, questions, win and loss in both readings, and the rules (points, lives, ranks, saved progress) |
-| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Keep the Beat, Packet Tetris, Packet Race, Repeater Rescue, Rainbow Packing, Mesh Rescue, and the fight with Lord Lag built from three of them |
+| `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, the five levels, each network's stops and questions, each stop's villain, taunt, loss and lesson in both readings, and the rules (points, lives, ranks, saved progress) |
+| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Last Mile Dash, Packet Tetris, Storm Chaser, Stop the Fiber Cut, Keep the Beat, Packet Race, Repeater Rescue, Cable Layer, Rainbow Packing, Mesh Rescue, and the fight with Lord Lag built from one game per level |
 | `js/game.js` | the Quest on screen: the start screen, the score bar and the challenge card; reaches the globe only through the hooks main.js hands it |
 | `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos and the Quest's cloud cover, the airliner, switching views, labels, picking, the site card |
 | `css/net.css` | the HUD, and the Engineer theme as a second set of tokens |

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildWorld, MAJORS, majorParts } from '../js/world.js';
 import { TOPICS, TechPlayer } from '../js/tech.js';
 import { BASICS } from '../js/basics.js';
-import { STORY } from '../js/story.js';
+import { STORY, STAGES, EXTRA_QUESTIONS } from '../js/story.js';
 import { MINIGAMES } from '../js/minigames.js';
 import { vocab, MODES } from '../js/vocab.js';
 import { LAYER, ENDPOINT } from '../js/world.js';
@@ -121,8 +121,11 @@ test('the technologies the brief asked for are where it asked for them', () => {
 
 // Netlandia Quest speaks Explorer's plain words too: no trade terms in its plain lines.
 test('explorer: the Quest\'s plain lines have no jargon', () => {
+  const stageLines = Object.entries(STAGES).map(([id, st]) => [id, [st.villain.name, st.taunt.plain, st.lose.plain, st.lesson.plain]]);
+  const extra = Object.entries(EXTRA_QUESTIONS).map(([id, qs]) => [id, qs.flatMap((q) => [q.plain.q, ...q.plain.a])]);
+  for (const [id, lines] of [...stageLines, ...extra]) for (const x of lines) assert.ok(!JARGON.test(x) && !VPN_JARGON.test(x), `${id}: "${x}" has jargon`);
   for (const [id, ch] of Object.entries(STORY)) {
-    const lines = [ch.taunt.plain, ch.lose.plain, ch.win.plain, ch.why.plain, ch.recap.plain, ...ch.questions.flatMap((q) => [q.plain.q, ...q.plain.a])];
+    const lines = [ch.win.plain, ch.why.plain, ch.recap.plain, ...ch.questions.flatMap((q) => [q.plain.q, ...q.plain.a])];
     for (const x of lines) {
       assert.ok(!JARGON.test(x), `${id}: "${x}" has jargon`);
       assert.ok(!VPN_JARGON.test(x), `${id}: "${x}" has VPN jargon`);
