@@ -309,6 +309,7 @@ export const storyDone = (s) => s.unlocked.length === STORY_ORDER.length;
 export function startChallenge(id, random = Math.random, questions = STORY[id].questions) {
   return {
     id, questions, i: 0, lives: STORY_LIVES, points: 0, mistakes: 0, over: null,
+    wrong: [],          // the questions missed, for the review at the end: { i, pick } (pick null: time ran out)
     order: questions.map(() => shuffle([0, 1, 2], random)),
   };
 }
@@ -319,7 +320,7 @@ export function answer(c, pick, seconds) {
   const right = pick != null && c.order[c.i][pick] === 0;
   const points = answerPoints(right, seconds);
   c.points += points;
-  if (!right) { c.mistakes++; c.lives--; }
+  if (!right) { c.mistakes++; c.lives--; c.wrong.push({ i: c.i, pick: pick == null ? null : c.order[c.i][pick] }); }
   if (c.lives <= 0) c.over = 'lost';
   else if (++c.i >= c.questions.length) {
     c.over = 'won';

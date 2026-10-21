@@ -276,8 +276,9 @@ Crosspoint, Erbium Gap, Spectraville, Glassbridge, Beambrook) with 21 amplifier 
   station to Lumen City along a chain of repeaters on the seabed. Repeaters start blinking red as they
   run short of power; tap each one before it goes dark. A dark repeater and the light can't reach the
   far shore.
-- **Phase 2, the anchor:** an anchor cuts a cable. With the three buttons, move the island's traffic to
-  another cable that lands there (Coherent Isle has a West and a South landing) before it goes offline.
+- **Phase 2, the anchor:** an anchor cuts the North cable. With the three buttons, move the island's
+  traffic to the South cable (Coherent Isle has a landing for each, and both are named on the board)
+  before it goes offline.
 - **You died:** “The island across the sea is cut off. Lord Lag laughs.”
 - **Why it works:** repeaters powered from the shore keep the light strong across the ocean, and islands
   land more than one cable, so one cut is a repair job, not an outage.

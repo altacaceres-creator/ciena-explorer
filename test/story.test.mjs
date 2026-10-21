@@ -72,6 +72,7 @@ test('two mistakes end a challenge, a timeout counts as one, and a lost one scor
   assert.equal(c.lives, STORY_LIVES - 1);
   assert.equal(answer(c, null, STORY_SECONDS).right, false);
   assert.equal(c.over, 'lost');
+  assert.deepEqual(c.wrong, [{ i: 1, pick: c.order[1][wrong] }, { i: 2, pick: null }], 'the misses are kept for the review');
   assert.equal(answer(c, 0, 0).points, 0, 'nothing after the end');
   winChapter(s, c);
   assert.equal(s.unlocked.length, 0);
