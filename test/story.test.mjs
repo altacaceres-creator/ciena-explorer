@@ -6,7 +6,7 @@ import { MAJORS } from '../js/world.js';
 import {
   STORY, STAGES, STORY_ORDER, STORY_LEVELS, STORY_RANKS, STORY_LIVES, STORY_SECONDS, FLAWLESS_BONUS, answerPoints, newStory, loadStory,
   nextChapter, nextStage, isUnlocked, rankOf, storyDone, bossNext, startChallenge, answer, winStage, winChapter, winFinal, restartStory,
-  levelOf, examAt,
+  levelOf, examAt, jumpTo, TEASERS,
 } from '../js/story.js';
 import { MINIGAMES } from '../js/minigames.js';
 
@@ -155,4 +155,18 @@ test('five levels: four close with a final exam on their networks, the fifth is 
   for (let i = 0; i < exam.length; i++) answer(c, c.order[c.i].indexOf(0), 0);
   assert.equal(c.over, 'won');
   for (const id of STORY_ORDER) assert.ok(STORY[id].recap.plain.length > 150 && STORY[id].recap.eng.length > 150, `${id} has a longer recap`);
+});
+
+test('every network has a riddle that does not give its name away, and the dev menu can jump to any stop', () => {
+  for (const id of STORY_ORDER) for (const r of ['plain', 'eng']) assert.ok(TEASERS[id][r].length > 20, `${id}.${r}`);
+  const s = newStory();
+  jumpTo(s, 'ipcore');
+  assert.deepEqual([s.unlocked, s.stage, nextChapter(s), nextStage(s)], [['aggregation', 'xhaul'], 0, 'ipcore', 'race']);
+  jumpTo(s, 'aggregation', 2);
+  assert.deepEqual([s.unlocked, nextStage(s)], [[], 'storm']);
+  jumpTo(s, 'submarine', 9);
+  assert.equal(nextStage(s), 'cablelayer', 'a stop out of range is the last one');
+  jumpTo(s, null);
+  assert.ok(bossNext(s) && !storyDone(s));
+  assert.deepEqual(loadStory(JSON.parse(JSON.stringify(s))), s, 'a jump saves like any other progress');
 });

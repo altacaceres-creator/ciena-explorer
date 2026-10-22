@@ -282,3 +282,19 @@ enough that a slow player usually loses one of the three. The lesson, not the re
   through, choose what the ring does: switch to the other way round, wait, or reboot (ring protection).
 - **Cable Layer** (sea): steer the new cable north, middle or south round underwater volcanoes,
   seamounts and fishing grounds where anchors would catch it, while the Kraken stirs the seabed.
+
+## Keeping the mystery
+
+From the playtests: “make it single path… don't allow the user to rotate the globe… don't allow the
+cities to peek through. Make them wonder: what's next?” The order stays as it is (data, then the sea,
+then the light), one linear path.
+
+- **The camera follows the story.** In story mode the globe can't be spun or zoomed; it flies to each
+  stop. Explore freely (or beat Lord Lag) and it is free again.
+- **Nothing peeks through the clouds.** Towns, town names, huts and other equipment in a locked region
+  stay hidden, and so does everything on a side of the world the story hasn't reached yet.
+- **What's next? is a riddle.** The panel lists only the networks won back, then a ❓ row with a hint
+  (“Something is moving under the sea…”) and how many places are still hidden. The next network's name
+  shows only when its first villain appears; the win cards end with the next riddle too.
+- **A dev menu** (`?dev` on the address): jump to any stop or to Lord Lag, clear the progress, forget
+  everything, reload fresh past the browser's cache, and see when the bundle was built.

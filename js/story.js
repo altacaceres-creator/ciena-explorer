@@ -506,6 +506,42 @@ export function winFinal(s, points) {
 export function restartStory(s) {
   return Object.assign(s, { unlocked: [], stage: 0, final: false, score: 0 });
 }
+// For testing (the ?dev menu): put the story just before a stop, every network before
+// it already won. `id` null means just before the fight with Lord Lag.
+export function jumpTo(s, id, stage = 0) {
+  const k = id ? STORY_ORDER.indexOf(id) : STORY_ORDER.length;
+  if (k < 0) return s;
+  return Object.assign(s, { unlocked: STORY_ORDER.slice(0, k), stage: id ? Math.max(0, Math.min(stage, STORY[id].stages.length - 1)) : 0, final: false });
+}
+
+// What the story lets slip about the next network before you get there: a riddle,
+// not a name, so the player wonders what is under the clouds.
+export const TEASERS = {
+  aggregation: {
+    plain: 'Somewhere in the city, homes are waiting for their shows to start…',
+    eng: 'Somewhere in the metro, the access and aggregation layer has gone dark…',
+  },
+  xhaul: {
+    plain: 'Up on the hills, tall towers have gone quiet. Phones can\'t find them…',
+    eng: 'Up on the hills, the cell sites have lost sync and backhaul…',
+  },
+  ipcore: {
+    plain: 'At the heart of the country, the biggest routers are fast asleep…',
+    eng: 'At the centre of the country, the core routers are down…',
+  },
+  submarine: {
+    plain: 'Something is moving under the sea…',
+    eng: 'Something lies on the ocean floor, linking the two countries…',
+  },
+  metro: {
+    plain: 'Far across the ocean, a city made of light is flickering…',
+    eng: 'Across the ocean, a metro optical ring is losing its colours…',
+  },
+  longhaul: {
+    plain: 'A highway of light once crossed the far country. Now it is dark…',
+    eng: 'A long-haul photonic mesh spans the far country. It is dark…',
+  },
+};
 
 function shuffle(a, random) {
   for (let i = a.length - 1; i > 0; i--) {

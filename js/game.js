@@ -4,28 +4,31 @@
 import {
   STORY, STAGES, STORY_ORDER, STORY_LEVELS, BOSS_LEVEL, STORY_SECONDS, STORY_LIVES, loadStory, nextChapter, nextStage,
   isUnlocked, rankOf, storyDone, bossNext, startChallenge, answer, winStage, winChapter, winFinal, restartStory,
-  FLAWLESS_BONUS, levelOf, examAt,
+  FLAWLESS_BONUS, levelOf, examAt, jumpTo, TEASERS,
 } from './story.js';
 import { MINIGAMES, BOSS } from './minigames.js';
 
 const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play';
 const LAG_COLOR = '#e63946';     // Lord Lag's own colour, for the final fight
+// the ?dev menu says which build is running; build.mjs stamps the bundle with its date
+const BUILD = '__BUILD__';
+const DEV = (() => { try { return new URLSearchParams(location.search).has('dev'); } catch { return false; } })();
 
 // News on the win card when the next network is a new part of the world.
 const DISCOVERY = {
   submarine: {
-    plain: '🌊 New discovery! Something is moving under the sea: the undersea cables.',
-    eng: '🌊 New discovery: the subsea systems that cross the ocean.',
+    plain: '🌊 New discovery! Something is moving under the sea…',
+    eng: '🌊 New discovery: something lies on the ocean floor, linking the two countries…',
   },
   metro: {
-    plain: '🌍 You crossed the ocean! On the other side lies the land of light and cables.',
-    eng: '🌍 Across the ocean: side A, the optical transport under the packet world.',
+    plain: '🌍 You crossed the ocean! Far away, a city made of light is flickering…',
+    eng: '🌍 Across the ocean: side A, where the light runs. Something there is losing its colours…',
   },
 };
 
 // hooks: plain(), majorName(id), majorColor(id), setLocked(id, locked, animate),
 // focusMajor(id), openMajor(id), toGlobe(), refresh(), pause(on) (stop drawing the globe
-// while a mini-game has the screen)
+// while a mini-game has the screen), lockCamera(on) (the story steers the camera)
 export function initQuest(hooks) {
   const el = (s) => document.querySelector(s);
   const intro = el('#intro'), bar = el('#quest'), card = el('#qcard');
@@ -45,28 +48,36 @@ export function initQuest(hooks) {
   const locked = (id) => playing && !isUnlocked(story, id);
   // open, next (locked but named) or hidden (still in the clouds, not even named)
   const status = (id) => (!locked(id) ? 'open' : id === nextChapter(story) ? 'next' : 'hidden');
+  // the story is on: the camera follows it and the map keeps its secrets
+  const storyOn = () => playing && !storyDone(story);
+  // the next network keeps its name a mystery until its first villain shows up
+  const seen = new Set();
+  const revealed = (id) => id !== nextChapter(story) || story.stage > 0 || seen.has(id);
+  const riddle = (id) => say(TEASERS[id]);
 
   // ------------------------------------------------ the globe follows the story
   function applyLocks(animateId = null) {
     for (const id of STORY_ORDER) hooks.setLocked(id, locked(id), id === animateId);
+    hooks.lockCamera(storyOn());
     hooks.refresh();
   }
 
   // ------------------------------------------------ the score bar
   function renderBar() {
+    const dev = DEV ? '<button class="q-menu q-dev" data-q="dev" aria-label="Dev menu">🛠</button>' : '';
     if (!playing) {
-      bar.innerHTML = '<button class="q-play" data-q="intro">🎮 <b>Netlandia Quest</b><span>play to unlock the map</span></button>';
+      bar.innerHTML = `<button class="q-play" data-q="intro">🎮 <b>Netlandia Quest</b><span>play to unlock the map</span></button>${dev}`;
       return;
     }
     const next = nextChapter(story), gid = nextStage(story), words = hooks.plain() ? 'plain' : 'eng';
     const lvl = next ? levelOf(next) : BOSS_LEVEL;
-    const label = next ? `${esc(hooks.majorName(next))} · ${esc(MINIGAMES[gid].name[words])}` : bossNext(story) ? '😈 The final fight' : '';
+    const label = next ? (revealed(next) ? `${esc(hooks.majorName(next))} · ${esc(MINIGAMES[gid].name[words])}` : `❓ ${hooks.plain() ? 'What\'s next?' : 'Unknown'}`) : bossNext(story) ? '😈 The final fight' : '';
     bar.innerHTML = `
       <div class="q-stats"><span class="q-rank">${esc(rankOf(story))}</span>
         <span class="q-score"><b>${story.score.toLocaleString('en')}</b> pts</span>
         <span class="q-prog">${storyDone(story) ? '' : `Level ${lvl.n} · `}${story.unlocked.length} / ${STORY_ORDER.length} unlocked</span></div>
       ${label ? `<button class="q-next" data-q="next" style="--c:${next ? hooks.majorColor(next) : LAG_COLOR}">Next: ${label} ▶</button>` : '<button class="q-next" data-q="done">🏆 All done</button>'}
-      <button class="q-menu" data-q="intro" aria-label="Quest menu">☰</button>`;
+      <button class="q-menu" data-q="intro" aria-label="Quest menu">☰</button>${dev}`;
   }
 
   // ------------------------------------------------ the start screen
@@ -89,6 +100,37 @@ export function initQuest(hooks) {
       </div>`;
     intro.hidden = false;
   }
+  // ------------------------------------------------ the ?dev menu, for testing
+  function showDev() {
+    closeCard();
+    const words = hooks.plain() ? 'plain' : 'eng';
+    intro.innerHTML = `
+      <div class="i-box i-dev">
+        <h2>🛠 Dev menu</h2>
+        <p class="i-best">Build: <b>${BUILD.startsWith('__') ? 'source files (not the bundle)' : esc(BUILD)}</b> · ${esc(rankOf(story))} · ${story.score.toLocaleString('en')} pts</p>
+        <h3>Jump to a stop</h3>
+        ${STORY_LEVELS.map((l) => `<div class="dev-row"><b>Level ${l.n} · ${esc(say(l.name))}</b><span>${l.boss
+          ? '<button data-dev="boss">😈 Lord Lag</button>'
+          : l.chapters.flatMap((id) => STORY[id].stages.map((gid, k) => `<button data-dev="jump:${id}:${k}">${esc(MINIGAMES[gid].name[words])}</button>`)).join('')}</span></div>`).join('')}
+        <div class="i-btns">
+          <button data-dev="clear">Clear progress</button>
+          <button data-dev="wipe">Forget everything</button>
+          <button data-dev="fresh">Reload fresh</button>
+          <button class="primary" data-dev="close">Close</button>
+        </div>
+      </div>`;
+    intro.hidden = false;
+  }
+  function dev(what) {
+    const [cmd, id, k] = what.split(':');
+    if (cmd === 'jump' || cmd === 'boss') { jumpTo(story, cmd === 'boss' ? null : id, +k || 0); save(); setPlaying(true); goNext(); }
+    else if (cmd === 'clear') { restartStory(story); story.best = 0; save(); setPlaying(true); showDev(); }
+    else if (cmd === 'wipe') { try { localStorage.removeItem(QUEST_KEY); localStorage.removeItem(PLAY_KEY); } catch {} location.reload(); }
+    // a new address, so the browser can't hand back the old page from its cache
+    else if (cmd === 'fresh') location.replace(`${location.pathname}?dev&v=${Date.now()}${location.hash}`);
+    else if (cmd === 'close') intro.hidden = true;
+  }
+
   function setPlaying(on) {
     playing = on;
     store.set(PLAY_KEY, on ? 'story' : 'explore');
@@ -124,6 +166,7 @@ export function initQuest(hooks) {
   function taunt(id, gid) {
     hooks.toGlobe();
     hooks.focusMajor(id);
+    if (!seen.has(id)) { seen.add(id); renderBar(); hooks.refresh(); }
     openCard({ kind: 'taunt', id, gid });
   }
   // the questions missed in a challenge, with what was picked and the right answer
@@ -206,7 +249,8 @@ export function initQuest(hooks) {
     } else if (v.kind === 'won') {
       const next = nextChapter(story);
       const ended = lvl.chapters.at(-1) === v.id, after = STORY_LEVELS.find((l) => l.n === lvl.n + 1);
-      const news = !ended && DISCOVERY[next];
+      // what comes next stays a riddle: a hint, never the name
+      const news = next && (DISCOVERY[next] ?? TEASERS[next]);
       card.innerHTML = `
         <span class="q-k">Congratulations!</span>
         <h3>You unlocked ${name}</h3>
@@ -217,8 +261,8 @@ export function initQuest(hooks) {
         <p class="q-sum">+${v.points.toLocaleString('en')} pts${v.flawless ? ' · flawless bonus' : ''} · you are now <b>${esc(rankOf(story))}</b></p>
         ${ended ? `<div class="q-levelup"><b>🏁 Level ${lvl.n} complete: ${esc(say(lvl.name))}</b>
           <span>${lvl.chapters.map((c) => esc(hooks.majorName(c))).join(' · ')}: all back online.</span>
-          ${after ? `<span>Next: <b>Level ${after.n} · ${esc(say(after.name))}</b>${DISCOVERY[next] ? `. ${esc(say(DISCOVERY[next]))}` : after.boss ? (hooks.plain() ? '. Lord Lag is waiting, with a round from every level!' : '. Lord Lag, one round from each level.') : ''}</span>` : ''}</div>` : ''}
-        ${news ? `<p class="q-news">${esc(say(news))}</p>` : ''}
+          ${after ? `<span>Next: <b>Level ${after.n}${after.boss ? ` · ${esc(say(after.name))}` : ' · ???'}</b>${after.boss ? (hooks.plain() ? '. Lord Lag is waiting, with a round from every level!' : '. Lord Lag, one round from each level.') : ''}</span>` : ''}</div>` : ''}
+        ${news ? `<p class="q-news"><b>${hooks.plain() ? 'What\'s next?' : 'Up next'}</b> ${esc(say(news))}</p>` : ''}
         <div class="q-btns"><button data-q="enter">Go into ${name}</button><button class="primary" data-q="next">Next challenge ▶</button></div>`;
     } else if (v.kind === 'final') {
       card.innerHTML = `
@@ -244,8 +288,8 @@ export function initQuest(hooks) {
       card.innerHTML = `
         <span class="q-k">☁ Hidden in the clouds</span>
         <h3>Something is down there…</h3>
-        <p class="q-say">The clouds only clear one network at a time. Win back ${esc(hooks.majorName(next))} first.</p>
-        <div class="q-btns"><button data-q="later">OK</button><button class="primary" data-q="next">Go to ${esc(hooks.majorName(next))} ▶</button></div>`;
+        <p class="q-say">The clouds only clear one network at a time. ${next && revealed(next) ? `Win back ${esc(hooks.majorName(next))} first.` : `Follow the story first: ${esc(next ? riddle(next) : '')}`}</p>
+        <div class="q-btns"><button data-q="later">OK</button><button class="primary" data-q="next">${next && revealed(next) ? `Go to ${esc(hooks.majorName(next))}` : 'What\'s next?'} ▶</button></div>`;
     } else if (v.kind === 'done') {
       card.innerHTML = `
         <span class="q-k">🏆 Netlandia is back on</span>
@@ -380,6 +424,7 @@ export function initQuest(hooks) {
   function act(what) {
     const v = view;
     if (what === 'intro') showIntro();
+    else if (what === 'dev') showDev();
     else if (what === 'play') { setPlaying(true); goNext(); }
     else if (what === 'restart') { restartStory(story); save(); setPlaying(true); goNext(); }
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
@@ -406,6 +451,8 @@ export function initQuest(hooks) {
     root.addEventListener('click', (e) => {
       const a = e.target.closest('[data-answer]');
       if (a) { pick(+a.dataset.answer); return; }
+      const d = e.target.closest('[data-dev]');
+      if (d) { dev(d.dataset.dev); return; }
       const b = e.target.closest('[data-q]');
       if (b) act(b.dataset.q);
     });
@@ -420,10 +467,24 @@ export function initQuest(hooks) {
   if (store.get(PLAY_KEY) == null) showIntro();
   applyLocks();
   renderBar();
+  // the camera can't be moved in the story, so it starts where the story is
+  if (storyOn()) hooks.focusMajor(nextChapter(story) ?? story.unlocked.at(-1) ?? STORY_ORDER[0]);
 
   return {
     isLocked: locked,
     status,
+    // for the panel and the labels on the globe
+    get story() { return storyOn(); },
+    order: STORY_ORDER,
+    revealed,
+    teaser: riddle,
+    // a place's name on the globe stays hidden while its region is under cloud, and so
+    // does every name on a side of the world the story hasn't reached yet
+    hidesPlace(region, side) {
+      if (!storyOn()) return false;
+      if (region) return locked(region);
+      return !story.unlocked.some((id) => hooks.sideOf(id) === side);
+    },
     // for test scripts: the running mini-game's state
     get playing() { return play?.state ?? null; },
     // a click on a locked network: the next one starts its challenge, the others say why not
