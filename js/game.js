@@ -163,7 +163,7 @@ export function initQuest(hooks) {
         <div class="q-time"><i></i></div>
         <h3 class="q-q">${esc(q.q)}</h3>
         <div class="q-answers">${c.order[c.i].map((k, pos) => `<button data-answer="${pos}"><kbd>${pos + 1}</kbd>${esc(q.a[k])}</button>`).join('')}</div>
-        ${v.last ? `<p class="q-flash ${v.last.right ? 'ok' : 'bad'}">${v.last.right ? `Right! +${v.last.points}` : v.last.timeout ? 'Too slow!' : 'Not quite.'}</p>` : ''}`;
+        ${v.last ? `<p class="q-flash ${v.last.right ? 'ok' : 'bad'}">${v.last.right ? `Right! +${v.last.points}` : `${v.last.timeout ? 'Too slow!' : 'Not quite.'} ${hooks.plain() ? 'The right answer was' : 'Correct answer'}: <b>${esc(v.last.answer)}</b>`}</p>` : ''}`;
       startTimer();
     } else if (v.kind === 'how') {
       const game = gameOf(v);
@@ -179,7 +179,7 @@ export function initQuest(hooks) {
       const game = gameOf(v);
       card.innerHTML = `
         <div class="q-head"><span class="q-k">${v.boss ? '😈 Final fight' : `Win back ${name}`} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
-        <canvas class="q-canvas"></canvas>
+        <canvas class="q-canvas${game.tall ? ' tall' : ''}"></canvas>
         <div class="q-lanes">${game.laneNames[words].map((l, i) => `<button data-lane="${i}"><kbd>${i + 1}</kbd>${esc(l)}</button>`).join('')}</div>`;
       startGame(v.id ?? 'boss', game);
     } else if (v.kind === 'cleared') {
@@ -296,6 +296,11 @@ export function initQuest(hooks) {
           const b = card.querySelector(`[data-lane="${i}"]`);
           if (b && (b.lastChild.textContent !== l || b.disabled !== (l === '—'))) { b.lastChild.textContent = l; b.disabled = l === '—'; }
         });
+        // and some colour each button like its road on the board (Mesh Rescue)
+        game.laneColors?.(play.state)?.forEach((col, i) => {
+          const b = card.querySelector(`[data-lane="${i}"]`);
+          if (b && (b.dataset.tint ?? '') !== (col ?? '')) { b.dataset.tint = col ?? ''; b.classList.toggle('tinted', !!col); b.style.setProperty('--lane', col ?? ''); }
+        });
       }
     };
     canvas.addEventListener('pointerdown', (e) => {
@@ -358,6 +363,7 @@ export function initQuest(hooks) {
     if (!view || view.kind !== 'question' || view.c.over) return;
     stopTimer();
     const c = view.c, seconds = (performance.now() - asked) / 1000;
+    const right = say(c.questions[c.i]).a[0];
     const res = answer(c, pos, seconds);
     if (c.over === 'won') {
       const ex = view.exam;
@@ -365,7 +371,7 @@ export function initQuest(hooks) {
     } else if (c.over === 'lost') {
       openCard({ kind: 'lost', id: c.id, gid: view.exam.gid, exam: view.exam, review: c });
     } else {
-      view.last = { ...res, timeout: pos == null };
+      view.last = { ...res, timeout: pos == null, answer: right };
       renderCard();
     }
   }

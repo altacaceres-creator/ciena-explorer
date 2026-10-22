@@ -374,6 +374,9 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 .qcard[data-kind="game"] { width: min(760px, calc(100% - 32px)); }
 .q-canvas { display: block; width: 100%; height: clamp(240px, 46vh, 400px); border: var(--rule); border-radius: var(--radius-s); background: var(--paper); touch-action: none; }
+.q-canvas.tall { height: clamp(320px, 58vh, 520px); }
+.q-lanes button.tinted { border-color: var(--lane); border-left: 10px solid var(--lane); }
+.q-lanes button.tinted kbd { background: var(--lane); border-color: var(--lane); color: #fff; }
 .q-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .q-lanes button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; font-weight: 800; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .q-lanes button.hit { background: color-mix(in srgb, var(--c) 30%, var(--paper)); transform: var(--press); box-shadow: none; }
@@ -427,6 +430,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .q-q { font-size: 18px !important; }
   .q-face { font-size: 38px; }
   .q-canvas { height: 38vh; }
+  .q-canvas.tall { height: 50vh; }
   .q-lanes button { min-height: 58px; font-size: 13px; padding: 6px !important; }
   .q-lanes kbd { display: none; }
 }

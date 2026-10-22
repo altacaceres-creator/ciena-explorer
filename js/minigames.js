@@ -784,6 +784,8 @@ const MNODES = {
 const MLINKS = [['pf', 'rr'], ['rr', 'lv'], ['lv', 'sv'], ['pf', 'cp'], ['rr', 'cp'], ['cp', 'lv'], ['cp', 'eg'], ['lv', 'eg'], ['eg', 'sv'], ['pf', 'gb'], ['gb', 'cp'], ['gb', 'bb'], ['bb', 'eg'], ['bb', 'sv']];
 const MSERVICES = [['pf', 'sv'], ['gb', 'lv'], ['rr', 'bb'], ['pf', 'eg']];
 const MCOLORS = ['#e76f51', '#2f80ed', '#12a35a', '#b5179e'];
+// the three roads round, one colour each, the same on the board and on the buttons
+const MROUTE = ['#f59f00', '#7b2ff7', '#00a5b8'];
 const MCUTS = ['cp-eg', 'lv-sv', 'bb-eg', 'cp-lv'];
 const mkey = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 const mlen = (a, b) => Math.hypot((MNODES[a].x - MNODES[b].x) * 1.6, MNODES[a].y - MNODES[b].y);
@@ -829,17 +831,18 @@ function meshAsk(s) {
 }
 const MeshRescue = {
   id: 'mesh',
+  tall: true,
   name: { plain: 'Mesh Rescue', eng: 'Mesh Rescue' },
   how: {
-    plain: 'A storm is cutting the country\'s light highway, one fibre after another. When a link between two towns breaks, pick one of three ways round (tap it, or press 1, 2, 3). Each fibre has room for only two links, so think ahead: the next cut is coming!',
-    eng: 'A storm cuts long-haul fibres one after another. For each service that drops, pick one of three restoration routes (1, 2, 3). Each fibre carries two waves, so a greedy choice now can block the next restoration.',
+    plain: 'A storm is cutting the country\'s light highway. When a fibre is cut (✂), two towns lose their light and start blinking. Three roads round appear, each in its own colour: tap one, or its button, or press 1, 2, 3. Every fibre has room for only two lights (the two dots on it); a full fibre turns red. Save room: another cut is coming!',
+    eng: 'A storm cuts long-haul fibres one after another. When a cut (✂) drops a service, its two ROADMs blink and three restoration routes appear, each in its own colour: pick one (tap, or 1, 2, 3). Each fibre carries two waves (the two dots); a full fibre turns red, so a greedy choice now can block the next restoration.',
   },
   goal: { plain: 'Keep the towns connected through the storm', eng: 'Restore every service through four cuts' },
   laneNames: { plain: ['—', '—', '—'], eng: ['—', '—', '—'] },
   start(random = Math.random, opts = {}) {
     const s = {
       t: 0, random, cut: new Set(), used: {}, services: [], queue: [], asking: null, pause: 1.2, cuts: opts.cuts ?? MCUTS.length, cutsDone: 0,
-      lives: MESH.lives, restored: 0, down: 0, full: 0, longest: 0, score: 0, fx: [], over: null,
+      lives: MESH.lives, flows: [], next: 0, restored: 0, down: 0, full: 0, longest: 0, score: 0, fx: [], over: null,
     };
     MSERVICES.forEach(([a, b], i) => { const path = meshPaths(s, a, b)[0]; s.services.push({ a, b, path, color: MCOLORS[i] }); meshTake(s, path, 1); });
     return s;
@@ -849,7 +852,9 @@ const MeshRescue = {
     s.t += dt;
     for (const f of s.fx) f.t += dt;
     s.fx = s.fx.filter((f) => f.t < 1.6);
-    if (s.asking) {
+    for (const f of s.flows) f.t += dt;
+    s.flows = s.flows.filter((f) => f.t < 1.6);
+    if (s.next > 0) { if ((s.next -= dt) <= 0) meshAsk(s); } else if (s.asking) {
       if ((s.asking.t += dt) >= MESH.decide) { s.lives--; s.down++; float(s, 1, 'Too late: that service is down', false); meshAsk(s); }
     } else if ((s.pause -= dt) <= 0) meshNextCut(s);
     if (s.lives <= 0) s.over = 'lost';
@@ -861,10 +866,12 @@ const MeshRescue = {
     if (!meshFits(s, r)) { s.full++; float(s, 1, 'No room on that fibre!', false); return; }
     const sv = s.asking.sv;
     sv.path = r; meshTake(s, r, 1); s.restored++;
+    s.flows.push({ path: r, color: MROUTE[lane], t: 0 });
     s.longest = Math.max(s.longest, r.length - 1);
     const pts = 100 + Math.round((1 - s.asking.t / MESH.decide) * 30);
     s.score += pts; float(s, 1, `Back up! +${pts}`, true);
-    meshAsk(s);
+    // a moment to watch the light come back before the next question
+    s.asking = null; s.next = 0.9;
   },
   lanes(s, words) {
     const a = s.asking;
@@ -875,9 +882,11 @@ const MeshRescue = {
       // name the route by a town on it that the other routes on offer don't pass through
       const mid = r.slice(1, -1), elsewhere = new Set(a.routes.filter((x) => x !== r).flatMap((x) => x.slice(1, -1)));
       const via = MNODES[mid.find((n) => !elsewhere.has(n)) ?? mid[0] ?? r[0]].name;
-      return `${words === 'plain' ? 'via' : 'via'} ${via} · ${r.length - 1} ${words === 'plain' ? 'hops' : 'spans'}${meshFits(s, r) ? '' : ' · full'}`;
+      return meshFits(s, r) ? `via ${via} · ${r.length - 1} ${words === 'plain' ? 'hops' : 'spans'}` : `✗ via ${via} · ${words === 'plain' ? 'full' : 'no capacity'}`;
     });
   },
+  // each road's button wears its road's colour; a full road's goes grey
+  laneColors: (s) => [0, 1, 2].map((i) => (s.asking?.routes[i] ? (meshFits(s, s.asking.routes[i]) ? MROUTE[i] : '#8a94a6') : null)),
   result(s) {
     if (!s.over) return null;
     return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.down === 0 && s.full === 0 };
@@ -887,53 +896,99 @@ const MeshRescue = {
       ? `The storm cut ${s.cutsDone} fibres. You found a way round for ${s.restored} links between towns${s.down ? `, and ${s.down} went down` : ' and not one town lost its connection'}. ${s.full ? `${s.full} time${s.full === 1 ? '' : 's'} you tried a fibre that was already full.` : 'You never tried a fibre that was already full.'}`
       : `${s.cutsDone} fibre cuts, ${s.restored} services restored, ${s.down} lost; longest restoration ${s.longest} spans; ${s.full} attempt${s.full === 1 ? '' : 's'} on a full fibre.`;
   },
-  pos: (n, w, h) => [30 + (w - 60) * MNODES[n].x, 44 + (h - 70) * MNODES[n].y],
+  // on a tall, narrow board (a phone) the map turns a quarter so the towns have room
+  pos: (n, w, h) => {
+    const { x, y } = MNODES[n], tall = h > w * 0.85;
+    return tall ? [56 + (w - 112) * y, 80 + (h - 116) * x] : [44 + (w - 88) * x, 78 + (h - 112) * y];
+  },
   draw(g, s, w, h, words, theme) {
     g.clearRect(0, 0, w, h);
-    hud(g, w, theme, `${words === 'plain' ? 'Storm' : 'Cuts'} ${s.cutsDone} / ${s.cuts} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(MESH.lives - Math.max(0, s.lives))}`, s.asking ? 1 - s.asking.t / MESH.decide : s.cutsDone / s.cuts, s.score, null);
+    const plain = words === 'plain', a = s.asking, pulse = 0.5 + 0.5 * Math.sin(s.t * 6);
+    hud(g, w, theme, `${plain ? 'Storm' : 'Cuts'} ${s.cutsDone} / ${s.cuts} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(MESH.lives - Math.max(0, s.lives))}`, a ? 1 - a.t / MESH.decide : s.cutsDone / s.cuts, s.score, null);
     const P = (n) => MeshRescue.pos(n, w, h);
-    for (const [a, b] of MLINKS) {
-      const [ax, ay] = P(a), [bx, by] = P(b), k = mkey(a, b), cut = s.cut.has(k), used = s.used[k] ?? 0;
-      g.strokeStyle = cut ? theme.muted : used >= MESH.cap ? theme.bad : theme.muted; g.lineWidth = cut ? 2 : 3; g.setLineDash(cut ? [6, 6] : []);
-      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.setLineDash([]);
-      const mx = (ax + bx) / 2, my = (ay + by) / 2;
-      if (cut) emoji(g, '✂', mx, my, 18);
-      else for (let c = 0; c < MESH.cap; c++) { g.fillStyle = c < used ? theme.ink : theme.paper; g.strokeStyle = theme.ink; g.lineWidth = 1.5; g.fillRect(mx - 9 + c * 10, my - 4, 8, 8); g.strokeRect(mx - 9 + c * 10, my - 4, 8, 8); }
+    // what is happening, in one line under the meter
+    const say = a
+      ? `✂ ${MNODES[a.sv.a].name} ↔ ${MNODES[a.sv.b].name} ${plain ? 'lost its light! Pick a road: 1, 2 or 3' : 'is down: pick a restoration route'}`
+      : s.cutsDone < s.cuts ? `⛈ ${plain ? 'The storm is moving… the next cut is coming' : 'Storm in progress: next cut incoming'}` : '';
+    if (say) {
+      g.font = `800 13px ${theme.font}`; const tw = Math.min(w - 16, g.measureText(say).width + 24);
+      g.fillStyle = a ? a.sv.color : theme.well; roundRect(g, (w - tw) / 2, 32, tw, 24, 12); g.fill();
+      g.fillStyle = a ? '#ffffff' : theme.ink; g.textAlign = 'center'; g.fillText(say, w / 2, 49, w - 28);
     }
-    // the services that are up, each in its colour, slightly apart so they don't hide each other
+    // the fibres: grey with two dots each (room for two lights), red when full, dashed with ✂ when cut
+    const r0 = Math.max(4, Math.min(6, w / 110));
+    for (const [x, y] of MLINKS) {
+      const [ax, ay] = P(x), [bx, by] = P(y), k = mkey(x, y), cut = s.cut.has(k), used = s.used[k] ?? 0, full = used >= MESH.cap;
+      g.strokeStyle = cut ? theme.muted : full ? theme.bad : theme.muted; g.lineWidth = cut ? 2 : full ? 4 : 3; g.setLineDash(cut ? [6, 6] : []);
+      g.globalAlpha = cut ? 0.6 : 1;
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    }
+    // the services that still have their light, thin and faded while a road is being picked
     s.services.forEach((sv, i) => {
       if (!sv.path) return;
-      g.strokeStyle = sv.color; g.lineWidth = 3; g.globalAlpha = 0.85;
+      g.strokeStyle = sv.color; g.lineWidth = a ? 2 : 3; g.globalAlpha = a ? 0.35 : 0.85;
       g.beginPath();
       sv.path.forEach((n, j) => { const [x, y] = P(n); const o = (i - 1.5) * 3; if (j) g.lineTo(x + o, y + o); else g.moveTo(x + o, y + o); });
       g.stroke(); g.globalAlpha = 1;
     });
-    // the ways round on offer, numbered on their middle hop
-    if (s.asking) {
-      s.asking.routes.forEach((r, i) => {
-        const fits = meshFits(s, r);
-        g.strokeStyle = fits ? theme.accent : theme.bad; g.lineWidth = 6; g.globalAlpha = 0.45; g.setLineDash([10, 6]);
-        g.beginPath(); r.forEach((n, j) => { const [x, y] = P(n); if (j) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
-        g.setLineDash([]); g.globalAlpha = 1;
-        const [bx, by] = MeshRescue.badge(s, i, w, h);
-        g.fillStyle = fits ? theme.accent : theme.bad; g.beginPath(); g.arc(bx, by, 13, 0, 7); g.fill();
-        g.fillStyle = '#ffffff'; g.font = `800 13px ${theme.font}`; g.textAlign = 'center'; g.fillText(String(i + 1), bx, by + 5);
+    // the roads on offer, each in its own colour, side by side where they share a fibre
+    if (a) {
+      a.routes.forEach((r, i) => {
+        const fits = meshFits(s, r), off = (i - 1) * 7;
+        g.strokeStyle = fits ? MROUTE[i] : theme.muted; g.lineWidth = fits ? 6 : 4; g.lineCap = 'round';
+        g.globalAlpha = fits ? 0.6 + 0.35 * pulse : 0.45; g.setLineDash(fits ? [] : [4, 8]);
+        g.beginPath();
+        r.slice(1).forEach((n, j) => {
+          const [ax, ay] = P(r[j]), [bx, by] = P(n), L = Math.hypot(bx - ax, by - ay) || 1, nx = -(by - ay) / L * off, ny = (bx - ax) / L * off;
+          g.moveTo(ax + nx, ay + ny); g.lineTo(bx + nx, by + ny);
+        });
+        g.stroke(); g.setLineDash([]); g.globalAlpha = 1; g.lineCap = 'butt';
       });
-      const sv = s.asking.sv;
-      g.fillStyle = sv.color; g.font = `800 13px ${theme.font}`; g.textAlign = 'center';
-      g.fillText(`${MNODES[sv.a].name} – ${MNODES[sv.b].name} ${words === 'plain' ? 'needs a way round' : 'needs restoration'}`, w / 2, h - 8);
     }
+    // the room on each fibre, drawn over the roads so it can always be read
+    for (const [x, y] of MLINKS) {
+      const [ax, ay] = P(x), [bx, by] = P(y), k = mkey(x, y), used = s.used[k] ?? 0, mx = (ax + bx) / 2, my = (ay + by) / 2;
+      if (s.cut.has(k)) { emoji(g, '✂', mx, my, 20); continue; }
+      for (let c = 0; c < MESH.cap; c++) {
+        g.beginPath(); g.arc(mx + (c - 0.5) * (r0 * 2 + 3), my, r0, 0, 7);
+        g.fillStyle = c < used ? (used >= MESH.cap ? theme.bad : theme.ink) : theme.paper; g.fill();
+        g.strokeStyle = theme.ink; g.lineWidth = 1.5; g.stroke();
+      }
+    }
+    // the light coming back along the road just picked
+    for (const f of s.flows) {
+      const pts = f.path.map(P), segs = pts.slice(1).map((p, j) => Math.hypot(p[0] - pts[j][0], p[1] - pts[j][1])), total = segs.reduce((x, y) => x + y, 0);
+      for (let k = 0; k < 5; k++) {
+        let d = clamp01(f.t / 1.1 - k * 0.07) * total, j = 0;
+        while (j < segs.length - 1 && d > segs[j]) d -= segs[j++];
+        const q = segs[j] ? d / segs[j] : 0, x = pts[j][0] + (pts[j + 1][0] - pts[j][0]) * q, y = pts[j][1] + (pts[j + 1][1] - pts[j][1]) * q;
+        g.globalAlpha = Math.max(0, 1 - f.t / 1.6); g.fillStyle = f.color; g.beginPath(); g.arc(x, y, 7 - k, 0, 7); g.fill(); g.globalAlpha = 1;
+      }
+    }
+    if (a) {
+      a.routes.forEach((r, i) => {
+        const fits = meshFits(s, r), [bx, by] = MeshRescue.badge(s, i, w, h);
+        g.fillStyle = fits ? MROUTE[i] : theme.muted; g.beginPath(); g.arc(bx, by, 15, 0, 7); g.fill();
+        g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.stroke();
+        g.fillStyle = '#ffffff'; g.font = `800 14px ${theme.font}`; g.textAlign = 'center'; g.fillText(fits ? String(i + 1) : '✗', bx, by + 5);
+      });
+    }
+    // the towns; the two that lost their light blink in the service's colour
     for (const n of Object.keys(MNODES)) {
-      const [x, y] = P(n);
-      g.font = `800 11px ${theme.font}`; const tw = g.measureText(MNODES[n].name).width;
-      g.fillStyle = theme.paper; roundRect(g, x - tw / 2 - 6, y - 10, tw + 12, 20, 7); g.fill();
-      g.strokeStyle = s.asking && (n === s.asking.sv.a || n === s.asking.sv.b) ? s.asking.sv.color : theme.ink; g.lineWidth = 2; g.stroke();
-      g.fillStyle = theme.ink; g.textAlign = 'center'; g.fillText(MNODES[n].name, x, y + 4);
+      const [x, y] = P(n), lost = a && (n === a.sv.a || n === a.sv.b);
+      g.font = `800 ${lost ? 13 : 11}px ${theme.font}`; const tw = g.measureText(MNODES[n].name).width, bh = lost ? 24 : 20;
+      if (lost) { g.globalAlpha = 0.25 + 0.35 * pulse; g.fillStyle = a.sv.color; roundRect(g, x - tw / 2 - 12, y - bh / 2 - 6, tw + 24, bh + 12, 12); g.fill(); g.globalAlpha = 1; }
+      g.fillStyle = lost ? a.sv.color : theme.paper; roundRect(g, x - tw / 2 - 6, y - bh / 2, tw + 12, bh, 7); g.fill();
+      g.strokeStyle = lost ? a.sv.color : theme.ink; g.lineWidth = 2; g.stroke();
+      g.fillStyle = lost ? '#ffffff' : theme.ink; g.textAlign = 'center'; g.fillText(MNODES[n].name, x, y + 4);
     }
-    floats(g, s, () => [w / 2, 52], theme);
+    // a key along the bottom
+    g.font = `700 11px ${theme.font}`; g.fillStyle = theme.muted; g.textAlign = 'left';
+    g.fillText(plain ? '○○ room for 2 lights per fibre · red = full · ✂ = cut' : '○○ two waves per fibre · red = full · ✂ = cut', 10, h - 8);
+    floats(g, s, () => [w / 2, h - 28], theme);
   },
   // where a route's number sits: on a hop no other route on offer takes, so the numbers
-  // never sit on top of each other (else halfway along it)
+  // never sit on top of each other (else halfway along it), beside its own line
   badge(s, i, w, h) {
     const routes = s.asking.routes, r = routes[i];
     const hops = (x) => x.slice(1).map((n, j) => mkey(x[j], n));
@@ -941,7 +996,8 @@ const MeshRescue = {
     const own = hops(r).findIndex((k) => !others.has(k));
     const j = own >= 0 ? own : Math.floor(r.length / 2) - 1;
     const [ax, ay] = MeshRescue.pos(r[j], w, h), [bx, by] = MeshRescue.pos(r[j + 1], w, h);
-    return [(ax + bx) / 2, (ay + by) / 2 - 12];
+    const L = Math.hypot(bx - ax, by - ay) || 1, side = i === 1 ? 1 : i - 1;
+    return [ax + (bx - ax) * 0.42 - (by - ay) / L * 20 * side, ay + (by - ay) * 0.42 + (bx - ax) / L * 20 * side];
   },
   laneAt(x, y, w, h, s) {
     if (!s?.asking) return null;
@@ -1467,6 +1523,7 @@ const LordLagFight = {
     const G = LordLagFight.game(s);
     return G.lanes ? G.lanes(s.sub, words) : G.laneNames[words];
   },
+  laneColors: (s) => (s.sub && LordLagFight.game(s).laneColors?.(s.sub)) || [null, null, null],
   result(s) {
     if (!s.over) return null;
     return { won: s.over === 'won', points: s.over === 'won' ? s.points + 400 : 0, flawless: s.results.every((r) => r.flawless) };
