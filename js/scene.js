@@ -246,11 +246,14 @@ const clearOf = (segs, nodes, side, x, z, cable, node) =>
 const BUILDING_COLORS = ['#f6f1e7', '#ffd6a5', '#bde0fe', '#cdb4db', '#ffc8dd', '#caffbf', '#e9edc9', '#a2d2ff'];
 const ROOF_COLORS = ['#e76f51', '#c0504d', '#6d597a', '#457b9d', '#e9a03b'];
 
-export function buildTowns(world) {
+// `regionOf(x, z, side)` sorts the buildings by the network region they stand in, so
+// story mode can hide a whole region's town while it is under cloud: the group's
+// `byRegion` holds one group per region ('' for the ground outside every region).
+export function buildTowns(world, regionOf = () => '') {
   const segs = cableSegments(world);
   const ground = world.nodes.filter((n) => !['router', 'repeater'].includes(n.type));
   const r = rand(11);
-  const towers = [], roofs = [], caps = [];
+  const sets = {};
   for (const c of world.cities) {
     // the far side of the planet squeezes the map sideways, so space lots out there
     const step = (c.town ? 1.9 : c.dense ? 1.85 : 2.3) / squeeze(c.x, c.z);
@@ -262,6 +265,7 @@ export function buildTowns(world) {
         if (heightAt(jx, jz, c.side) < 0.6 || !clearOf(segs, ground, c.side, jx, jz, 1.5, 2.6)) continue;
         const y = heightAt(jx, jz, c.side) - 0.3, side = c.side;
         const color = BUILDING_COLORS[Math.floor(r() * BUILDING_COLORS.length)];
+        const { towers, roofs, caps } = sets[regionOf(jx, jz, side) ?? ''] ??= { towers: [], roofs: [], caps: [] };
         if (c.town || (d > 0.6 && r() < 0.6)) {
           const w = 1.1 + r() * 0.5, dd = 0.9 + r() * 0.4, h = 0.9 + r() * 0.5, ry = r() < 0.5 ? 0 : Math.PI / 2;
           towers.push({ x: jx, y, z: jz, side, sx: w, sy: h + 0.3, sz: dd, color, ry });
@@ -275,7 +279,12 @@ export function buildTowns(world) {
     }
   }
   const g = new THREE.Group();
-  g.add(instanced(unitBox, towers, { line: 0.09 }), instanced(unitRoof, roofs, { line: 0.08 }), instanced(unitBox, caps, { line: 0.05 }));
+  g.byRegion = {};
+  for (const [k, { towers, roofs, caps }] of Object.entries(sets)) {
+    const part = g.byRegion[k] = new THREE.Group();
+    part.add(instanced(unitBox, towers, { line: 0.09 }), instanced(unitRoof, roofs, { line: 0.08 }), instanced(unitBox, caps, { line: 0.05 }));
+    g.add(part);
+  }
   return g;
 }
 

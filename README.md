@@ -227,7 +227,21 @@ in the browser, the ☰ menu starts over or switches to free exploring, and both
 modes tell the story in their own words. The full plan is in
 [`docs/game-plan.md`](docs/game-plan.md).
 
-- Globe: drag (one finger on a phone) spins the planet in any direction; scroll or
+The story keeps its secrets, so there is always a "what's next?". While it is being
+played the globe can't be spun or zoomed: the camera flies wherever the story goes.
+Everything still under cloud stays hidden, town names, buildings and huts included,
+and so does every place on a side of the world the story hasn't reached yet. The panel
+lists only the networks won back, then a **❓ What's next?** row with a riddle about
+the next one, and a count of the places still in the clouds; the next network's name
+only shows once its first villain appears. Exploring freely, or after Lord Lag, the
+whole map is yours.
+
+For testing, open the page with **`?dev`** (`index.html?dev`): a 🛠 button opens a menu
+that jumps to any stop of any level or to Lord Lag, clears the progress, forgets
+everything, or reloads the page at a fresh address so the browser can't serve an old
+copy. It also shows when the bundle was built, to tell a stale copy from a new one.
+
+- Globe (when exploring freely): drag (one finger on a phone) spins the planet in any direction; scroll or
   pinch zooms. **Side A / Side B** in the panel spins it round to the other country;
   the panel also follows whichever side you've spun to.
 - A network on its own: drag turns, right-drag or two fingers pan, scroll or pinch zooms.
@@ -256,7 +270,7 @@ inlined, so it can be shared as one file.
 | `js/tech.js` | the technology topics for each network (Engineer mode) and the step player |
 | `js/basics.js` | the introduction-to-networking topics for each network (Explorer mode) |
 | `js/vocab.js` | the two reading modes: every name, label and sentence the HUD prints, in plain words and in the trade's |
-| `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, the five levels, each network's stops and questions, each stop's villain, taunt, loss and lesson in both readings, and the rules (points, lives, ranks, saved progress) |
+| `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, the five levels, each network's stops and questions, each stop's villain, taunt, loss and lesson, the riddles for what's next, in both readings, and the rules (points, lives, ranks, saved progress) |
 | `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Last Mile Dash, Packet Tetris, Storm Chaser, Stop the Fiber Cut, Keep the Beat, Packet Race, Repeater Rescue, Cable Layer, Rainbow Packing, Mesh Rescue, and the fight with Lord Lag built from one game per level |
 | `js/game.js` | the Quest on screen: the start screen, the score bar and the challenge card; reaches the globe only through the hooks main.js hands it |
 | `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos and the Quest's cloud cover, the airliner, switching views, labels, picking, the site card |

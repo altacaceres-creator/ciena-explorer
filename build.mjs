@@ -24,7 +24,9 @@ const body = modules.map((m) => m.replace(/^import .* from 'three(\/addons\/[^']
 
 // The modules now share one scope, so two top-level names that collide would only
 // fail in the browser. Parse the joined script here and stop the build instead.
-const joined = [...threeImports].join('\n') + '\n' + body.join('\n');
+// the ?dev menu shows when the bundle was built, to tell a stale copy from a fresh one
+const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+const joined = ([...threeImports].join('\n') + '\n' + body.join('\n')).replace("'__BUILD__'", JSON.stringify(stamp));
 const probe = join(mkdtempSync(join(tmpdir(), 'netlandia-')), 'bundle.mjs');
 writeFileSync(probe, joined);
 try {
@@ -58,8 +60,7 @@ ${read('css/net.css')}
 </script>
 ${hud}
 <script type="module">
-${[...threeImports].join('\n')}
-${body.join('\n')}
+${joined}
 </script>
 `;
 

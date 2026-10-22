@@ -105,7 +105,8 @@ scene.add(sun, sun.target);
 // ---------------------------------------------------------------- world
 
 const board = buildPlanet(scene);
-scene.add(buildTowns(world), buildTrees(world));
+const towns = buildTowns(world, (x, z, side) => regionAt(x, z, side) ?? `side${side}`);
+scene.add(towns, buildTrees(world));
 const life = buildLife(scene);
 
 // Cable-laying ships working the subsea routes: one per cable, steaming slowly up
@@ -240,11 +241,23 @@ function setLocked(id, on, animate = false) {
   shades[id].target = on ? CLOUD_COVER : 0;
   if (!animate) shades[id].mat.opacity = shades[id].target;
   for (const nid of landmarksOf[id]) nodeObjs[nid].visible = !on;
+  // and its town, whose tallest towers would otherwise poke up through the clouds
+  if (towns.byRegion[id]) towns.byRegion[id].visible = !on;
   if (id === 'submarine') for (const sh of ships) sh.ship.visible = !on;
   if (!on && animate) {
     halos[id].mat.opacity = 0.75;
     popping = { id, t0: performance.now() };
   }
+}
+
+// Story mode also hides what stands outside every network's region (a hut on the road,
+// the towns between) until the story reaches that side of the world.
+function hideUnknown() {
+  for (const [id, o] of Object.entries(nodeObjs)) {
+    // the region it stands in, else the network that owns it, else just its side
+    o.visible = !quest?.hidesPlace(majorOfNode[id] ?? null, o.userData.node.side);
+  }
+  for (const side of [0, 1]) if (towns.byRegion[`side${side}`]) towns.byRegion[`side${side}`].visible = !quest?.hidesPlace(null, side);
 }
 
 let lit = null;
@@ -346,6 +359,9 @@ let quest = null;          // Netlandia Quest, set up once the map is built
 function listSide(side, force = false) {
   if (side === listedSide && !force) return;
   listedSide = side;
+  // the story has its own list: only what you have won back, and a riddle for what's next
+  $('.sides').hidden = !!quest?.story;
+  if (quest?.story) { listStory(); return; }
   list.replaceChildren(...MAJORS.filter((m) => m.side === side || m.both).map((m) => {
     const row = document.createElement('li');
     // in the Quest, the next network shows its name and the rest are still in the clouds
@@ -362,6 +378,31 @@ function listSide(side, force = false) {
   }));
   for (const b of document.querySelectorAll('[data-side]')) b.setAttribute('aria-pressed', String(+b.dataset.side === side));
   $('#side-name').textContent = V.sideHeading(side);
+}
+function listStory() {
+  const rows = [];
+  let hidden = 0;
+  for (const id of quest.order) {
+    const st = quest.status(id), m = MAJOR[id];
+    if (st === 'hidden') { hidden++; continue; }
+    const mystery = st === 'next' && !quest.revealed(id);
+    const row = document.createElement('li');
+    row.innerHTML = `
+      <button class="major${st !== 'open' ? ' locked' : ''}${mystery ? ' mystery' : ''}" data-major="${id}" style="--c:${mystery ? '#8a94a6' : m.color}">
+        <span class="wire${mystery ? '' : LAYER[m.layers[0]].data ? ' dashed' : ''}" aria-hidden="true"></span>
+        <span class="txt"><span class="nm">${mystery ? '❓ What\'s next?' : V.majorName(id)}</span><span class="st">${mystery ? quest.teaser(id) : st === 'next' ? 'Locked · next in the Quest' : majorStats(id)}</span></span>
+        <span class="go" aria-hidden="true">${st === 'next' ? '▶' : 'Open'}</span>
+      </button>`;
+    rows.push(row);
+  }
+  if (hidden) {
+    const row = document.createElement('li');
+    row.className = 'clouded';
+    row.textContent = `☁ ${hidden} more ${hidden === 1 ? 'place' : 'places'} still hidden in the clouds`;
+    rows.push(row);
+  }
+  list.replaceChildren(...rows);
+  $('#side-name').textContent = V.plain ? 'Your Netlandia so far' : 'Networks restored';
 }
 for (const b of document.querySelectorAll('[data-side]')) {
   b.addEventListener('click', () => {
@@ -529,18 +570,28 @@ function closeTopic() {
   if (detailId) openMajor(detailId, null);
 }
 
+// In the story the globe can't be spun or zoomed: the camera goes where the story goes,
+// so what lies beyond stays a surprise. Exploring freely, it is yours again.
+let camLocked = false;
+function lockCamera(on) {
+  camLocked = on;
+  if (mode === 'globe') controls.enabled = !on;
+  if (mode === 'globe') hint.textContent = globeHint();
+}
+const globeHint = () => (camLocked ? (V.plain ? 'Follow the story: press Next ▶ at the top to see where it takes you' : 'Story mode: the camera follows the Quest · press Next ▶') : V.hints.globe);
+
 function closeMajor() {
   if (player) { player.close(); player = null; }
   techCard.hidden = true;
   mode = 'globe';
   detailControls.enabled = false;
-  controls.enabled = true;
+  controls.enabled = !camLocked;
   panel.hidden = false;
   detailPanel.hidden = true;
   labelLayer.hidden = false;
   detailLabels.hidden = true;
   card.hidden = true;
-  hint.textContent = V.hints.globe;
+  hint.textContent = globeHint();
 }
 // Back goes to the globe in one hop, however many topics were visited on the way.
 $('#btn-back').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); route(); });
@@ -613,7 +664,7 @@ for (const c of world.cities) {
   el.className = 'lbl city' + (c.town ? ' town' : '') + (c.big ? ' big' : '');
   el.textContent = c.name;
   labelLayer.append(el);
-  labels.push({ el, pos: sph(c.x, Math.max(0, heightAt(c.x, c.z, c.side)) + (c.town ? 4 : 9), c.z, c.side), town: c.town });
+  labels.push({ el, pos: sph(c.x, Math.max(0, heightAt(c.x, c.z, c.side)) + (c.town ? 4 : 9), c.z, c.side), town: c.town, region: regionAt(c.x, c.z, c.side), side: c.side });
 }
 const tip = document.createElement('div');
 tip.className = 'lbl tip';
@@ -629,6 +680,8 @@ function placeLabels() {
   for (const L of labels) {
     let vis = opts.labels && facing(L.pos);
     if (L.town) vis &&= hh < 150;
+    // in the story, a place under cloud keeps its name to itself
+    if (vis && quest?.hidesPlace(L.region, L.side)) vis = false;
     if (vis) {
       _lp.copy(L.pos).project(camera);
       vis = _lp.z < 1 && Math.abs(_lp.x) < 1.1 && Math.abs(_lp.y) < 1.1;
@@ -748,7 +801,7 @@ function applyMode(id) {
     renderDetailPanel(detailId);
     if (selected) selectInDetail(selected);
   } else {
-    hint.textContent = V.hints.globe;
+    hint.textContent = globeHint();
   }
 }
 for (const b of document.querySelectorAll('.modes [data-mode]')) b.addEventListener('click', () => { if (b.dataset.mode !== modeId) applyMode(b.dataset.mode); });
@@ -824,9 +877,14 @@ quest = initQuest({
   },
   openMajor: (id) => openMajor(id),
   toGlobe,
-  refresh: () => listSide(listedSide, true),
+  refresh: () => { listSide(listedSide, true); hideUnknown(); },
   pause: (on) => { globePaused = on; },
+  lockCamera,
+  // the undersea cables reach both sides, so winning them reveals neither
+  sideOf: (id) => (MAJOR[id].both ? null : MAJOR[id].side),
 });
+listSide(listedSide, true);
+hideUnknown();
 
 route();
 requestAnimationFrame(frame);

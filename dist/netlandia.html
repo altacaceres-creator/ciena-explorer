@@ -550,6 +550,24 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 [data-mode="engineer"] .q-review .no { color: #ff8a94; }
 [data-mode="engineer"] .q-review .yes { color: #4fd59a; }
 
+/* the story's list: a riddle for what's next, and a count of what's still under cloud */
+.major.mystery { border-style: dashed; animation: q-wonder 2.4s ease-in-out infinite; }
+.major.mystery .nm { color: var(--ink); }
+.major.mystery .st { font-style: italic; display: block; }
+@keyframes q-wonder { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, #8a94a6 30%, transparent); } }
+#majors .clouded { padding: 8px 10px; border: 2px dashed color-mix(in srgb, var(--muted) 50%, transparent); border-radius: 12px; color: var(--muted); font-size: 12.5px; font-weight: 800; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .major.mystery { animation: none; } }
+
+/* the ?dev menu */
+.i-dev { max-width: 640px; text-align: left; }
+.i-dev h3 { margin: 12px 0 6px; font-size: 14px; text-align: left; }
+.dev-row { display: grid; gap: 4px; margin-bottom: 8px; justify-items: start; text-align: left; width: 100%; justify-self: stretch; align-self: stretch; }
+.i-dev > h3, .i-dev > .i-best { width: 100%; max-width: none; }
+.dev-row b { font-size: 12.5px; }
+.dev-row span { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
+.dev-row button { padding: 6px 10px !important; font-size: 12.5px; }
+.q-dev { background: #ffe8a3; }
+
 </style>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js" } }
@@ -1654,11 +1672,14 @@ const clearOf = (segs, nodes, side, x, z, cable, node) =>
 const BUILDING_COLORS = ['#f6f1e7', '#ffd6a5', '#bde0fe', '#cdb4db', '#ffc8dd', '#caffbf', '#e9edc9', '#a2d2ff'];
 const ROOF_COLORS = ['#e76f51', '#c0504d', '#6d597a', '#457b9d', '#e9a03b'];
 
-function buildTowns(world) {
+// `regionOf(x, z, side)` sorts the buildings by the network region they stand in, so
+// story mode can hide a whole region's town while it is under cloud: the group's
+// `byRegion` holds one group per region ('' for the ground outside every region).
+function buildTowns(world, regionOf = () => '') {
   const segs = cableSegments(world);
   const ground = world.nodes.filter((n) => !['router', 'repeater'].includes(n.type));
   const r = rand(11);
-  const towers = [], roofs = [], caps = [];
+  const sets = {};
   for (const c of world.cities) {
     // the far side of the planet squeezes the map sideways, so space lots out there
     const step = (c.town ? 1.9 : c.dense ? 1.85 : 2.3) / squeeze(c.x, c.z);
@@ -1670,6 +1691,7 @@ function buildTowns(world) {
         if (heightAt(jx, jz, c.side) < 0.6 || !clearOf(segs, ground, c.side, jx, jz, 1.5, 2.6)) continue;
         const y = heightAt(jx, jz, c.side) - 0.3, side = c.side;
         const color = BUILDING_COLORS[Math.floor(r() * BUILDING_COLORS.length)];
+        const { towers, roofs, caps } = sets[regionOf(jx, jz, side) ?? ''] ??= { towers: [], roofs: [], caps: [] };
         if (c.town || (d > 0.6 && r() < 0.6)) {
           const w = 1.1 + r() * 0.5, dd = 0.9 + r() * 0.4, h = 0.9 + r() * 0.5, ry = r() < 0.5 ? 0 : Math.PI / 2;
           towers.push({ x: jx, y, z: jz, side, sx: w, sy: h + 0.3, sz: dd, color, ry });
@@ -1683,7 +1705,12 @@ function buildTowns(world) {
     }
   }
   const g = new THREE.Group();
-  g.add(instanced(unitBox, towers, { line: 0.09 }), instanced(unitRoof, roofs, { line: 0.08 }), instanced(unitBox, caps, { line: 0.05 }));
+  g.byRegion = {};
+  for (const [k, { towers, roofs, caps }] of Object.entries(sets)) {
+    const part = g.byRegion[k] = new THREE.Group();
+    part.add(instanced(unitBox, towers, { line: 0.09 }), instanced(unitRoof, roofs, { line: 0.08 }), instanced(unitBox, caps, { line: 0.05 }));
+    g.add(part);
+  }
   return g;
 }
 
@@ -4011,6 +4038,42 @@ function winFinal(s, points) {
 function restartStory(s) {
   return Object.assign(s, { unlocked: [], stage: 0, final: false, score: 0 });
 }
+// For testing (the ?dev menu): put the story just before a stop, every network before
+// it already won. `id` null means just before the fight with Lord Lag.
+function jumpTo(s, id, stage = 0) {
+  const k = id ? STORY_ORDER.indexOf(id) : STORY_ORDER.length;
+  if (k < 0) return s;
+  return Object.assign(s, { unlocked: STORY_ORDER.slice(0, k), stage: id ? Math.max(0, Math.min(stage, STORY[id].stages.length - 1)) : 0, final: false });
+}
+
+// What the story lets slip about the next network before you get there: a riddle,
+// not a name, so the player wonders what is under the clouds.
+const TEASERS = {
+  aggregation: {
+    plain: 'Somewhere in the city, homes are waiting for their shows to start…',
+    eng: 'Somewhere in the metro, the access and aggregation layer has gone dark…',
+  },
+  xhaul: {
+    plain: 'Up on the hills, tall towers have gone quiet. Phones can\'t find them…',
+    eng: 'Up on the hills, the cell sites have lost sync and backhaul…',
+  },
+  ipcore: {
+    plain: 'At the heart of the country, the biggest routers are fast asleep…',
+    eng: 'At the centre of the country, the core routers are down…',
+  },
+  submarine: {
+    plain: 'Something is moving under the sea…',
+    eng: 'Something lies on the ocean floor, linking the two countries…',
+  },
+  metro: {
+    plain: 'Far across the ocean, a city made of light is flickering…',
+    eng: 'Across the ocean, a metro optical ring is losing its colours…',
+  },
+  longhaul: {
+    plain: 'A highway of light once crossed the far country. Now it is dark…',
+    eng: 'A long-haul photonic mesh spans the far country. It is dark…',
+  },
+};
 
 function shuffle(a, random) {
   for (let i = a.length - 1; i > 0; i--) {
@@ -5619,22 +5682,25 @@ const MINIGAMES = {
 
 const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play';
 const LAG_COLOR = '#e63946';     // Lord Lag's own colour, for the final fight
+// the ?dev menu says which build is running; build.mjs stamps the bundle with its date
+const BUILD = "2026-10-22 23:12 UTC";
+const DEV = (() => { try { return new URLSearchParams(location.search).has('dev'); } catch { return false; } })();
 
 // News on the win card when the next network is a new part of the world.
 const DISCOVERY = {
   submarine: {
-    plain: '🌊 New discovery! Something is moving under the sea: the undersea cables.',
-    eng: '🌊 New discovery: the subsea systems that cross the ocean.',
+    plain: '🌊 New discovery! Something is moving under the sea…',
+    eng: '🌊 New discovery: something lies on the ocean floor, linking the two countries…',
   },
   metro: {
-    plain: '🌍 You crossed the ocean! On the other side lies the land of light and cables.',
-    eng: '🌍 Across the ocean: side A, the optical transport under the packet world.',
+    plain: '🌍 You crossed the ocean! Far away, a city made of light is flickering…',
+    eng: '🌍 Across the ocean: side A, where the light runs. Something there is losing its colours…',
   },
 };
 
 // hooks: plain(), majorName(id), majorColor(id), setLocked(id, locked, animate),
 // focusMajor(id), openMajor(id), toGlobe(), refresh(), pause(on) (stop drawing the globe
-// while a mini-game has the screen)
+// while a mini-game has the screen), lockCamera(on) (the story steers the camera)
 function initQuest(hooks) {
   const el = (s) => document.querySelector(s);
   const intro = el('#intro'), bar = el('#quest'), card = el('#qcard');
@@ -5654,28 +5720,36 @@ function initQuest(hooks) {
   const locked = (id) => playing && !isUnlocked(story, id);
   // open, next (locked but named) or hidden (still in the clouds, not even named)
   const status = (id) => (!locked(id) ? 'open' : id === nextChapter(story) ? 'next' : 'hidden');
+  // the story is on: the camera follows it and the map keeps its secrets
+  const storyOn = () => playing && !storyDone(story);
+  // the next network keeps its name a mystery until its first villain shows up
+  const seen = new Set();
+  const revealed = (id) => id !== nextChapter(story) || story.stage > 0 || seen.has(id);
+  const riddle = (id) => say(TEASERS[id]);
 
   // ------------------------------------------------ the globe follows the story
   function applyLocks(animateId = null) {
     for (const id of STORY_ORDER) hooks.setLocked(id, locked(id), id === animateId);
+    hooks.lockCamera(storyOn());
     hooks.refresh();
   }
 
   // ------------------------------------------------ the score bar
   function renderBar() {
+    const dev = DEV ? '<button class="q-menu q-dev" data-q="dev" aria-label="Dev menu">🛠</button>' : '';
     if (!playing) {
-      bar.innerHTML = '<button class="q-play" data-q="intro">🎮 <b>Netlandia Quest</b><span>play to unlock the map</span></button>';
+      bar.innerHTML = `<button class="q-play" data-q="intro">🎮 <b>Netlandia Quest</b><span>play to unlock the map</span></button>${dev}`;
       return;
     }
     const next = nextChapter(story), gid = nextStage(story), words = hooks.plain() ? 'plain' : 'eng';
     const lvl = next ? levelOf(next) : BOSS_LEVEL;
-    const label = next ? `${esc(hooks.majorName(next))} · ${esc(MINIGAMES[gid].name[words])}` : bossNext(story) ? '😈 The final fight' : '';
+    const label = next ? (revealed(next) ? `${esc(hooks.majorName(next))} · ${esc(MINIGAMES[gid].name[words])}` : `❓ ${hooks.plain() ? 'What\'s next?' : 'Unknown'}`) : bossNext(story) ? '😈 The final fight' : '';
     bar.innerHTML = `
       <div class="q-stats"><span class="q-rank">${esc(rankOf(story))}</span>
         <span class="q-score"><b>${story.score.toLocaleString('en')}</b> pts</span>
         <span class="q-prog">${storyDone(story) ? '' : `Level ${lvl.n} · `}${story.unlocked.length} / ${STORY_ORDER.length} unlocked</span></div>
       ${label ? `<button class="q-next" data-q="next" style="--c:${next ? hooks.majorColor(next) : LAG_COLOR}">Next: ${label} ▶</button>` : '<button class="q-next" data-q="done">🏆 All done</button>'}
-      <button class="q-menu" data-q="intro" aria-label="Quest menu">☰</button>`;
+      <button class="q-menu" data-q="intro" aria-label="Quest menu">☰</button>${dev}`;
   }
 
   // ------------------------------------------------ the start screen
@@ -5698,6 +5772,37 @@ function initQuest(hooks) {
       </div>`;
     intro.hidden = false;
   }
+  // ------------------------------------------------ the ?dev menu, for testing
+  function showDev() {
+    closeCard();
+    const words = hooks.plain() ? 'plain' : 'eng';
+    intro.innerHTML = `
+      <div class="i-box i-dev">
+        <h2>🛠 Dev menu</h2>
+        <p class="i-best">Build: <b>${BUILD.startsWith('__') ? 'source files (not the bundle)' : esc(BUILD)}</b> · ${esc(rankOf(story))} · ${story.score.toLocaleString('en')} pts</p>
+        <h3>Jump to a stop</h3>
+        ${STORY_LEVELS.map((l) => `<div class="dev-row"><b>Level ${l.n} · ${esc(say(l.name))}</b><span>${l.boss
+          ? '<button data-dev="boss">😈 Lord Lag</button>'
+          : l.chapters.flatMap((id) => STORY[id].stages.map((gid, k) => `<button data-dev="jump:${id}:${k}">${esc(MINIGAMES[gid].name[words])}</button>`)).join('')}</span></div>`).join('')}
+        <div class="i-btns">
+          <button data-dev="clear">Clear progress</button>
+          <button data-dev="wipe">Forget everything</button>
+          <button data-dev="fresh">Reload fresh</button>
+          <button class="primary" data-dev="close">Close</button>
+        </div>
+      </div>`;
+    intro.hidden = false;
+  }
+  function dev(what) {
+    const [cmd, id, k] = what.split(':');
+    if (cmd === 'jump' || cmd === 'boss') { jumpTo(story, cmd === 'boss' ? null : id, +k || 0); save(); setPlaying(true); goNext(); }
+    else if (cmd === 'clear') { restartStory(story); story.best = 0; save(); setPlaying(true); showDev(); }
+    else if (cmd === 'wipe') { try { localStorage.removeItem(QUEST_KEY); localStorage.removeItem(PLAY_KEY); } catch {} location.reload(); }
+    // a new address, so the browser can't hand back the old page from its cache
+    else if (cmd === 'fresh') location.replace(`${location.pathname}?dev&v=${Date.now()}${location.hash}`);
+    else if (cmd === 'close') intro.hidden = true;
+  }
+
   function setPlaying(on) {
     playing = on;
     store.set(PLAY_KEY, on ? 'story' : 'explore');
@@ -5733,6 +5838,7 @@ function initQuest(hooks) {
   function taunt(id, gid) {
     hooks.toGlobe();
     hooks.focusMajor(id);
+    if (!seen.has(id)) { seen.add(id); renderBar(); hooks.refresh(); }
     openCard({ kind: 'taunt', id, gid });
   }
   // the questions missed in a challenge, with what was picked and the right answer
@@ -5815,7 +5921,8 @@ function initQuest(hooks) {
     } else if (v.kind === 'won') {
       const next = nextChapter(story);
       const ended = lvl.chapters.at(-1) === v.id, after = STORY_LEVELS.find((l) => l.n === lvl.n + 1);
-      const news = !ended && DISCOVERY[next];
+      // what comes next stays a riddle: a hint, never the name
+      const news = next && (DISCOVERY[next] ?? TEASERS[next]);
       card.innerHTML = `
         <span class="q-k">Congratulations!</span>
         <h3>You unlocked ${name}</h3>
@@ -5826,8 +5933,8 @@ function initQuest(hooks) {
         <p class="q-sum">+${v.points.toLocaleString('en')} pts${v.flawless ? ' · flawless bonus' : ''} · you are now <b>${esc(rankOf(story))}</b></p>
         ${ended ? `<div class="q-levelup"><b>🏁 Level ${lvl.n} complete: ${esc(say(lvl.name))}</b>
           <span>${lvl.chapters.map((c) => esc(hooks.majorName(c))).join(' · ')}: all back online.</span>
-          ${after ? `<span>Next: <b>Level ${after.n} · ${esc(say(after.name))}</b>${DISCOVERY[next] ? `. ${esc(say(DISCOVERY[next]))}` : after.boss ? (hooks.plain() ? '. Lord Lag is waiting, with a round from every level!' : '. Lord Lag, one round from each level.') : ''}</span>` : ''}</div>` : ''}
-        ${news ? `<p class="q-news">${esc(say(news))}</p>` : ''}
+          ${after ? `<span>Next: <b>Level ${after.n}${after.boss ? ` · ${esc(say(after.name))}` : ' · ???'}</b>${after.boss ? (hooks.plain() ? '. Lord Lag is waiting, with a round from every level!' : '. Lord Lag, one round from each level.') : ''}</span>` : ''}</div>` : ''}
+        ${news ? `<p class="q-news"><b>${hooks.plain() ? 'What\'s next?' : 'Up next'}</b> ${esc(say(news))}</p>` : ''}
         <div class="q-btns"><button data-q="enter">Go into ${name}</button><button class="primary" data-q="next">Next challenge ▶</button></div>`;
     } else if (v.kind === 'final') {
       card.innerHTML = `
@@ -5853,8 +5960,8 @@ function initQuest(hooks) {
       card.innerHTML = `
         <span class="q-k">☁ Hidden in the clouds</span>
         <h3>Something is down there…</h3>
-        <p class="q-say">The clouds only clear one network at a time. Win back ${esc(hooks.majorName(next))} first.</p>
-        <div class="q-btns"><button data-q="later">OK</button><button class="primary" data-q="next">Go to ${esc(hooks.majorName(next))} ▶</button></div>`;
+        <p class="q-say">The clouds only clear one network at a time. ${next && revealed(next) ? `Win back ${esc(hooks.majorName(next))} first.` : `Follow the story first: ${esc(next ? riddle(next) : '')}`}</p>
+        <div class="q-btns"><button data-q="later">OK</button><button class="primary" data-q="next">${next && revealed(next) ? `Go to ${esc(hooks.majorName(next))}` : 'What\'s next?'} ▶</button></div>`;
     } else if (v.kind === 'done') {
       card.innerHTML = `
         <span class="q-k">🏆 Netlandia is back on</span>
@@ -5989,6 +6096,7 @@ function initQuest(hooks) {
   function act(what) {
     const v = view;
     if (what === 'intro') showIntro();
+    else if (what === 'dev') showDev();
     else if (what === 'play') { setPlaying(true); goNext(); }
     else if (what === 'restart') { restartStory(story); save(); setPlaying(true); goNext(); }
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
@@ -6015,6 +6123,8 @@ function initQuest(hooks) {
     root.addEventListener('click', (e) => {
       const a = e.target.closest('[data-answer]');
       if (a) { pick(+a.dataset.answer); return; }
+      const d = e.target.closest('[data-dev]');
+      if (d) { dev(d.dataset.dev); return; }
       const b = e.target.closest('[data-q]');
       if (b) act(b.dataset.q);
     });
@@ -6029,10 +6139,24 @@ function initQuest(hooks) {
   if (store.get(PLAY_KEY) == null) showIntro();
   applyLocks();
   renderBar();
+  // the camera can't be moved in the story, so it starts where the story is
+  if (storyOn()) hooks.focusMajor(nextChapter(story) ?? story.unlocked.at(-1) ?? STORY_ORDER[0]);
 
   return {
     isLocked: locked,
     status,
+    // for the panel and the labels on the globe
+    get story() { return storyOn(); },
+    order: STORY_ORDER,
+    revealed,
+    teaser: riddle,
+    // a place's name on the globe stays hidden while its region is under cloud, and so
+    // does every name on a side of the world the story hasn't reached yet
+    hidesPlace(region, side) {
+      if (!storyOn()) return false;
+      if (region) return locked(region);
+      return !story.unlocked.some((id) => hooks.sideOf(id) === side);
+    },
     // for test scripts: the running mini-game's state
     get playing() { return play?.state ?? null; },
     // a click on a locked network: the next one starts its challenge, the others say why not
@@ -6150,7 +6274,8 @@ scene.add(sun, sun.target);
 // ---------------------------------------------------------------- world
 
 const board = buildPlanet(scene);
-scene.add(buildTowns(world), buildTrees(world));
+const towns = buildTowns(world, (x, z, side) => regionAt(x, z, side) ?? `side${side}`);
+scene.add(towns, buildTrees(world));
 const life = buildLife(scene);
 
 // Cable-laying ships working the subsea routes: one per cable, steaming slowly up
@@ -6285,11 +6410,23 @@ function setLocked(id, on, animate = false) {
   shades[id].target = on ? CLOUD_COVER : 0;
   if (!animate) shades[id].mat.opacity = shades[id].target;
   for (const nid of landmarksOf[id]) nodeObjs[nid].visible = !on;
+  // and its town, whose tallest towers would otherwise poke up through the clouds
+  if (towns.byRegion[id]) towns.byRegion[id].visible = !on;
   if (id === 'submarine') for (const sh of ships) sh.ship.visible = !on;
   if (!on && animate) {
     halos[id].mat.opacity = 0.75;
     popping = { id, t0: performance.now() };
   }
+}
+
+// Story mode also hides what stands outside every network's region (a hut on the road,
+// the towns between) until the story reaches that side of the world.
+function hideUnknown() {
+  for (const [id, o] of Object.entries(nodeObjs)) {
+    // the region it stands in, else the network that owns it, else just its side
+    o.visible = !quest?.hidesPlace(majorOfNode[id] ?? null, o.userData.node.side);
+  }
+  for (const side of [0, 1]) if (towns.byRegion[`side${side}`]) towns.byRegion[`side${side}`].visible = !quest?.hidesPlace(null, side);
 }
 
 let lit = null;
@@ -6391,6 +6528,9 @@ let quest = null;          // Netlandia Quest, set up once the map is built
 function listSide(side, force = false) {
   if (side === listedSide && !force) return;
   listedSide = side;
+  // the story has its own list: only what you have won back, and a riddle for what's next
+  $('.sides').hidden = !!quest?.story;
+  if (quest?.story) { listStory(); return; }
   list.replaceChildren(...MAJORS.filter((m) => m.side === side || m.both).map((m) => {
     const row = document.createElement('li');
     // in the Quest, the next network shows its name and the rest are still in the clouds
@@ -6407,6 +6547,31 @@ function listSide(side, force = false) {
   }));
   for (const b of document.querySelectorAll('[data-side]')) b.setAttribute('aria-pressed', String(+b.dataset.side === side));
   $('#side-name').textContent = V.sideHeading(side);
+}
+function listStory() {
+  const rows = [];
+  let hidden = 0;
+  for (const id of quest.order) {
+    const st = quest.status(id), m = MAJOR[id];
+    if (st === 'hidden') { hidden++; continue; }
+    const mystery = st === 'next' && !quest.revealed(id);
+    const row = document.createElement('li');
+    row.innerHTML = `
+      <button class="major${st !== 'open' ? ' locked' : ''}${mystery ? ' mystery' : ''}" data-major="${id}" style="--c:${mystery ? '#8a94a6' : m.color}">
+        <span class="wire${mystery ? '' : LAYER[m.layers[0]].data ? ' dashed' : ''}" aria-hidden="true"></span>
+        <span class="txt"><span class="nm">${mystery ? '❓ What\'s next?' : V.majorName(id)}</span><span class="st">${mystery ? quest.teaser(id) : st === 'next' ? 'Locked · next in the Quest' : majorStats(id)}</span></span>
+        <span class="go" aria-hidden="true">${st === 'next' ? '▶' : 'Open'}</span>
+      </button>`;
+    rows.push(row);
+  }
+  if (hidden) {
+    const row = document.createElement('li');
+    row.className = 'clouded';
+    row.textContent = `☁ ${hidden} more ${hidden === 1 ? 'place' : 'places'} still hidden in the clouds`;
+    rows.push(row);
+  }
+  list.replaceChildren(...rows);
+  $('#side-name').textContent = V.plain ? 'Your Netlandia so far' : 'Networks restored';
 }
 for (const b of document.querySelectorAll('[data-side]')) {
   b.addEventListener('click', () => {
@@ -6574,18 +6739,28 @@ function closeTopic() {
   if (detailId) openMajor(detailId, null);
 }
 
+// In the story the globe can't be spun or zoomed: the camera goes where the story goes,
+// so what lies beyond stays a surprise. Exploring freely, it is yours again.
+let camLocked = false;
+function lockCamera(on) {
+  camLocked = on;
+  if (mode === 'globe') controls.enabled = !on;
+  if (mode === 'globe') hint.textContent = globeHint();
+}
+const globeHint = () => (camLocked ? (V.plain ? 'Follow the story: press Next ▶ at the top to see where it takes you' : 'Story mode: the camera follows the Quest · press Next ▶') : V.hints.globe);
+
 function closeMajor() {
   if (player) { player.close(); player = null; }
   techCard.hidden = true;
   mode = 'globe';
   detailControls.enabled = false;
-  controls.enabled = true;
+  controls.enabled = !camLocked;
   panel.hidden = false;
   detailPanel.hidden = true;
   labelLayer.hidden = false;
   detailLabels.hidden = true;
   card.hidden = true;
-  hint.textContent = V.hints.globe;
+  hint.textContent = globeHint();
 }
 // Back goes to the globe in one hop, however many topics were visited on the way.
 $('#btn-back').addEventListener('click', () => { history.pushState(null, '', location.pathname + location.search); route(); });
@@ -6658,7 +6833,7 @@ for (const c of world.cities) {
   el.className = 'lbl city' + (c.town ? ' town' : '') + (c.big ? ' big' : '');
   el.textContent = c.name;
   labelLayer.append(el);
-  labels.push({ el, pos: sph(c.x, Math.max(0, heightAt(c.x, c.z, c.side)) + (c.town ? 4 : 9), c.z, c.side), town: c.town });
+  labels.push({ el, pos: sph(c.x, Math.max(0, heightAt(c.x, c.z, c.side)) + (c.town ? 4 : 9), c.z, c.side), town: c.town, region: regionAt(c.x, c.z, c.side), side: c.side });
 }
 const tip = document.createElement('div');
 tip.className = 'lbl tip';
@@ -6674,6 +6849,8 @@ function placeLabels() {
   for (const L of labels) {
     let vis = opts.labels && facing(L.pos);
     if (L.town) vis &&= hh < 150;
+    // in the story, a place under cloud keeps its name to itself
+    if (vis && quest?.hidesPlace(L.region, L.side)) vis = false;
     if (vis) {
       _lp.copy(L.pos).project(camera);
       vis = _lp.z < 1 && Math.abs(_lp.x) < 1.1 && Math.abs(_lp.y) < 1.1;
@@ -6793,7 +6970,7 @@ function applyMode(id) {
     renderDetailPanel(detailId);
     if (selected) selectInDetail(selected);
   } else {
-    hint.textContent = V.hints.globe;
+    hint.textContent = globeHint();
   }
 }
 for (const b of document.querySelectorAll('.modes [data-mode]')) b.addEventListener('click', () => { if (b.dataset.mode !== modeId) applyMode(b.dataset.mode); });
@@ -6869,9 +7046,14 @@ quest = initQuest({
   },
   openMajor: (id) => openMajor(id),
   toGlobe,
-  refresh: () => listSide(listedSide, true),
+  refresh: () => { listSide(listedSide, true); hideUnknown(); },
   pause: (on) => { globePaused = on; },
+  lockCamera,
+  // the undersea cables reach both sides, so winning them reveals neither
+  sideOf: (id) => (MAJOR[id].both ? null : MAJOR[id].side),
 });
+listSide(listedSide, true);
+hideUnknown();
 
 route();
 requestAnimationFrame(frame);
