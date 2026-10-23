@@ -5,11 +5,12 @@ import {
   STORY, STAGES, STORY_ORDER, STORY_LEVELS, BOSS_LEVEL, STORY_SECONDS, STORY_LIVES, loadStory, nextChapter, nextStage,
   isUnlocked, rankOf, storyDone, bossNext, startChallenge, answer, winStage, winChapter, winFinal, restartStory,
   FLAWLESS_BONUS, levelOf, examAt, jumpTo, TEASERS,
-  loadNotebook, noteGame, noteExam, noteAnswer, noteChapter, questionOf,
+  loadNotebook, noteGame, noteExam, noteAnswer, noteChapter, questionOf, newNotebook, loadBoard, addToBoard,
 } from './story.js';
 import { MINIGAMES, BOSS } from './minigames.js';
 
 const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play', NOTE_KEY = 'netlandia.notebook';
+const BOARD_KEY = 'netlandia.board', SOUND_KEY = 'netlandia.sound';
 const LAG_COLOR = '#e63946';     // Lord Lag's own colour, for the final fight
 // the ?dev menu says which build is running; build.mjs stamps the bundle with its date
 const BUILD = '__BUILD__';
@@ -43,10 +44,50 @@ export function initQuest(hooks) {
   const story = loadStory((() => { try { return JSON.parse(store.get(QUEST_KEY)); } catch { return null; } })());
   // the notebook outlives a restart: what was learned, and every slip on the way
   const notebook = loadNotebook((() => { try { return JSON.parse(store.get(NOTE_KEY)); } catch { return null; } })(), [...Object.keys(MINIGAMES), 'boss']);
+  // the best runs on this device, for a booth; `boarded` says this run is already on it
+  const board = loadBoard((() => { try { return JSON.parse(store.get(BOARD_KEY)); } catch { return null; } })());
+  let boarded = false;
   let playing = store.get(PLAY_KEY) === 'story';
   let view = null;            // what the card shows: { kind, id, challenge, ... }
   let timer = null, asked = 0;
   let play = null;            // a mini-game running: { game, state, raf, canvas }
+
+  // ------------------------------------------------ sounds: little synth blips, no files
+  let soundOn = store.get(SOUND_KEY) !== 'off', actx = null, lastBlip = 0;
+  const TUNES = {
+    good: [[660, 0.07], [880, 0.1]],
+    bad: [[196, 0.16, 'square', 0.05]],
+    blipGood: [[880, 0.05, 'triangle', 0.04]],
+    blipBad: [[150, 0.08, 'square', 0.03]],
+    win: [[523, 0.09], [659, 0.09], [784, 0.09], [1047, 0.22]],
+    lose: [[392, 0.14], [330, 0.14], [262, 0.3]],
+    fanfare: [[523, 0.1], [523, 0.1], [523, 0.1], [784, 0.25], [659, 0.12], [784, 0.12], [1047, 0.4]],
+  };
+  function sfx(name) {
+    if (!soundOn) return;
+    try {
+      actx ??= new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      let at = actx.currentTime + 0.01;
+      for (const [f, d, type = 'triangle', gain = 0.08] of TUNES[name]) {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type; o.frequency.value = f;
+        g.gain.setValueAtTime(gain, at); g.gain.exponentialRampToValueAtTime(0.0001, at + d);
+        o.connect(g).connect(actx.destination); o.start(at); o.stop(at + d + 0.02);
+        at += d * 0.92;
+      }
+    } catch {}
+  }
+  // a mini-game's own "+100" or "Missed!" floats, heard as a blip (not too often)
+  const heard = new WeakSet();
+  function blips(st) {
+    for (const f of [...(st?.fx ?? []), ...(st?.sub?.fx ?? [])]) {
+      if (heard.has(f)) continue;
+      heard.add(f);
+      const now = performance.now();
+      if (now - lastBlip > 90) { lastBlip = now; sfx(f.good ? 'blipGood' : 'blipBad'); }
+    }
+  }
 
   const save = () => { store.set(QUEST_KEY, JSON.stringify(story)); store.set(NOTE_KEY, JSON.stringify(notebook)); };
   const num = (x) => x.toLocaleString('en');
@@ -108,10 +149,55 @@ export function initQuest(hooks) {
           ${started ? '<button data-q="restart">Start over</button>' : ''}
           <button data-q="explore">Explore freely</button>
           ${notebookEmpty() ? '' : '<button data-q="notebook">📓 Your notebook</button>'}
+          ${started || !notebookEmpty() ? '<button data-q="newplayer">👤 New player</button>' : ''}
+          <button data-q="sound" aria-pressed="${soundOn}">${soundOn ? '🔊 Sound on' : '🔇 Sound off'}</button>
         </div>
+        ${board.length ? `<h3 class="b-title">🏆 Top scores</h3>${boardHtml(-1, 5)}` : ''}
       </div>`;
     intro.hidden = false;
   }
+  // ------------------------------------------------ the board
+  function boardHtml(mine = -1, max = 10) {
+    if (!board.length) return '';
+    return `<ol class="board">${board.slice(0, max).map((e, i) => `<li class="${i === mine ? 'mine' : ''}"><span class="b-pos">${['🥇', '🥈', '🥉'][i] ?? i + 1}</span><b>${esc(e.name)}</b><span class="b-rank">${esc(e.rank)}</span><span class="b-pts"><b>${num(e.score)}</b><small>🧠 ${num(e.know)} · 🎮 ${num(e.play)}</small></span></li>`).join('')}</ol>`;
+  }
+  const nameField = (label) => `<label class="b-name"><span>${label}</span><input id="b-name" maxlength="12" autocomplete="off" placeholder="${hooks.plain() ? 'Your name or initials' : 'Name or initials'}"></label>`;
+  // put this run on the board under the name typed in; returns its place, or -1
+  function boardIt() {
+    const name = document.getElementById('b-name')?.value ?? '';
+    if (boarded) return -1;
+    const at = addToBoard(board, name, story);
+    if (at >= 0) { boarded = true; store.set(BOARD_KEY, JSON.stringify(board)); sfx('win'); }
+    return at;
+  }
+  // 👤 New player: offer the board to the one leaving, then a clean start for the next
+  function showNewPlayer() {
+    closeCard();
+    const plain = hooks.plain(), offer = story.score > 0 && !boarded;
+    intro.innerHTML = `
+      <div class="i-box i-player">
+        <h2>👤 New player</h2>
+        <p>${plain ? 'The next person starts from the beginning, with a fresh notebook.' : 'Progress, score and notebook are reset for the next player.'}</p>
+        ${offer ? `<p class="i-best">This run: <b>${num(story.score)}</b> pts (🧠 ${num(story.know)} + 🎮 ${num(story.play)}) · ${esc(rankOf(story))}</p>${nameField(plain ? 'Put it on the board first?' : 'Add this run to the board')}` : ''}
+        <div class="i-btns">
+          ${offer ? '<button class="primary" data-q="np-save">🏆 Save and hand over</button><button data-q="np-go">Hand over without saving</button>' : '<button class="primary" data-q="np-go">Start fresh ▶</button>'}
+          <button data-q="intro">Cancel</button>
+        </div>
+      </div>`;
+    intro.hidden = false;
+    document.getElementById('b-name')?.focus();
+  }
+  function newPlayer() {
+    restartStory(story);
+    story.best = 0;
+    Object.assign(notebook, newNotebook());
+    boarded = false;
+    save();
+    setPlaying(true);
+    applyLocks();
+    showIntro();
+  }
+
   // ------------------------------------------------ the notebook
   const notebookEmpty = () => !Object.keys(notebook.games).length && !Object.keys(notebook.misses).length && !notebook.won.length;
   let nbFrom = null;
@@ -398,7 +484,9 @@ export function initQuest(hooks) {
           ? 'Every network is back, from the homes of Popcorn Hill to the cables under the ocean, and Lord Lag is beaten. For now.'
           : 'All five levels cleared: aggregation, xhaul, core, subsea, metro and long-haul, and Lord Lag defeated. For now.'}</p>
         <p class="q-sum">Score <b>${num(story.score)}</b> = 🧠 <b>${num(story.know)}</b> ${hooks.plain() ? 'what you know' : 'knowledge'} + 🎮 <b>${num(story.play)}</b> games · best <b>${num(story.best)}</b></p>
-        <div class="q-btns"><button data-q="notebook">📓 Notebook</button><button data-q="replay">Play again</button><button class="primary" data-q="free">Explore the map ▶</button></div>`;
+        ${boarded ? '' : `${nameField(hooks.plain() ? 'Put your name on the board' : 'Add your run to the board')}<div class="q-btns"><button class="primary" data-q="board">🏆 Save to the board</button></div>`}
+        ${boardHtml(v.place ?? -1)}
+        <div class="q-btns"><button data-q="newplayer">👤 New player</button><button data-q="notebook">📓 Notebook</button><button data-q="replay">Play again</button><button class="primary" data-q="free">Explore the map ▶</button></div>`;
     }
   }
 
@@ -434,6 +522,7 @@ export function initQuest(hooks) {
       const [w, h] = size();
       const words = hooks.plain() ? 'plain' : 'eng';
       game.draw(g, play.state, w, h, words, theme);
+      blips(play.state);
       // games whose choices change (Packet Race) relabel their lane buttons as they go
       if (game.lanes) {
         game.lanes(play.state, words).forEach((l, i) => {
@@ -471,6 +560,7 @@ export function initQuest(hooks) {
     if (!view || view.kind !== 'game') return;
     const v = view;
     stopGame();
+    sfx(!res.won ? 'lose' : v.boss ? 'fanfare' : 'win');
     if (v.practice) { openCard({ ...v, kind: 'practice', won: res.won, st, points: res.points + (res.flawless ? FLAWLESS_BONUS : 0) }); return; }
     noteGame(notebook, v.boss ? 'boss' : v.gid, res.won); save();
     if (!res.won) { openCard({ kind: 'lost', id: v.id, gid: v.gid, boss: v.boss }); return; }
@@ -489,6 +579,7 @@ export function initQuest(hooks) {
   }
   // a network won: it unlocks, its points join the score, and the win card says why
   function bank(id, gid, play, know, flawless, st = null, review = null) {
+    if (levelOf(id).chapters.at(-1) === id) sfx('fanfare');
     winChapter(story, { id, over: 'won', points: know }, play);
     noteChapter(notebook, id);
     save();
@@ -513,6 +604,7 @@ export function initQuest(hooks) {
     const q = c.questions[c.i], right = say(q).a[0], picked = pos == null ? null : c.order[c.i][pos];
     const res = answer(c, pos, seconds);
     noteAnswer(notebook, q, res.right, picked);
+    sfx(c.over === 'lost' ? 'lose' : res.right ? 'good' : 'bad');
     if (c.over) noteExam(notebook, c.id, c.over === 'won');
     save();
     if (c.over === 'won') {
@@ -532,9 +624,14 @@ export function initQuest(hooks) {
     if (what === 'intro') showIntro();
     else if (what === 'dev') showDev();
     else if (what === 'notebook') showNotebook();
+    else if (what === 'newplayer') showNewPlayer();
+    else if (what === 'np-save') { if (boardIt() >= 0 || boarded) newPlayer(); else document.getElementById('b-name')?.focus(); }
+    else if (what === 'np-go') newPlayer();
+    else if (what === 'board') { const place = boardIt(); if (place >= 0) openCard({ kind: 'done', place }); else document.getElementById('b-name')?.focus(); }
+    else if (what === 'sound') { soundOn = !soundOn; store.set(SOUND_KEY, soundOn ? 'on' : 'off'); showIntro(); sfx('good'); }
     else if (what === 'nbclose') { intro.hidden = true; if (nbFrom === 'intro') showIntro(); }
     else if (what === 'play') { setPlaying(true); goNext(); }
-    else if (what === 'restart') { restartStory(story); save(); setPlaying(true); goNext(); }
+    else if (what === 'restart') { restartStory(story); boarded = false; save(); setPlaying(true); goNext(); }
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
     else if (what === 'next') goNext();
     else if (what === 'begin' && v) openCard({ kind: 'how', id: v.id, gid: v.gid });
@@ -550,7 +647,7 @@ export function initQuest(hooks) {
     else if (what === 'later') closeCard();
     else if (what === 'enter' && v) { const id = v.id; closeCard(); hooks.openMajor(id); }
     else if (what === 'done') openCard({ kind: 'done' });
-    else if (what === 'replay') { restartStory(story); save(); applyLocks(); renderBar(); goNext(); }
+    else if (what === 'replay') { restartStory(story); boarded = false; save(); applyLocks(); renderBar(); goNext(); }
   }
   // the lane buttons react on touch-down, the way a game should
   card.addEventListener('pointerdown', (e) => {
@@ -568,6 +665,9 @@ export function initQuest(hooks) {
     });
   }
   addEventListener('keydown', (e) => {
+    // Enter in the name box saves it to the board
+    if (e.key === 'Enter' && e.target.id === 'b-name') { e.preventDefault(); act(view?.kind === 'done' ? 'board' : 'np-save'); return; }
+    if (e.target.id === 'b-name') return;
     if (!['1', '2', '3'].includes(e.key)) return;
     if (view?.kind === 'question') { pick(+e.key - 1); e.stopPropagation(); }
     else if (view?.kind === 'game' && !e.repeat) { press(+e.key - 1); e.stopPropagation(); }

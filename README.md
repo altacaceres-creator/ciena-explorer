@@ -231,7 +231,15 @@ game's lesson and each network's longer recap, level by level, with the levels n
 reached yet still a mystery. It also keeps every question ever missed, with the answer
 picked and the right one, even after it is answered right later (marked as such), and
 every game and exam tried: won first try, won after a few losses, or not won yet. The
-notebook stays across a restart. Progress, the best score and the notebook stay
+notebook stays across a restart.
+
+Built for a booth, too: a **🏆 board** of the ten best runs on the device (name, score,
+its 🧠 and 🎮 halves, and the rank reached) shows on the start screen and on the end
+card, where the player types a name to join it. **👤 New player** (in the ☰ menu and on
+the end card) offers to put the current run on the board, then hands over a clean start:
+progress, best score and notebook reset, the board kept. Short synthesized **sounds**
+mark right and wrong answers, hits and misses in the games, a won or lost stop and the
+end of a level; the ☰ menu turns them off. Progress, the best score and the notebook stay
 in the browser, the ☰ menu starts over or switches to free exploring, and both reading
 modes tell the story in their own words. The full plan is in
 [`docs/game-plan.md`](docs/game-plan.md).
@@ -268,6 +276,9 @@ python3 -m http.server 8765     # then open http://localhost:8765/
 node --test                     # every test in test/
 node build.mjs                  # single-file page -> dist/netlandia.html
 ```
+
+On GitHub every push and pull request runs the tests, and checks that
+`dist/netlandia.html` was rebuilt from the sources (`.github/workflows/test.yml`).
 
 `dist/netlandia.html` loads three.js r160 from jsDelivr and has everything else
 inlined, so it can be shared as one file.

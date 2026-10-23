@@ -48,7 +48,11 @@ const favicon = (() => {
 })();
 const fonts = html.match(/<link rel="preconnect"[^>]*>\n<link rel="stylesheet" href="https:\/\/fonts[^>]*>/)[0];
 
+// the same viewport as index.html, or a phone lays the page out desktop-wide and shrinks it
+const viewport = html.match(/<meta name="viewport"[^>]*>/)[0];
+
 const out = `<meta charset="utf-8">
+${viewport}
 ${title}
 ${favicon}
 ${fonts}

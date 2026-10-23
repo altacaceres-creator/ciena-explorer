@@ -1,0 +1,30 @@
+# Every push and pull request: run the tests, and check dist/netlandia.html was rebuilt
+# from the sources it carries (the build date line aside, which changes every build).
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tests
+        run: node --test
+      - name: dist/netlandia.html is up to date
+        run: |
+          node build.mjs
+          if ! git diff --quiet -I 'const BUILD = ' -- dist/; then
+            echo "::error file=dist/netlandia.html::dist/netlandia.html is out of date: run 'node build.mjs' and commit it."
+            git diff --stat -- dist/
+            exit 1
+          fi
