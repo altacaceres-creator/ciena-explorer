@@ -617,3 +617,30 @@ export function noteChapter(nb, id) {
   if (STORY[id] && !nb.won.includes(id)) nb.won = STORY_ORDER.filter((x) => x === id || nb.won.includes(x));
   return nb;
 }
+
+// ---------------------------------------------------------------- the board
+// The best runs played on this device, for a booth: a name, the score and its two
+// halves, and the rank reached. Kept to the top ten.
+export const BOARD_SIZE = 10;
+// a name as typed, kept short and plain: letters, digits, spaces and . ' -
+export const boardName = (s) => String(s ?? '').replace(/[^\p{L}\p{N} .'-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 12);
+const byScore = (a, b) => b.score - a.score || a.at - b.at;
+export function loadBoard(saved) {
+  if (!Array.isArray(saved)) return [];
+  const pts = (x) => (Number.isFinite(x) && x > 0 ? Math.round(x) : 0);
+  return saved
+    .filter((e) => e && boardName(e.name) && pts(e.score) > 0)
+    .map((e) => ({ name: boardName(e.name), score: pts(e.score), know: pts(e.know), play: pts(e.play), rank: STORY_RANKS.includes(e.rank) ? e.rank : STORY_RANKS[0], at: pts(e.at) }))
+    .sort(byScore).slice(0, BOARD_SIZE);
+}
+// Put a run on the board: returns its place (0 is the top), or -1 when it doesn't make
+// the top ten (or has no name or no points).
+export function addToBoard(board, name, s, at = Date.now()) {
+  const n = boardName(name);
+  if (!n || !(s.score > 0)) return -1;
+  const e = { name: n, score: s.score, know: s.know, play: s.play, rank: rankOf(s), at };
+  board.push(e);
+  board.sort(byScore);
+  board.length = Math.min(board.length, BOARD_SIZE);
+  return board.indexOf(e);
+}

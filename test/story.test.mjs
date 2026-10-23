@@ -7,7 +7,7 @@ import {
   STORY, STAGES, STORY_ORDER, STORY_LEVELS, STORY_RANKS, STORY_LIVES, STORY_SECONDS, FLAWLESS_BONUS, answerPoints, newStory, loadStory,
   nextChapter, nextStage, isUnlocked, rankOf, storyDone, bossNext, startChallenge, answer, winStage, winChapter, winFinal, restartStory,
   levelOf, examAt, jumpTo, TEASERS, EXTRA_QUESTIONS,
-  newNotebook, loadNotebook, noteGame, noteExam, noteAnswer, noteChapter, questionKey, questionOf,
+  newNotebook, loadNotebook, BOARD_SIZE, boardName, loadBoard, addToBoard, noteGame, noteExam, noteAnswer, noteChapter, questionKey, questionOf,
 } from '../js/story.js';
 import { MINIGAMES } from '../js/minigames.js';
 
@@ -209,4 +209,23 @@ test('the notebook keeps every game and exam tried, every miss (even once fixed)
   const odd = loadNotebook({ games: { tetris: { tries: 2, wins: 1 }, pong: { tries: 1 } }, exams: { atlantis: {} }, misses: { 'ipcore.9': { times: 1 }, 'ipcore.0': { times: 2, picks: [7, 1] } }, won: ['atlantis', 'metro'] }, ids);
   assert.deepEqual(odd, { games: { tetris: { tries: 2, wins: 1 } }, exams: {}, misses: { 'ipcore.0': { times: 2, picks: [1], fixed: false } }, won: ['metro'] });
   assert.deepEqual(loadNotebook('nonsense', ids), newNotebook());
+});
+
+test('the board keeps the ten best runs with their two scores, and only clean names', () => {
+  const board = [];
+  const run = (score, know = 0) => ({ ...newStory(), score, know, play: score - know, unlocked: ['aggregation'] });
+  assert.equal(addToBoard(board, 'Ana', run(500, 200), 1), 0);
+  assert.equal(addToBoard(board, 'Bo', run(900), 2), 0, 'a better run goes on top');
+  assert.equal(addToBoard(board, 'Cy', run(500), 3), 2, 'a tie goes after the earlier run');
+  assert.equal(addToBoard(board, '', run(800), 4), -1, 'no name, no place');
+  assert.equal(addToBoard(board, 'Zero', run(0), 5), -1, 'no points, no place');
+  assert.deepEqual(board[1], { name: 'Ana', score: 500, know: 200, play: 300, rank: STORY_RANKS[1], at: 1 });
+  for (let i = 0; i < 12; i++) addToBoard(board, `P${i}`, run(1000 + i), 10 + i);
+  assert.equal(board.length, BOARD_SIZE);
+  assert.equal(board[0].name, 'P11');
+  assert.equal(addToBoard(board, 'Late', run(10), 99), -1, 'too low for the top ten');
+  assert.deepEqual(loadBoard(JSON.parse(JSON.stringify(board))), board);
+  assert.equal(boardName('  María   José <3 López!! '), 'María José 3');
+  assert.deepEqual(loadBoard([{ name: '<>', score: 50 }, { name: 'Ok', score: -3 }, 'junk', { name: 'Fine', score: 70.4, rank: 'Emperor' }]), [{ name: 'Fine', score: 70, know: 0, play: 0, rank: STORY_RANKS[0], at: 0 }]);
+  assert.deepEqual(loadBoard('nonsense'), []);
 });

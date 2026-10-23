@@ -313,3 +313,13 @@ or a test even if they passed after”.
   - every missed question with the answer picked and the right one, marked once it is answered right
     later, but never removed;
   - every game and exam tried: won first try, won after N losses, or not won yet.
+
+## Ready for a booth
+
+- **🏆 Board**: the ten best runs on the device, with both halves of the score and the rank reached;
+  the end card asks for a name.
+- **👤 New player**: offers the board to the player leaving, then resets progress, best score and
+  notebook for the next one (the board stays).
+- **Sounds**: little synthesized blips and jingles, no audio files; ☰ turns them off.
+- **Checks on GitHub**: the tests run on every pull request, and `dist/netlandia.html` must be rebuilt
+  (it now also carries the phone viewport, so the single file lays out on a phone).
