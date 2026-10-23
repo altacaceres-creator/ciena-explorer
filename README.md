@@ -222,7 +222,16 @@ what that would mean in a real network, and a retry from that stop. A won networ
 lifts the clouds, pops the landmarks back up and shows **You unlocked …**, and the
 scene can then be opened like any other. Points come from the games (or 100 a right
 answer plus up to 50 for speed), with 200 more for a flawless round, and every network
-won is a rank, from Apprentice to Chief of the NOC. Progress and the best score stay
+won is a rank, from Apprentice to Chief of the NOC. The score is two scores added up and
+always shown apart: 🧠 **knowledge** (the questions and exams) and 🎮 **games** (the
+mini-games and the fight with Lord Lag).
+
+The 📓 **notebook** (in the bar, and on the start screen) collects what was learned: each
+game's lesson and each network's longer recap, level by level, with the levels not
+reached yet still a mystery. It also keeps every question ever missed, with the answer
+picked and the right one, even after it is answered right later (marked as such), and
+every game and exam tried: won first try, won after a few losses, or not won yet. The
+notebook stays across a restart. Progress, the best score and the notebook stay
 in the browser, the ☰ menu starts over or switches to free exploring, and both reading
 modes tell the story in their own words. The full plan is in
 [`docs/game-plan.md`](docs/game-plan.md).
@@ -270,7 +279,7 @@ inlined, so it can be shared as one file.
 | `js/tech.js` | the technology topics for each network (Engineer mode) and the step player |
 | `js/basics.js` | the introduction-to-networking topics for each network (Explorer mode) |
 | `js/vocab.js` | the two reading modes: every name, label and sentence the HUD prints, in plain words and in the trade's |
-| `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, the five levels, each network's stops and questions, each stop's villain, taunt, loss and lesson, the riddles for what's next, in both readings, and the rules (points, lives, ranks, saved progress) |
+| `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, the five levels, each network's stops and questions, each stop's villain, taunt, loss and lesson, the riddles for what's next, in both readings, the two scores and the notebook's records, and the rules (points, lives, ranks, saved progress) |
 | `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Last Mile Dash, Packet Tetris, Storm Chaser, Stop the Fiber Cut, Keep the Beat, Packet Race, Repeater Rescue, Cable Layer, Rainbow Packing, Mesh Rescue, and the fight with Lord Lag built from one game per level |
 | `js/game.js` | the Quest on screen: the start screen, the score bar and the challenge card; reaches the globe only through the hooks main.js hands it |
 | `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos and the Quest's cloud cover, the airliner, switching views, labels, picking, the site card |
