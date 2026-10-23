@@ -245,10 +245,13 @@ the next one, and a count of the places still in the clouds; the next network's 
 only shows once its first villain appears. Exploring freely, or after Lord Lag, the
 whole map is yours.
 
-For testing, open the page with **`?dev`** (`index.html?dev`): a 🛠 button opens a menu
-that jumps to any stop of any level or to Lord Lag, clears the progress, forgets
-everything, or reloads the page at a fresh address so the browser can't serve an old
-copy. It also shows when the bundle was built, to tell a stale copy from a new one.
+For testing, open the page with **`?dev`** (`index.html?dev`), or tap the Netlandia
+title five times quickly (for a preview whose address can't be changed): a 🛠 button
+opens a menu that plays **any one game on its own**, as many times as you like, without
+touching the story, the score or the notebook; jumps the story to any stop of any level
+or to Lord Lag; clears the progress; forgets everything; or reloads the page at a fresh
+address so the browser can't serve an old copy. It also shows when the bundle was built,
+to tell a stale copy from a new one, and can hide itself again.
 
 - Globe (when exploring freely): drag (one finger on a phone) spins the planet in any direction; scroll or
   pinch zooms. **Side A / Side B** in the panel spins it round to the other country;

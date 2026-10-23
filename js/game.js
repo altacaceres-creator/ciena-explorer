@@ -13,7 +13,10 @@ const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play', NOTE_KEY = 'ne
 const LAG_COLOR = '#e63946';     // Lord Lag's own colour, for the final fight
 // the ?dev menu says which build is running; build.mjs stamps the bundle with its date
 const BUILD = '__BUILD__';
-const DEV = (() => { try { return new URLSearchParams(location.search).has('dev'); } catch { return false; } })();
+// on with ?dev in the address, or five quick taps on the Netlandia title (for previews
+// where the address can't be changed); the menu itself can switch it off again
+const DEV_KEY = 'netlandia.dev';
+let DEV = (() => { try { return new URLSearchParams(location.search).has('dev') || localStorage.getItem(DEV_KEY) === '1'; } catch { return false; } })();
 
 // News on the win card when the next network is a new part of the world.
 const DISCOVERY = {
@@ -169,7 +172,13 @@ export function initQuest(hooks) {
       <div class="i-box i-dev">
         <h2>🛠 Dev menu</h2>
         <p class="i-best">Build: <b>${BUILD.startsWith('__') ? 'source files (not the bundle)' : esc(BUILD)}</b> · ${esc(rankOf(story))} · ${story.score.toLocaleString('en')} pts</p>
-        <h3>Jump to a stop</h3>
+        <h3>🎮 Play one game</h3>
+        <p class="dev-note">Just that game, as many times as you like. The story, the score and the notebook stay as they are.</p>
+        ${STORY_LEVELS.map((l) => `<div class="dev-row"><b>Level ${l.n} · ${esc(say(l.name))}</b><span>${l.boss
+          ? '<button data-dev="try:boss">😈 Lord Lag</button>'
+          : l.chapters.flatMap((id) => STORY[id].stages.map((gid) => `<button data-dev="try:${gid}:${id}">${esc(MINIGAMES[gid].name[words])}</button>`)).join('')}</span></div>`).join('')}
+        <h3>⏩ Jump the story to a stop</h3>
+        <p class="dev-note">Your progress moves there: everything before it counts as won.</p>
         ${STORY_LEVELS.map((l) => `<div class="dev-row"><b>Level ${l.n} · ${esc(say(l.name))}</b><span>${l.boss
           ? '<button data-dev="boss">😈 Lord Lag</button>'
           : l.chapters.flatMap((id) => STORY[id].stages.map((gid, k) => `<button data-dev="jump:${id}:${k}">${esc(MINIGAMES[gid].name[words])}</button>`)).join('')}</span></div>`).join('')}
@@ -177,6 +186,7 @@ export function initQuest(hooks) {
           <button data-dev="clear">Clear progress</button>
           <button data-dev="wipe">Forget everything</button>
           <button data-dev="fresh">Reload fresh</button>
+          <button data-dev="hide">Hide the dev menu</button>
           <button class="primary" data-dev="close">Close</button>
         </div>
       </div>`;
@@ -184,12 +194,29 @@ export function initQuest(hooks) {
   }
   function dev(what) {
     const [cmd, id, k] = what.split(':');
+    // practice: one game on its own, nothing banked
+    if (cmd === 'try') { intro.hidden = true; hooks.toGlobe(); openCard(practiceOf(id, k)); return; }
+    if (cmd === 'hide') { DEV = false; try { localStorage.removeItem(DEV_KEY); } catch {} intro.hidden = true; renderBar(); return; }
     if (cmd === 'jump' || cmd === 'boss') { jumpTo(story, cmd === 'boss' ? null : id, +k || 0); save(); setPlaying(true); goNext(); }
     else if (cmd === 'clear') { restartStory(story); story.best = 0; save(); setPlaying(true); showDev(); }
     else if (cmd === 'wipe') { try { localStorage.removeItem(QUEST_KEY); localStorage.removeItem(PLAY_KEY); localStorage.removeItem(NOTE_KEY); } catch {} location.reload(); }
     // a new address, so the browser can't hand back the old page from its cache
     else if (cmd === 'fresh') location.replace(`${location.pathname}?dev&v=${Date.now()}${location.hash}`);
     else if (cmd === 'close') intro.hidden = true;
+  }
+
+  const practiceOf = (gid, id) => (gid === 'boss' ? { kind: 'game', boss: true, practice: true } : { kind: 'game', id, gid, practice: true });
+  // five quick taps on the title switch the dev menu on
+  {
+    let taps = [];
+    document.querySelector('.title h1')?.addEventListener('click', () => {
+      const now = performance.now();
+      taps = [...taps.filter((x) => now - x < 3000), now];
+      if (taps.length < 5 || DEV) return;
+      DEV = true; taps = [];
+      try { localStorage.setItem(DEV_KEY, '1'); } catch {}
+      renderBar(); showDev();
+    });
   }
 
   function setPlaying(on) {
@@ -282,10 +309,19 @@ export function initQuest(hooks) {
     } else if (v.kind === 'game') {
       const game = gameOf(v);
       card.innerHTML = `
-        <div class="q-head"><span class="q-k">${v.boss ? '😈 Final fight' : `Win back ${name}`} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
+        <div class="q-head"><span class="q-k">${v.practice ? '🛠 Practice' : v.boss ? '😈 Final fight' : `Win back ${name}`} · ${esc(game.name[words])}</span><button class="q-quit" data-q="quit" aria-label="Give up">✕</button></div>
         <canvas class="q-canvas${game.tall ? ' tall' : ''}"></canvas>
         <div class="q-lanes">${game.laneNames[words].map((l, i) => `<button data-lane="${i}"><kbd>${i + 1}</kbd>${esc(l)}</button>`).join('')}</div>`;
       startGame(v.id ?? 'boss', game);
+    } else if (v.kind === 'practice') {
+      // a practice game over: how it went and its lesson, and nothing banked
+      const game = gameOf(v);
+      card.innerHTML = `
+        <span class="q-k">🛠 Practice · nothing counts</span>
+        <h3>${v.won ? '🎉 You won' : '💥 You lost'}: ${esc(game.name[words])}</h3>
+        ${v.st ? `<dl><dt>Your game</dt><dd>${esc(game.summary(v.st, words))}</dd>${stage ? `<dt>${hooks.plain() ? 'Why it works' : 'In a real network'}</dt><dd>${esc(say(stage.lesson))}</dd>` : ''}</dl>` : ''}
+        ${v.won ? `<p class="q-sum">${num(v.points)} pts (not added to your score)</p>` : ''}
+        <div class="q-btns"><button data-q="later">Close</button><button data-q="dev">🛠 Dev menu</button><button class="primary" data-q="again">Play again ▶</button></div>`;
     } else if (v.kind === 'cleared') {
       // a stop won that is not the network's last: the game in numbers, and its lesson
       const nextG = nextStage(story), left = STORY[v.id].stages.length - story.stage;
@@ -432,6 +468,7 @@ export function initQuest(hooks) {
     if (!view || view.kind !== 'game') return;
     const v = view;
     stopGame();
+    if (v.practice) { openCard({ ...v, kind: 'practice', won: res.won, st, points: res.points + (res.flawless ? FLAWLESS_BONUS : 0) }); return; }
     noteGame(notebook, v.boss ? 'boss' : v.gid, res.won); save();
     if (!res.won) { openCard({ kind: 'lost', id: v.id, gid: v.gid, boss: v.boss }); return; }
     const points = res.points + (res.flawless ? FLAWLESS_BONUS : 0);
@@ -504,6 +541,8 @@ export function initQuest(hooks) {
       const ex = v.exam ?? { gid: v.gid, carry: v.carry, flawless: v.flawless, st: v.st };
       openCard({ kind: 'question', id: v.id, c: startChallenge(v.id, Math.random, examAt(v.id)), last: null, exam: ex });
     }
+    else if (what === 'quit' && v?.practice) openCard({ ...v, kind: 'practice', won: false, st: null });
+    else if (what === 'again' && v?.practice) openCard({ ...v, kind: 'game' });
     else if (what === 'quit' && v) { if (v.kind === 'game') { noteGame(notebook, v.boss ? 'boss' : v.gid, false); save(); } openCard({ kind: 'lost', id: v.id, gid: v.gid, boss: v.boss }); }
     else if (what === 'later') closeCard();
     else if (what === 'enter' && v) { const id = v.id; closeCard(); hooks.openMajor(id); }
