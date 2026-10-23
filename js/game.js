@@ -206,14 +206,17 @@ export function initQuest(hooks) {
   }
 
   const practiceOf = (gid, id) => (gid === 'boss' ? { kind: 'game', boss: true, practice: true } : { kind: 'game', id, gid, practice: true });
-  // five quick taps on the title switch the dev menu on
+  // five quick taps on the title switch the dev menu on (and open it): the map's title,
+  // or the start screen's, since that screen covers the map on a first visit
   {
     let taps = [];
-    document.querySelector('.title h1')?.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.title h1, #intro .i-box h2')) return;
       const now = performance.now();
       taps = [...taps.filter((x) => now - x < 3000), now];
-      if (taps.length < 5 || DEV) return;
-      DEV = true; taps = [];
+      if (taps.length < 5) return;
+      taps = [];
+      DEV = true;
       try { localStorage.setItem(DEV_KEY, '1'); } catch {}
       renderBar(); showDev();
     });

@@ -246,7 +246,7 @@ only shows once its first villain appears. Exploring freely, or after Lord Lag, 
 whole map is yours.
 
 For testing, open the page with **`?dev`** (`index.html?dev`), or tap the Netlandia
-title five times quickly (for a preview whose address can't be changed): a 🛠 button
+title five times quickly (or the "Netlandia Quest" title on the start screen; for a preview whose address can't be changed): a 🛠 button
 opens a menu that plays **any one game on its own**, as many times as you like, without
 touching the story, the score or the notebook; jumps the story to any stop of any level
 or to Lord Lag; clears the progress; forgets everything; or reloads the page at a fresh

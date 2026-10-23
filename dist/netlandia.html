@@ -5788,7 +5788,7 @@ const MINIGAMES = {
 const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play', NOTE_KEY = 'netlandia.notebook';
 const LAG_COLOR = '#e63946';     // Lord Lag's own colour, for the final fight
 // the ?dev menu says which build is running; build.mjs stamps the bundle with its date
-const BUILD = "2026-10-23 15:42 UTC";
+const BUILD = "2026-10-23 16:51 UTC";
 // on with ?dev in the address, or five quick taps on the Netlandia title (for previews
 // where the address can't be changed); the menu itself can switch it off again
 const DEV_KEY = 'netlandia.dev';
@@ -5982,14 +5982,17 @@ function initQuest(hooks) {
   }
 
   const practiceOf = (gid, id) => (gid === 'boss' ? { kind: 'game', boss: true, practice: true } : { kind: 'game', id, gid, practice: true });
-  // five quick taps on the title switch the dev menu on
+  // five quick taps on the title switch the dev menu on (and open it): the map's title,
+  // or the start screen's, since that screen covers the map on a first visit
   {
     let taps = [];
-    document.querySelector('.title h1')?.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.title h1, #intro .i-box h2')) return;
       const now = performance.now();
       taps = [...taps.filter((x) => now - x < 3000), now];
-      if (taps.length < 5 || DEV) return;
-      DEV = true; taps = [];
+      if (taps.length < 5) return;
+      taps = [];
+      DEV = true;
       try { localStorage.setItem(DEV_KEY, '1'); } catch {}
       renderBar(); showDev();
     });
