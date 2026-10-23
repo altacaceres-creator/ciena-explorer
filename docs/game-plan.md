@@ -298,3 +298,18 @@ then the light), one linear path.
   shows only when its first villain appears; the win cards end with the next riddle too.
 - **A dev menu** (`?dev` on the address): jump to any stop or to Lord Lag, clear the progress, forget
   everything, reload fresh past the browser's cache, and see when the bundle was built.
+
+## Two scores and a notebook
+
+From the playtests: “add educational score and mini game score, that adds up to one final score but keep
+it divided”, and “a notebook where the lessons learned are saved, and keep track if they failed a question
+or a test even if they passed after”.
+
+- **🧠 Knowledge + 🎮 Games = score.** Exam answers go to knowledge; mini-games and the fight with Lord
+  Lag go to games. The bar, the win cards, the end card and the notebook show both.
+- **📓 The notebook** keeps, across restarts:
+  - the lessons learned: each won game's lesson and each network's recap, level by level (levels not
+    reached yet stay “???”);
+  - every missed question with the answer picked and the right one, marked once it is answered right
+    later, but never removed;
+  - every game and exam tried: won first try, won after N losses, or not won yet.

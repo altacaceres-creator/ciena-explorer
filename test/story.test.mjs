@@ -6,7 +6,8 @@ import { MAJORS } from '../js/world.js';
 import {
   STORY, STAGES, STORY_ORDER, STORY_LEVELS, STORY_RANKS, STORY_LIVES, STORY_SECONDS, FLAWLESS_BONUS, answerPoints, newStory, loadStory,
   nextChapter, nextStage, isUnlocked, rankOf, storyDone, bossNext, startChallenge, answer, winStage, winChapter, winFinal, restartStory,
-  levelOf, examAt, jumpTo, TEASERS,
+  levelOf, examAt, jumpTo, TEASERS, EXTRA_QUESTIONS,
+  newNotebook, loadNotebook, noteGame, noteExam, noteAnswer, noteChapter, questionKey, questionOf,
 } from '../js/story.js';
 import { MINIGAMES } from '../js/minigames.js';
 
@@ -169,4 +170,43 @@ test('every network has a riddle that does not give its name away, and the dev m
   jumpTo(s, null);
   assert.ok(bossNext(s) && !storyDone(s));
   assert.deepEqual(loadStory(JSON.parse(JSON.stringify(s))), s, 'a jump saves like any other progress');
+});
+
+test('two scores, knowledge and games, add up to the score; old saves count as games', () => {
+  const s = newStory();
+  winStage(s, 'aggregation', 300);
+  winStage(s, 'aggregation', 200);
+  winChapter(s, { id: 'aggregation', over: 'won', points: 450 }, 250);
+  assert.deepEqual([s.play, s.know, s.score, s.best], [750, 450, 1200, 1200]);
+  jumpTo(s, null);
+  winFinal(s, 1000);
+  assert.deepEqual([s.play, s.know, s.score], [1750, 450, 2200]);
+  assert.deepEqual(loadStory(JSON.parse(JSON.stringify(s))), s);
+  const old = loadStory({ unlocked: ['aggregation'], score: 900, best: 1500 });
+  assert.deepEqual([old.play, old.know, old.score, old.best], [900, 0, 900, 1500]);
+  restartStory(s);
+  assert.deepEqual([s.play, s.know, s.score, s.best], [0, 0, 0, 2200]);
+});
+
+test('the notebook keeps every game and exam tried, every miss (even once fixed) and survives a reload', () => {
+  const nb = newNotebook();
+  noteGame(nb, 'tetris', false); noteGame(nb, 'tetris', false); noteGame(nb, 'tetris', true);
+  noteExam(nb, 'aggregation', false); noteExam(nb, 'aggregation', true);
+  const q = STORY.ipcore.questions[1], x = EXTRA_QUESTIONS.sea[0];
+  noteAnswer(nb, q, false, 2); noteAnswer(nb, q, false, null); noteAnswer(nb, q, true, 0);
+  noteAnswer(nb, x, false, 1);
+  noteAnswer(nb, STORY.metro.questions[0], true, 0);            // right first time: nothing to note
+  noteChapter(nb, 'xhaul'); noteChapter(nb, 'aggregation'); noteChapter(nb, 'aggregation');
+  assert.deepEqual(nb.games.tetris, { tries: 3, wins: 1 });
+  assert.deepEqual(nb.exams.aggregation, { tries: 2, wins: 1 });
+  assert.deepEqual(nb.misses[questionKey(q)], { times: 2, picks: [2, null], fixed: true });
+  assert.deepEqual(Object.keys(nb.misses).sort(), ['extra.sea.0', 'ipcore.1']);
+  assert.equal(questionOf('extra.sea.0'), x);
+  assert.deepEqual(nb.won, ['aggregation', 'xhaul'], 'in story order, once each');
+  const ids = Object.keys(MINIGAMES);
+  assert.deepEqual(loadNotebook(JSON.parse(JSON.stringify(nb)), ids), nb);
+  // anything that doesn't exist any more is dropped
+  const odd = loadNotebook({ games: { tetris: { tries: 2, wins: 1 }, pong: { tries: 1 } }, exams: { atlantis: {} }, misses: { 'ipcore.9': { times: 1 }, 'ipcore.0': { times: 2, picks: [7, 1] } }, won: ['atlantis', 'metro'] }, ids);
+  assert.deepEqual(odd, { games: { tetris: { tries: 2, wins: 1 } }, exams: {}, misses: { 'ipcore.0': { times: 2, picks: [1], fixed: false } }, won: ['metro'] });
+  assert.deepEqual(loadNotebook('nonsense', ids), newNotebook());
 });

@@ -430,7 +430,8 @@ export function answerPoints(right, seconds) {
 export const FLAWLESS_BONUS = 200;
 
 export function newStory() {
-  return { unlocked: [], stage: 0, final: false, score: 0, best: 0 };
+  // the score is two scores added up: knowledge (questions and exams) and games
+  return { unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0, best: 0 };
 }
 // Saved progress, checked: anything unknown or out of order is dropped.
 export function loadStory(saved) {
@@ -442,8 +443,12 @@ export function loadStory(saved) {
   const next = nextChapter(s);
   s.stage = next && Number.isInteger(saved.stage) && saved.stage > 0 && saved.stage < STORY[next].stages.length ? saved.stage : 0;
   s.final = saved.final === true && s.unlocked.length === STORY_ORDER.length;
-  s.score = Number.isFinite(saved.score) && saved.score > 0 ? Math.round(saved.score) : 0;
-  s.best = Math.max(s.score, Number.isFinite(saved.best) ? Math.round(saved.best) : 0);
+  const pts = (x) => (Number.isFinite(x) && x > 0 ? Math.round(x) : 0);
+  s.know = pts(saved.know);
+  // a save from before the two scores counts all its points as games
+  s.play = saved.play == null ? Math.max(0, pts(saved.score) - s.know) : pts(saved.play);
+  s.score = s.know + s.play;
+  s.best = Math.max(s.score, pts(saved.best));
   return s;
 }
 export const nextChapter = (s) => STORY_ORDER[s.unlocked.length] ?? null;
@@ -454,7 +459,10 @@ export const isUnlocked = (s, id) => s.unlocked.includes(id);
 export const bossNext = (s) => !nextChapter(s) && !s.final;
 export const rankOf = (s) => STORY_RANKS[Math.min(s.unlocked.length + (s.final ? 1 : 0), STORY_RANKS.length - 1)];
 export const storyDone = (s) => s.final;
-const bankPoints = (s, points) => { s.score += points; s.best = Math.max(s.best, s.score); };
+const bankPoints = (s, play, know = 0) => {
+  s.play += play; s.know += know; s.score = s.play + s.know;
+  s.best = Math.max(s.best, s.score);
+};
 // A stop cleared that is not the network's last: on to its next game.
 export function winStage(s, id, points) {
   if (nextChapter(s) !== id || s.stage >= STORY[id].stages.length - 1) return s;
@@ -487,12 +495,12 @@ export function answer(c, pick, seconds) {
   return { right, points };
 }
 // The network's last stop won (and its level's exam, if it closes one): it unlocks and
-// the points join the score.
-export function winChapter(s, c) {
+// the points join the score: the questions' to knowledge, the last game's (`play`) to games.
+export function winChapter(s, c, play = 0) {
   if (c.over !== 'won' || nextChapter(s) !== c.id) return s;
   s.unlocked.push(c.id);
   s.stage = 0;
-  bankPoints(s, c.points);
+  bankPoints(s, play, c.points);
   return s;
 }
 // Lord Lag beaten: the story is over.
@@ -504,7 +512,7 @@ export function winFinal(s, points) {
 }
 // Start the story again from the top, keeping the best score.
 export function restartStory(s) {
-  return Object.assign(s, { unlocked: [], stage: 0, final: false, score: 0 });
+  return Object.assign(s, { unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0 });
 }
 // For testing (the ?dev menu): put the story just before a stop, every network before
 // it already won. `id` null means just before the fight with Lord Lag.
@@ -549,4 +557,63 @@ function shuffle(a, random) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+// ---------------------------------------------------------------- the notebook
+// What the player has learned and where they slipped, kept across restarts: every game
+// and exam tried and how it went, every question ever missed (and whether it was got
+// right later), and the networks won back, whose lessons it collects.
+export function newNotebook() {
+  return { games: {}, exams: {}, misses: {}, won: [] };
+}
+// every question has a stable name, so a miss survives a reload: 'ipcore.2', 'extra.sea.0'
+const QUESTION_KEYS = new Map([
+  ...Object.entries(STORY).flatMap(([id, ch]) => ch.questions.map((q, k) => [q, `${id}.${k}`])),
+  ...Object.entries(EXTRA_QUESTIONS).flatMap(([id, qs]) => qs.map((q, k) => [q, `extra.${id}.${k}`])),
+]);
+const QUESTIONS_BY_KEY = new Map([...QUESTION_KEYS].map(([q, k]) => [k, q]));
+export const questionKey = (q) => QUESTION_KEYS.get(q) ?? null;
+export const questionOf = (key) => QUESTIONS_BY_KEY.get(key) ?? null;
+const tally = (x) => ({ tries: Math.max(0, Math.round(+x?.tries || 0)), wins: Math.max(0, Math.round(+x?.wins || 0)) });
+// Saved notebook, checked: games, exams and questions that don't exist any more are dropped.
+export function loadNotebook(saved, gameIds = []) {
+  const nb = newNotebook();
+  if (!saved || typeof saved !== 'object') return nb;
+  for (const [gid, x] of Object.entries(saved.games ?? {})) if (gameIds.includes(gid)) nb.games[gid] = tally(x);
+  for (const [id, x] of Object.entries(saved.exams ?? {})) if (STORY[id]) nb.exams[id] = tally(x);
+  for (const [key, x] of Object.entries(saved.misses ?? {})) {
+    const q = questionOf(key);
+    if (!q || !x) continue;
+    const picks = (Array.isArray(x.picks) ? x.picks : []).filter((p) => p === null || [1, 2].includes(p));
+    nb.misses[key] = { times: Math.max(1, Math.round(+x.times || 1)), picks: picks.slice(-3), fixed: x.fixed === true };
+  }
+  nb.won = STORY_ORDER.filter((id) => Array.isArray(saved.won) && saved.won.includes(id));
+  return nb;
+}
+// a game played to the end (or given up): won or not
+export function noteGame(nb, gid, won) {
+  const g = nb.games[gid] ??= { tries: 0, wins: 0 };
+  g.tries++; if (won) g.wins++;
+  return nb;
+}
+// a level's exam, named by the network it closes
+export function noteExam(nb, id, won) {
+  const e = nb.exams[id] ??= { tries: 0, wins: 0 };
+  e.tries++; if (won) e.wins++;
+  return nb;
+}
+// one answer: a miss is kept with the answer picked (null: the time ran out); a miss
+// answered right later is marked fixed, but stays in the notebook
+export function noteAnswer(nb, q, right, pick) {
+  const key = questionKey(q);
+  if (!key) return nb;
+  const m = nb.misses[key];
+  if (right) { if (m) m.fixed = true; return nb; }
+  const x = nb.misses[key] ??= { times: 0, picks: [], fixed: false };
+  x.times++; x.picks = [...x.picks, pick].slice(-3); x.fixed = false;
+  return nb;
+}
+export function noteChapter(nb, id) {
+  if (STORY[id] && !nb.won.includes(id)) nb.won = STORY_ORDER.filter((x) => x === id || nb.won.includes(x));
+  return nb;
 }
