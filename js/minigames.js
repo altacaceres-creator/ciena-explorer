@@ -1682,6 +1682,178 @@ const GuardTheGate = {
   },
 };
 
+// ---------------------------------------------------------------- Robot Dive (undersea cables)
+// The anchor cut a cable somewhere along the seabed, in the dark. A ping sends a flash
+// of light down the fibre from the shore; its echo comes back from the cut and marks
+// roughly where it is, more closely with every ping (that is what an OTDR does). Drive
+// the robot there by its headlamp, dodging the glowing jellyfish, before its battery
+// runs out. Three cuts to find.
+const DIVE = { rounds: 3, lives: 3, battery: 26, speed: 0.12, ping: 2, echo: 1.2, hit: 5, see: 0.09, found: 0.025, check: 0.5, bands: [0.12, 0.05, 0.015], robotY: 0.6 };
+const RobotDive = {
+  id: 'dive',
+  name: { plain: 'Robot Dive', eng: 'Robot Dive' },
+  how: {
+    plain: 'Somewhere along the sea floor the cable is cut, buried in the sand where nobody can see it. Press 2 📡 to send a flash of light down the cable: its echo bounces back from the cut and marks 📍 about where it is, closer with every flash. Drive the robot there with ◀ ▶ (press again to stop) or tap where it should go, and stop on the spot: the robot checks the cable under it. Dodge the jellyfish 🪼: they drain the battery. Find three cuts!',
+    eng: 'A fibre break lies somewhere along a buried seabed cable. Press 2 📡 to fire an OTDR pulse from the landing station: the reflection from the break gives its distance 📍, more precisely with each shot. Drive the ROV there with ◀ ▶ (press again to stop) or tap a position, and hold station to inspect the cable below. Avoid the jellyfish 🪼: each hit drains the battery. Locate three faults.',
+  },
+  goal: { plain: 'Find all three cuts before the battery runs out', eng: 'Locate three faults within battery' },
+  laneNames: { plain: ['◀ Left', '📡 Ping', 'Right ▶'], eng: ['◀ Back', '📡 OTDR', 'Ahead ▶'] },
+  start(random = Math.random, opts = {}) {
+    const s = { t: 0, random, rounds: opts.rounds ?? DIVE.rounds, round: 0, lives: DIVE.lives, found: 0, hits: 0, pings: 0, score: 0, fx: [], over: null };
+    RobotDive.newRound(s);
+    return s;
+  },
+  newRound(s) {
+    const r = s.random;
+    s.x = 0.04; s.dir = 0; s.goto = null; s.battery = DIVE.battery; s.cut = 0.32 + r() * 0.6;
+    s.pulse = null; s.mark = null; s.roundPings = 0; s.shield = 0; s.between = 0; s.dwell = 0; s.checking = 0;
+    s.jellies = Array.from({ length: 3 + s.round }, (_, i) => ({ x: 0.2 + (0.72 * (i + r() * 0.6)) / (3 + s.round), ph: r() * 6.28, w: 0.9 + r() * 0.6 }));
+  },
+  jellyY: (j, t) => 0.42 + 0.3 * Math.sin(j.ph + t * j.w),
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.between > 0) { if ((s.between -= dt) <= 0) RobotDive.newRound(s); return; }
+    s.battery -= dt; s.shield = Math.max(0, s.shield - dt);
+    // the robot drives toward a tapped spot, or keeps going the way it was sent
+    if (s.goto != null) {
+      const d = s.goto - s.x;
+      if (Math.abs(d) < 0.006) { s.goto = null; s.dir = 0; } else s.dir = Math.sign(d);
+    }
+    s.x = clamp01(s.x + s.dir * DIVE.speed * dt);
+    if (s.x <= 0 || s.x >= 1) { s.dir = 0; s.goto = null; }
+    // a ping's flash runs down the cable to the cut and back
+    if (s.pulse) {
+      s.pulse.t += dt;
+      if (s.pulse.t >= DIVE.echo) {
+        const band = DIVE.bands[Math.min(DIVE.bands.length - 1, s.roundPings - 1)];
+        s.mark = { x: clamp01(s.cut + (s.random() - 0.5) * band), band };
+        s.pulse = null;
+      }
+    }
+    // jellyfish
+    if (!s.shield) for (const j of s.jellies) {
+      if (Math.abs(j.x - s.x) < 0.045 && Math.abs(RobotDive.jellyY(j, s.t) - DIVE.robotY) < 0.07) {
+        s.battery -= DIVE.hit; s.hits++; s.shield = 1.5; float(s, 1, 'Ouch! 🪼 −battery', false);
+        break;
+      }
+    }
+    // the cable is buried: the robot checks the spot it stops on, and there it is, or not
+    if (s.dir === 0 && s.goto == null) s.dwell += dt; else s.dwell = 0;
+    s.checking = s.dwell > 0.05 ? Math.min(1, s.dwell / DIVE.check) : 0;
+    if (s.dwell >= DIVE.check && s.dwell - dt < DIVE.check && Math.abs(s.x - s.cut) >= DIVE.found) float(s, 1, 'Nothing here…', false);
+    if (s.dwell >= DIVE.check && Math.abs(s.x - s.cut) < DIVE.found) {
+      s.found++; const pts = 100 + Math.round(Math.max(0, s.battery) * 5); s.score += pts;
+      float(s, 1, `Found it! +${pts}`, true);
+      s.dir = 0; s.goto = null; s.dwell = 0;
+      if (s.found >= s.rounds) { s.over = 'won'; return; }
+      s.round++; s.between = 1.6; s.why = 'found';
+      return;
+    }
+    if (s.battery <= 0) {
+      s.lives--; float(s, 1, 'Battery flat! The robot is hauled up', false);
+      if (s.lives <= 0) { s.over = 'lost'; return; }
+      s.between = 1.6; s.why = 'flat';
+    }
+  },
+  press(s, lane) {
+    if (s.over || s.between > 0) return;
+    if (lane >= 10) { s.goto = clamp01((lane - 10) / 100); return; }
+    if (lane === 1) {
+      if (s.pulse) return;
+      s.pulse = { t: 0 }; s.pings++; s.roundPings++; s.battery -= DIVE.ping;
+      return;
+    }
+    const d = lane === 0 ? -1 : 1;
+    s.goto = null;
+    s.dir = s.dir === d ? 0 : d;
+  },
+  lanes(s, words) {
+    const names = RobotDive.laneNames[words];
+    return [s.dir === -1 ? '■ Stop' : names[0], s.pulse ? '📡 …' : names[1], s.dir === 1 ? '■ Stop' : names[2]];
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.hits === 0 && s.lives === DIVE.lives };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You found ${s.found} cut${s.found === 1 ? '' : 's'} on the sea floor with ${s.pings} flash${s.pings === 1 ? '' : 'es'} of light${s.hits ? `, and bumped into ${s.hits} jellyfish on the way` : ', and never touched a jellyfish'}.`
+      : `${s.found} faults located with ${s.pings} OTDR shot${s.pings === 1 ? '' : 's'}; ${s.hits} ROV collision${s.hits === 1 ? '' : 's'}, ${DIVE.lives - s.lives} recovery${DIVE.lives - s.lives === 1 ? '' : 'ies'}.`;
+  },
+  box: (w, h) => ({ x: 14, y: 34, w: w - 28, h: h - 42 }),
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', b = RobotDive.box(w, h), X = (x) => b.x + 24 + (b.w - 48) * x, Y = (y) => b.y + b.h * y;
+    hud(g, w, theme, `${plain ? 'Cut' : 'Fault'} ${Math.min(s.found + 1, s.rounds)} / ${s.rounds} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(DIVE.lives - Math.max(0, s.lives))} · 🔋`, clamp01(s.battery / DIVE.battery), s.score, null);
+    // the deep sea, the seabed and the cable along it
+    const sea = g.createLinearGradient(0, b.y, 0, b.y + b.h);
+    sea.addColorStop(0, '#1b6fa8'); sea.addColorStop(1, '#06233a');
+    g.fillStyle = sea; roundRect(g, b.x, b.y, b.w, b.h, 10); g.fill();
+    g.fillStyle = '#c9a66b'; g.fillRect(b.x, Y(0.9), b.w, b.h * 0.1);
+    const cy = Y(0.86);
+    g.strokeStyle = '#ffc43d'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(X(0) - 20, cy); g.lineTo(X(s.cut) - 3, cy); g.moveTo(X(s.cut) + 3, cy); g.lineTo(X(1) + 20, cy); g.stroke();
+    const rx = X(s.x), ry = Y(DIVE.robotY);
+    // the dark: all but the headlamp's pool of light
+    const light = (b.w - 48) * DIVE.see * 1.6, lx = rx, ly = (ry + cy) / 2;
+    g.save(); roundRect(g, b.x, b.y, b.w, b.h, 10); g.moveTo(lx + light, ly); g.arc(lx, ly, light, 0, Math.PI * 2, true);
+    g.fillStyle = 'rgba(2, 12, 24, 0.88)'; g.fill('evenodd'); g.restore();
+    // the ship up top, and the robot's tether down to it
+    emoji(g, '🚢', X(0.02), b.y + 16, 22);
+    g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X(0.02), b.y + 26); g.quadraticCurveTo((X(0.02) + rx) / 2, ry, rx, ry); g.stroke();
+    const glow = g.createRadialGradient(lx, ly, 0, lx, ly, light);
+    glow.addColorStop(0, 'rgba(255,240,180,0.22)'); glow.addColorStop(1, 'rgba(255,240,180,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(lx, ly, light, 0, Math.PI * 2); g.fill();
+    // the cable is faintly seen all the way, so you know where to look
+    g.strokeStyle = 'rgba(255,196,61,0.25)'; g.lineWidth = 2; g.beginPath(); g.moveTo(X(0), cy); g.lineTo(X(1), cy); g.stroke();
+    // the robot checking the spot under it: a ring that fills
+    if (s.checking) { g.strokeStyle = '#7dffb0'; g.lineWidth = 3; g.beginPath(); g.arc(X(s.x), cy, 12, -Math.PI / 2, -Math.PI / 2 + 6.283 * s.checking); g.stroke(); }
+    if (s.why === 'found' && s.between > 0) emoji(g, '✂', X(s.cut), cy - 14, 18);
+    // the ping's flash running along it, and where its echo says the cut is
+    if (s.pulse) {
+      const k = s.pulse.t / DIVE.echo, at = k < 0.5 ? s.cut * k * 2 : s.cut * (2 - k * 2);
+      g.fillStyle = '#ffffff'; g.shadowColor = '#ffffff'; g.shadowBlur = 16; g.beginPath(); g.arc(X(at), cy, 5, 0, 7); g.fill(); g.shadowBlur = 0;
+    }
+    if (s.mark) {
+      // the echo's guess: a pin, and a bracket on the cable for how sure it is
+      const x0 = X(s.mark.x - s.mark.band / 2), x1 = X(s.mark.x + s.mark.band / 2);
+      g.strokeStyle = '#ffc43d'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(x0, cy - 9); g.lineTo(x0, cy + 9); g.moveTo(x1, cy - 9); g.lineTo(x1, cy + 9); g.moveTo(x0, cy + 9); g.lineTo(x1, cy + 9); g.stroke();
+      emoji(g, '📍', X(s.mark.x), cy - 20, 20);
+    }
+    // the jellyfish glow in the dark
+    for (const j of s.jellies) {
+      const jx = X(j.x), jy = Y(RobotDive.jellyY(j, s.t));
+      const halo = g.createRadialGradient(jx, jy, 0, jx, jy, 22);
+      halo.addColorStop(0, 'rgba(255,140,220,0.45)'); halo.addColorStop(1, 'rgba(255,140,220,0)');
+      g.fillStyle = halo; g.beginPath(); g.arc(jx, jy, 22, 0, Math.PI * 2); g.fill();
+      emoji(g, '🪼', jx, jy, 22);
+    }
+    // the robot: a little yellow submarine with a lamp
+    g.globalAlpha = s.shield ? 0.5 + 0.5 * Math.sin(s.t * 30) : 1;
+    g.fillStyle = '#ffc43d'; roundRect(g, rx - 16, ry - 10, 32, 20, 9); g.fill();
+    g.strokeStyle = '#1d2a44'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#9fd8ff'; g.beginPath(); g.arc(rx + (s.dir < 0 ? -6 : 6), ry - 1, 5, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#1d2a44'; g.fillRect(rx + (s.dir < 0 ? 15 : -21), ry - 5, 6, 10);
+    g.globalAlpha = 1;
+    // the shore and the island at either end
+    g.fillStyle = 'rgba(255,255,255,0.75)'; g.font = `800 10px ${theme.font}`; g.textAlign = 'left';
+    g.fillText(plain ? 'Shore' : 'Landing station', b.x + 6, b.y + b.h - 4);
+    g.textAlign = 'right'; g.fillText(plain ? 'Island' : 'Coherent Isle', b.x + b.w - 6, b.y + b.h - 4);
+    if (s.between > 0 && s.over == null) { g.fillStyle = '#ffffff'; g.font = `800 15px ${theme.font}`; g.textAlign = 'center'; g.fillText(s.why === 'found' ? (plain ? 'Next cut…' : 'Next fault…') : (plain ? 'New robot coming down…' : 'Relaunching the ROV…'), w / 2, Y(0.3)); }
+    floats(g, s, () => [w / 2, Y(0.2)], { ...theme, good: '#7dffb0', bad: '#ff8a94' });
+  },
+  laneAt(x, y, w, h, s) {
+    // a tap in the water sends the robot to that spot
+    const b = RobotDive.box(w, h);
+    if (y < b.y || !s) return null;
+    return 10 + Math.round(clamp01((x - b.x - 24) / (b.w - 48)) * 100);
+  },
+};
+
 // ---------------------------------------------------------------- Level 5: the fight with Lord Lag
 // The last level is a recap of the whole Quest: one round for each level before it, in a
 // game from that level picked at random (so a replay can bring a different one), short
@@ -1690,10 +1862,10 @@ const GuardTheGate = {
 const SHORT = {
   lastmile: { goal: 6 }, tetris: { goal: 8 }, storm: { rounds: 1 },
   fibercut: { goal: 4 }, beat: { seconds: 15 }, firewall: { waves: 2, build: 6 }, race: { first: 2, races: 1, need: 1 },
-  repeaters: { seconds: 10 }, cablelayer: { seconds: 16 },
+  repeaters: { seconds: 10 }, dive: { rounds: 1 }, cablelayer: { seconds: 16 },
   rainbow: { goal: 4 }, mesh: { cuts: 2 },
 };
-const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'cablelayer'], ['rainbow', 'mesh']];
+const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'dive', 'cablelayer'], ['rainbow', 'mesh']];
 const BOSS_TAUNTS = [
   { plain: 'Back to the city, apprentice. Let\'s see if you remember!', eng: 'Round one, the city network. Show me you still remember.' },
   { plain: 'Lucky! Now the towers and the core. Faster!', eng: 'Round two: the towers and the core. Faster this time.' },
@@ -1800,6 +1972,6 @@ export const BOSS = LordLagFight;
 export const MINIGAMES = {
   lastmile: LastMileDash, tetris: PacketTetris, storm: StormChaser,
   fibercut: StopTheFiberCut, beat: KeepTheBeat, firewall: GuardTheGate, race: PacketRace,
-  repeaters: RepeaterRescue, cablelayer: CableLayer,
+  repeaters: RepeaterRescue, dive: RobotDive, cablelayer: CableLayer,
   rainbow: RainbowPacking, mesh: MeshRescue,
 };

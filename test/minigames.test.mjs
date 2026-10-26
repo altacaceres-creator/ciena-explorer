@@ -139,6 +139,15 @@ const robots = {
     if (s.coins < costs[step[1]]) return;
     G.press(s, 10 + step[0]); G.press(s, step[1]);
   },
+  // ping, drive to the mark (waiting for jellyfish to drift by), ping again closer
+  dive: (G, s) => {
+    if (s.between > 0) return;
+    if (!s.mark) { if (!s.pulse) G.press(s, 1); return; }
+    if (Math.abs(s.x - s.mark.x) < 0.01 && !s.pulse && s.mark.band > 0.02) { G.press(s, 1); return; }
+    const ahead = Math.sign(s.mark.x - s.x);
+    const danger = s.jellies.some((j) => (j.x - s.x) * ahead > 0 && Math.abs(j.x - s.x) < 0.09 && Math.abs(G.jellyY(j, s.t) - 0.6) < 0.2);
+    if (danger) { s.goto = null; s.dir = 0; } else if (s.goto !== s.mark.x) G.press(s, 10 + Math.round(s.mark.x * 100));
+  },
   // the first way round that has room
   mesh: (G, s) => {
     if (!s.asking || s.asking.t < 1) return;
@@ -299,4 +308,16 @@ test('Guard the Gate: guards alone let the disguised bots through; a detective s
   assert.equal(c.coins, 3, 'the same tower again does nothing');
   G.press(c, 1);
   assert.deepEqual([c.towers[0].key, c.coins, c.swapped], ['detective', 3 - (4 - 1), 1]);
+});
+
+test('Robot Dive: each ping marks the cut more closely; searching by lamp alone runs the battery down', () => {
+  const G = MINIGAMES.dive;
+  const s = G.start(seeded(5));
+  const bands = [];
+  for (let i = 0; i < 3; i++) { G.press(s, 1); run(G, s, 2); bands.push(s.mark.band); assert.ok(Math.abs(s.mark.x - s.cut) <= s.mark.band / 2 + 1e-9); }
+  assert.deepEqual(bands, [0.12, 0.05, 0.015]);
+  // never pinging: drive slowly back and forth by lamp, and lose to the battery
+  const blind = G.start(seeded(5));
+  run(G, blind, 400, (x) => { if (x.between > 0 || x.dir) return; G.press(x, x.x < 0.5 ? 2 : 0); });
+  assert.ok(blind.found < 3, `found ${blind.found}`);
 });

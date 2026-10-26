@@ -147,7 +147,7 @@ export const STORY = {
   },
 
   submarine: {
-    stages: ['repeaters', 'cablelayer'],
+    stages: ['repeaters', 'dive', 'cablelayer'],
     questions: [
       {
         plain: { q: 'Light gets weaker as it travels thousands of kilometres under the sea. What keeps it strong?', a: ['Boosters on the sea floor every so often, powered through the cable', 'Fish swimming beside the cable', 'Nothing: it is just very bright when it starts'] },
@@ -361,6 +361,21 @@ export const STAGES = {
     lesson: {
       plain: 'Boosters on the sea floor, powered from the shore, keep the light strong, and an island lands more than one cable.',
       eng: 'Powered repeater chains keep the signal up; diverse cables and landings turn a cut into a repair job.',
+    },
+  },
+  dive: {
+    villain: { name: 'The Jellyfish Gang', face: '🪼' },
+    taunt: {
+      plain: 'Blub blub! The cable is cut somewhere down in the dark, and we are everywhere. Good luck finding it before your little robot runs out of power!',
+      eng: 'The break is somewhere on a long, dark seabed, and we drift right across your ROV\'s path. Find it before the battery dies.',
+    },
+    lose: {
+      plain: 'The robot\'s battery ran out three times and the cut is still lost in the dark. The island stays offline.',
+      eng: 'Three ROV dives ended on a flat battery with the fault unlocated; the island remains on its last path.',
+    },
+    lesson: {
+      plain: 'To find a break at the bottom of the sea, engineers send a flash of light down the cable from the shore and time its echo: the longer it takes to come back, the farther away the break is. Then the robot goes straight there.',
+      eng: 'An OTDR fires pulses into the fibre and times the reflection from the break, locating the fault to within metres from the landing station, so the repair ship and its ROV head straight for it.',
     },
   },
   cablelayer: {
