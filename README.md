@@ -169,7 +169,12 @@ make sure it only touches sites and links that exist there.
 
 ## Netlandia Quest: the story mode
 
-The first visit offers a choice: **Play the story** or **Explore freely**. In the
+The first visit offers a choice: a **⚡ Quick run**, a **📖 Full story**, or **Explore
+freely**. The full story plays every stop below, with the level exams (about an hour).
+The quick run is made for a booth (about ten minutes): one game per level, picked at
+random and played in its short version, then a two-question quiz from the level's exam;
+each win lifts the clouds off the whole level, and Lord Lag ends it with two rounds
+replaying games from the run. Each way of playing has its own board. In the
 story the planet starts under cloud. Lord Lag has switched Netlandia off, and each
 network is won back stop by stop, in the order a phone's packets travel: the **city's
 businesses and homes**, the **cell towers**, the **core**. That finishes the packet
@@ -177,7 +182,8 @@ world on side B, and the **undersea cables** appear as a new discovery. Across t
 ocean wait the **metro optical ring** and the **long-haul mesh**.
 
 Every stop is a mini-game on a board in the card, played by touch, click or the keys
-1, 2 and 3, and each opens with the taunt of the villain who holds it. A won stop
+1, 2 and 3, and each opens with the taunt of the villain who holds it: every one of them
+is one of Lord Lag's minions, and the notebook keeps a line-up of the ones beaten. A won stop
 shows **Stop cleared** with the story of your game in numbers and what it means in a
 real network; a network is unlocked when its last stop is won. There are five levels:
 

@@ -1942,6 +1942,7 @@ const FiberSplice = {
     // the splicer's view: a dark screen, two fibres, the cores glowing
     const vw = Math.min(w - 24, 560), vh = h - top - 40, vx = (w - vw) / 2;
     g.fillStyle = '#0d1b2a'; roundRect(g, vx, top, vw, vh, 12); g.fill();
+    g.strokeStyle = theme.muted; g.lineWidth = 1.5; g.stroke();
     const unit = Math.min(26, vh / 9), clad = unit * 3.2, core = unit * 0.9, gap = 10;
     g.strokeStyle = 'rgba(255,255,255,0.18)'; g.setLineDash([5, 6]); g.lineWidth = 1;
     g.beginPath(); g.moveTo(vx + 10, cy); g.lineTo(vx + vw - 10, cy); g.stroke(); g.setLineDash([]);
@@ -2367,6 +2368,9 @@ function floats(g, s, at, theme) {
 // Which chapter plays which game; the rest keep their questions for now.
 // The finale, Level 5.
 export const BOSS = LordLagFight;
+
+// The short versions: Lord Lag's rounds, and the quick run's games.
+export const SHORT_OPTS = SHORT;
 
 // Every game by its id; js/story.js says which network plays which.
 export const MINIGAMES = {

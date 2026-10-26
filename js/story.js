@@ -504,19 +504,46 @@ export function answerPoints(right, seconds) {
 // A challenge won without a single mistake earns a bonus.
 export const FLAWLESS_BONUS = 200;
 
-export function newStory() {
-  // the score is two scores added up: knowledge (questions and exams) and games
-  return { unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0, best: 0 };
+// Two ways to play. The full story plays every stop of every network (about an hour).
+// The quick run, for a booth, plays one game per level, picked at random, in its short
+// version, then a short quiz; each win brings back the level's networks together, and
+// Lord Lag ends it with two rounds from the games just played (about ten minutes).
+export const STORY_MODES = ['quick', 'full'];
+export const QUICK_QUIZ = 2;
+// a quick run's games: one from each level, at random
+export function quickPicks(random = Math.random) {
+  return Object.fromEntries(STORY_LEVELS.filter((l) => !l.boss).map((l) => {
+    const games = l.chapters.flatMap((id) => STORY[id].stages);
+    return [l.n, games[Math.floor(random() * games.length)]];
+  }));
 }
+export function newStory(mode = 'full', random = Math.random) {
+  // the score is two scores added up: knowledge (questions and exams) and games
+  return { mode, picks: mode === 'quick' ? quickPicks(random) : {}, unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0, best: 0 };
+}
+export const isQuick = (s) => s.mode === 'quick';
+// the network that plays a game
+export const ownerOf = (gid) => STORY_ORDER.find((id) => STORY[id].stages.includes(gid)) ?? null;
 // Saved progress, checked: anything unknown or out of order is dropped.
 export function loadStory(saved) {
   const s = newStory();
   if (!saved || typeof saved !== 'object') return s;
+  if (saved.mode === 'quick') {
+    s.mode = 'quick';
+    // a pick has to be one of its own level's games, else a fresh one
+    const fresh = quickPicks();
+    for (const l of STORY_LEVELS.filter((x) => !x.boss)) {
+      const p = saved.picks?.[l.n];
+      s.picks[l.n] = l.chapters.some((id) => STORY[id].stages.includes(p)) ? p : fresh[l.n];
+    }
+  }
   for (const id of Array.isArray(saved.unlocked) ? saved.unlocked : []) {
     if (id === STORY_ORDER[s.unlocked.length]) s.unlocked.push(id); else break;
   }
+  // a quick run brings a level back whole, so a level half won is not won at all
+  if (isQuick(s)) s.unlocked = s.unlocked.filter((id) => levelOf(id).chapters.every((c) => s.unlocked.includes(c)));
   const next = nextChapter(s);
-  s.stage = next && Number.isInteger(saved.stage) && saved.stage > 0 && saved.stage < STORY[next].stages.length ? saved.stage : 0;
+  s.stage = next && Number.isInteger(saved.stage) && saved.stage > 0 && saved.stage < stagesOf(s, next).length ? saved.stage : 0;
   s.final = saved.final === true && s.unlocked.length === STORY_ORDER.length;
   const pts = (x) => (Number.isFinite(x) && x > 0 ? Math.round(x) : 0);
   s.know = pts(saved.know);
@@ -526,9 +553,15 @@ export function loadStory(saved) {
   s.best = Math.max(s.score, pts(saved.best));
   return s;
 }
-export const nextChapter = (s) => STORY_ORDER[s.unlocked.length] ?? null;
+// the network to win back next; in a quick run, the one that plays its level's game
+export function nextChapter(s) {
+  const id = STORY_ORDER[s.unlocked.length] ?? null;
+  return id && isQuick(s) ? ownerOf(s.picks[levelOf(id).n]) : id;
+}
+// a network's stops: all of them, or in a quick run just its level's game
+export const stagesOf = (s, id) => (isQuick(s) ? [s.picks[levelOf(id).n]] : STORY[id].stages);
 // the game to play next in the network being won back
-export const nextStage = (s) => { const id = nextChapter(s); return id ? STORY[id].stages[s.stage] : null; };
+export const nextStage = (s) => { const id = nextChapter(s); return id ? stagesOf(s, id)[s.stage] : null; };
 export const isUnlocked = (s, id) => s.unlocked.includes(id);
 // every network back, and Lord Lag still to beat
 export const bossNext = (s) => !nextChapter(s) && !s.final;
@@ -540,7 +573,7 @@ const bankPoints = (s, play, know = 0) => {
 };
 // A stop cleared that is not the network's last: on to its next game.
 export function winStage(s, id, points) {
-  if (nextChapter(s) !== id || s.stage >= STORY[id].stages.length - 1) return s;
+  if (nextChapter(s) !== id || s.stage >= stagesOf(s, id).length - 1) return s;
   s.stage++;
   bankPoints(s, points);
   return s;
@@ -573,7 +606,9 @@ export function answer(c, pick, seconds) {
 // the points join the score: the questions' to knowledge, the last game's (`play`) to games.
 export function winChapter(s, c, play = 0) {
   if (c.over !== 'won' || nextChapter(s) !== c.id) return s;
-  s.unlocked.push(c.id);
+  // a quick run brings back the whole level at once
+  if (isQuick(s)) s.unlocked.push(...levelOf(c.id).chapters.filter((id) => !s.unlocked.includes(id)));
+  else s.unlocked.push(c.id);
   s.stage = 0;
   bankPoints(s, play, c.points);
   return s;
@@ -586,15 +621,22 @@ export function winFinal(s, points) {
   return s;
 }
 // Start the story again from the top, keeping the best score.
-export function restartStory(s) {
-  return Object.assign(s, { unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0 });
+export function restartStory(s, mode = s.mode, random = Math.random) {
+  return Object.assign(s, { mode, picks: mode === 'quick' ? quickPicks(random) : {}, unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0 });
+}
+// the quiz that closes a level in a quick run: a couple of its exam's questions, at random
+export function quickQuiz(id, random = Math.random) {
+  const all = [...examAt(levelOf(id).chapters.at(-1))];
+  for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+  return all.slice(0, QUICK_QUIZ);
 }
 // For testing (the ?dev menu): put the story just before a stop, every network before
 // it already won. `id` null means just before the fight with Lord Lag.
 export function jumpTo(s, id, stage = 0) {
   const k = id ? STORY_ORDER.indexOf(id) : STORY_ORDER.length;
   if (k < 0) return s;
-  return Object.assign(s, { unlocked: STORY_ORDER.slice(0, k), stage: id ? Math.max(0, Math.min(stage, STORY[id].stages.length - 1)) : 0, final: false });
+  // a jump is into the full story, where every stop has its place
+  return Object.assign(s, { mode: 'full', picks: {}, unlocked: STORY_ORDER.slice(0, k), stage: id ? Math.max(0, Math.min(stage, STORY[id].stages.length - 1)) : 0, final: false });
 }
 
 // What the story lets slip about the next network before you get there: a riddle,

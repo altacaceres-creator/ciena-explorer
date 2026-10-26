@@ -343,3 +343,12 @@ even. Levels 2, 3 and 4 now have four stops each; Level 1 keeps three.
 
 Level 3 now tells a repair story: the anchor cuts the cable, the robot finds the cut, the ship splices
 it, and a new cable is laid.
+
+## Two ways to play, and Lord Lag's minions
+
+- **⚡ Quick run** (about ten minutes, for a booth): one game per level, picked at random and played in its
+  short version, then a two-question quiz from the level's exam; each win brings back the whole level.
+  Lord Lag ends it with two rounds replaying games from the run. It has its own board.
+- **📖 Full story** (about an hour): every stop, every exam, and Lord Lag's four rounds.
+- **The minions**: every villain is introduced as one of Lord Lag's minions (“😈 Lord Lag sends his
+  minion”), and the notebook keeps a line-up: beaten minions by face and name, the rest as ❓.
