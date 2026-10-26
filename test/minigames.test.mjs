@@ -154,6 +154,14 @@ const robots = {
     if (Math.abs(s.o) < 0.12) G.press(s, 1);
     else { G.press(s, s.o > 0 ? 0 : 2); s.nextNudge = s.t + 0.12; }
   },
+  // repeat what was shown
+  memory: (G, s) => { if (s.phase === 'input' && s.wait > 0.3) G.press(s, s.seq[s.pos]); },
+  // turn each switch on the planned path until it is right, one turn every so often
+  lightpath: (G, s) => {
+    if (s.between > 0 || (s.nextTurn ?? 0) > s.t) return;
+    const i = s.pz.tiles.findIndex((tl, k) => tl.path && (tl.kind === 'straight' ? tl.rot % 2 !== s.pz.solved[k] % 2 : tl.rot !== s.pz.solved[k]));
+    if (i >= 0) { G.press(s, 10 + i); s.nextTurn = s.t + 0.25; }
+  },
   // the first way round that has room
   mesh: (G, s) => {
     if (!s.asking || s.asking.t < 1) return;
@@ -345,4 +353,36 @@ test('Fiber Splice: an offset core loses light; too far off must be redone; the 
   assert.equal(b.over, 'lost'); assert.equal(b.why, 'budget');
   // nudges move the fibre
   const n = G.start(seeded(2)); n.o = 0; G.press(n, 0); G.press(n, 0); assert.ok(Math.abs(n.o + 0.32) < 1e-9);
+});
+
+test('Colour Memory: the pattern grows a colour a round; a wrong colour shows the same pattern again', () => {
+  const G = MINIGAMES.memory;
+  const s = G.start(seeded(6));
+  const at = (phase) => { for (let i = 0; i < 2000 && s.phase !== phase && !s.over; i++) G.tick(s, 1 / 60); };
+  at('input');
+  const first = [...s.seq];
+  assert.equal(first.length, 3);
+  G.press(s, (s.seq[0] + 1) % 3);
+  assert.deepEqual([s.lives, s.phase], [2, 'pause']);
+  at('input');
+  assert.deepEqual(s.seq, first, 'the same pattern again');
+  for (const c of first) G.press(s, c);
+  assert.equal(s.seq.length, 4, 'one colour more');
+  assert.deepEqual(s.seq.slice(0, 3), first);
+});
+
+test('Light Path: every puzzle can be solved, the light stops at the first wrong switch, and four turns come back round', () => {
+  const G = MINIGAMES.lightpath;
+  for (let seed = 1; seed <= 30; seed++) {
+    const s = G.start(seeded(seed));
+    assert.equal(s.trace.done, false, 'never solved from the start');
+    for (let k = 0; k < s.pz.tiles.length; k++) if (s.pz.tiles[k].path) s.pz.tiles[k].rot = s.pz.solved[k];
+    G.press(s, 10 + s.pz.tiles.findIndex((tl) => tl.path)); for (let n = 0; n < 3; n++) G.press(s, 1);   // a full turn of one switch
+    assert.equal(s.trace.done, true, `seed ${seed}`);
+  }
+  const s = G.start(seeded(4));
+  const before = s.pz.tiles.map((tl) => tl.rot);
+  G.press(s, 10); for (let n = 0; n < 3; n++) G.press(s, 1);
+  assert.deepEqual(s.pz.tiles.map((tl) => tl.rot), before);
+  assert.equal(s.turns, 4);
 });

@@ -1980,6 +1980,280 @@ const FiberSplice = {
   },
 };
 
+// ---------------------------------------------------------------- Colour Memory (metro optical ring)
+// The hub sends a test pattern down the fibre, one colour at a time: each colour is its
+// own channel. Send the same pattern back, so both ends agree which colour goes where.
+// Every round adds a colour, and from the third the pattern plays faster.
+const MEM = { rounds: 5, start: 3, lives: 3, wait: 6, show: [0.75, 0.75, 0.6, 0.55, 0.5], gap: 0.22, pause: 1.1 };
+const MEM_COLOURS = [
+  { key: 'red', hex: '#ff4d6d', plain: 'Red', eng: 'λ1 red' },
+  { key: 'green', hex: '#2ecc71', plain: 'Green', eng: 'λ2 green' },
+  { key: 'blue', hex: '#3d8bff', plain: 'Blue', eng: 'λ3 blue' },
+];
+const ColourMemory = {
+  id: 'memory',
+  name: { plain: 'Colour Memory', eng: 'Channel Memory' },
+  how: {
+    plain: 'The hub sends a pattern of colours down the light ring, one at a time: each colour is its own channel. Watch it, then send the same colours back in the same order with 1 🔴, 2 🟢, 3 🔵 (or tap the pads). Every round adds one colour, and it gets faster!',
+    eng: 'The hub transmits a test sequence across the ring, one wavelength at a time. Echo it back in order with 1 🔴, 2 🟢, 3 🔵 (or tap the pads) so both ends agree on the channel plan. Each round adds a channel, and the sequence speeds up.',
+  },
+  goal: { plain: 'Repeat five patterns of colours', eng: 'Echo five channel sequences' },
+  laneNames: { plain: MEM_COLOURS.map((c) => c.plain), eng: MEM_COLOURS.map((c) => c.eng) },
+  start(random = Math.random, opts = {}) {
+    const seq = Array.from({ length: MEM.start }, () => Math.floor(random() * 3));
+    return { t: 0, random, rounds: opts.rounds ?? MEM.rounds, round: 0, seq, phase: 'pause', pt: 0.8, step: 0, pos: 0, wait: 0, lit: null, pulses: [], lives: MEM.lives, right: 0, wrong: 0, timeouts: 0, score: 0, fx: [], over: null };
+  },
+  speed: (s) => MEM.show[Math.min(MEM.show.length - 1, s.round)],
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    for (const p of s.pulses) p.k += dt / 0.9;
+    s.pulses = s.pulses.filter((p) => p.k < 1);
+    if (s.lit) { s.lit.t -= dt; if (s.lit.t <= 0) s.lit = null; }
+    if (s.phase === 'pause') {
+      if ((s.pt -= dt) <= 0) { s.phase = 'show'; s.step = 0; s.pt = 0; }
+    } else if (s.phase === 'show') {
+      // one colour at a time, sent from the hub across the ring
+      if ((s.pt -= dt) <= 0) {
+        if (s.step >= s.seq.length) { s.phase = 'input'; s.pos = 0; s.wait = 0; return; }
+        const c = s.seq[s.step++];
+        s.lit = { c, t: ColourMemory.speed(s) }; s.pulses.push({ c, k: 0, back: false });
+        s.pt = ColourMemory.speed(s) + MEM.gap;
+      }
+    } else if (s.phase === 'input') {
+      if ((s.wait += dt) > MEM.wait) { s.timeouts++; ColourMemory.miss(s, 'Too slow! The channel timed out'); }
+    }
+  },
+  miss(s, why) {
+    s.lives--; s.wrong++; float(s, 1, why, false);
+    if (s.lives <= 0) { s.over = 'lost'; return; }
+    s.phase = 'pause'; s.pt = MEM.pause;           // the same pattern again
+  },
+  press(s, lane) {
+    if (s.over || s.phase !== 'input') return;
+    if (lane >= 10) lane -= 10;
+    if (lane < 0 || lane > 2) return;
+    s.lit = { c: lane, t: 0.25 }; s.pulses.push({ c: lane, k: 0, back: true }); s.wait = 0;
+    if (lane !== s.seq[s.pos]) { ColourMemory.miss(s, `Wrong colour! That was ${MEM_COLOURS[s.seq[s.pos]].plain.toLowerCase()}`); return; }
+    s.pos++; s.right++; s.score += 20;
+    if (s.pos < s.seq.length) return;
+    s.round++; s.score += 50; float(s, 1, `Pattern matched! +${20 * s.seq.length + 50}`, true);
+    if (s.round >= s.rounds) { s.over = 'won'; return; }
+    s.seq.push(Math.floor(s.random() * 3));
+    s.phase = 'pause'; s.pt = MEM.pause;
+  },
+  lanes(s, words) { return MEM_COLOURS.map((c) => (s.phase === 'input' ? c[words] : '…')); },
+  laneColors: () => MEM_COLOURS.map((c) => c.hex),
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.wrong === 0 };
+  },
+  summary(s, words) {
+    const longest = s.seq.length - (s.over === 'won' ? 0 : 1);
+    return words === 'plain'
+      ? `You sent back ${s.right} colours in the right order, up to a pattern ${longest} colours long${s.wrong ? `, and mixed ${s.wrong} up along the way` : ', without a single mix-up'}.`
+      : `${s.right} wavelengths echoed in order; longest sequence ${longest}; ${s.wrong} mismatch${s.wrong === 1 ? '' : 'es'} (${s.timeouts} timed out).`;
+  },
+  pads(w, h) {
+    const top = 34, padY = top + (h - top) * 0.58, padH = h - padY - 10, padW = (w - 40) / 3;
+    return { padY, padH, padW };
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', top = 34;
+    hud(g, w, theme, `${plain ? 'Pattern' : 'Sequence'} ${Math.min(s.round + 1, s.rounds)} / ${s.rounds} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(MEM.lives - Math.max(0, s.lives))}`, s.phase === 'input' ? 1 - s.wait / MEM.wait : s.round / s.rounds, s.score, null);
+    // the fibre between the hub and the data center, with the colours running along it
+    const fy = top + (h - top) * 0.3, x0 = 56, x1 = w - 56;
+    g.strokeStyle = theme.well; g.lineWidth = 14; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, fy); g.lineTo(x1, fy); g.stroke();
+    g.strokeStyle = theme.muted; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, fy); g.lineTo(x1, fy); g.stroke(); g.lineCap = 'butt';
+    for (const p of s.pulses) {
+      const x = p.back ? x1 - (x1 - x0) * p.k : x0 + (x1 - x0) * p.k, c = MEM_COLOURS[p.c].hex;
+      g.fillStyle = c; g.shadowColor = c; g.shadowBlur = 18; g.beginPath(); g.ellipse(x, fy, 18, 7, 0, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+    }
+    emoji(g, '📡', x0 - 24, fy, 26); emoji(g, '🏢', x1 + 24, fy, 26);
+    g.fillStyle = theme.muted; g.font = `800 10px ${theme.font}`; g.textAlign = 'center';
+    g.fillText(plain ? 'Hub' : 'Hub ROADM', x0 - 24, fy + 28); g.fillText(plain ? 'Data center' : 'DC ROADM', x1 + 24, fy + 28);
+    // what to do now
+    g.fillStyle = theme.ink; g.font = `800 14px ${theme.font}`;
+    const say = s.phase === 'show' ? (plain ? '👀 Watch the colours…' : '👀 Receiving sequence…') : s.phase === 'input' ? (plain ? `Your turn: ${s.pos} / ${s.seq.length}` : `Echo it: ${s.pos} / ${s.seq.length}`) : (plain ? 'Get ready…' : 'Stand by…');
+    g.fillText(say, w / 2, fy + 52);
+    // the progress dots for this pattern
+    s.seq.forEach((c, i) => {
+      const x = w / 2 + (i - (s.seq.length - 1) / 2) * 18, y = fy + 70;
+      g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2);
+      g.fillStyle = s.phase === 'input' && i < s.pos ? MEM_COLOURS[c].hex : theme.well; g.fill();
+    });
+    // the three pads, lit when shown or pressed
+    const { padY, padH, padW } = ColourMemory.pads(w, h);
+    MEM_COLOURS.forEach((c, i) => {
+      const x = 20 + i * padW, on = s.lit?.c === i;
+      g.fillStyle = c.hex; g.globalAlpha = on ? 1 : s.phase === 'input' ? 0.55 : 0.3;
+      if (on) { g.shadowColor = c.hex; g.shadowBlur = 24; }
+      roundRect(g, x + 6, padY, padW - 12, padH, 16); g.fill(); g.shadowBlur = 0; g.globalAlpha = 1;
+      g.fillStyle = '#ffffff'; g.font = `800 ${Math.min(18, padH / 3)}px ${theme.font}`; g.textAlign = 'center';
+      g.fillText(c[words], x + padW / 2, padY + padH / 2 + 6);
+    });
+    floats(g, s, () => [w / 2, fy - 24], theme);
+  },
+  laneAt(x, y, w, h) {
+    const { padY, padW } = ColourMemory.pads(w, h);
+    if (y < padY - 10) return null;
+    return 10 + Math.max(0, Math.min(2, Math.floor((x - 20) / padW)));
+  },
+};
+
+// ---------------------------------------------------------------- Light Path (long-haul mesh)
+// Professor Prism has scrambled the light switches between Prismfield and Spectraville.
+// Each tile is a switch with a straight or a bent path through it; tap one to turn it.
+// The light runs live from the source as far as the switches let it: set every one on
+// the way and it reaches the far city. Three puzzles, each bigger, each against a clock.
+const LPATH = { lives: 3, sizes: [[4, 3], [5, 3], [6, 4]], times: [45, 55, 70], next: 1.4 };
+const LP_DIRS = [[-1, 0], [0, 1], [1, 0], [0, -1]];          // N, E, S, W as [row, col]
+const lpOpen = (tile) => (tile.kind === 'straight' ? [1, 3] : [0, 1]).map((d) => (d + tile.rot) % 4);
+// the turn of a straight or bent tile that opens exactly these two sides
+function lpFit(kind, a, b) {
+  for (let r = 0; r < 4; r++) { const o = lpOpen({ kind, rot: r }); if (o.includes(a) && o.includes(b)) return r; }
+  return null;
+}
+// a puzzle: a path from the left edge to the right one, column by column, with
+// the rest of the grid filled in, then every switch turned at random
+function lpPuzzle(random, cols, rows) {
+  const a = Math.floor(random() * rows), b = Math.floor(random() * rows);
+  const tiles = Array.from({ length: rows * cols }, () => ({ kind: random() < 0.5 ? 'straight' : 'corner', rot: 0, path: false }));
+  const put = (r, c, from, to) => { const kind = (from + 2) % 4 === to ? 'straight' : 'corner'; tiles[r * cols + c] = { kind, rot: lpFit(kind, from, to), path: true }; };
+  let y = a;
+  for (let c = 0; c < cols; c++) {
+    const to = c === cols - 1 ? b : Math.floor(random() * rows);
+    if (to === y) put(y, c, 3, 1);
+    else {
+      const d = to > y ? 2 : 0;
+      put(y, c, 3, d);
+      for (let r = y + (to > y ? 1 : -1); r !== to; r += to > y ? 1 : -1) put(r, c, (d + 2) % 4, d);
+      put(to, c, (d + 2) % 4, 1);
+      y = to;
+    }
+  }
+  const solved = tiles.map((tl) => tl.rot);
+  for (const tl of tiles) tl.rot = Math.floor(random() * 4);
+  const pz = { cols, rows, a, b, tiles, solved };
+  if (lpTrace(pz).done) tiles.find((tl) => tl.path).rot = (tiles.find((tl) => tl.path).rot + 1) % 4;
+  return pz;
+}
+// follow the light from the source: the tiles it lights, and whether it reaches the far side
+function lpTrace(pz) {
+  const lit = [];
+  let r = pz.a, c = 0, from = 3;
+  for (let n = 0; n < pz.cols * pz.rows + 2; n++) {
+    if (r < 0 || r >= pz.rows) return { lit, done: false };
+    if (c >= pz.cols) return { lit, done: r === pz.b && from === 3 };
+    const i = r * pz.cols + c, o = lpOpen(pz.tiles[i]);
+    if (!o.includes(from) || lit.includes(i)) return { lit, done: false };
+    lit.push(i);
+    const out = o.find((d) => d !== from);
+    r += LP_DIRS[out][0]; c += LP_DIRS[out][1]; from = (out + 2) % 4;
+    if (c < 0) return { lit, done: false };
+  }
+  return { lit, done: false };
+}
+const LightPath = {
+  id: 'lightpath',
+  name: { plain: 'Light Path', eng: 'Light Path' },
+  how: {
+    plain: 'Professor Prism has scrambled the light switches between two cities. Each square is a switch with a straight or a bent road for the light: tap it to turn it (or pick one with 1 ◀ and 3 ▶, and turn it with 2 ⟳). The light shines as far as the switches let it, so you can see where it stops. Get it all the way across, three times!',
+    eng: 'The ROADM cross-connects between Prismfield and Spectraville were scrambled. Each tile is a switch with an express or a bent path: tap to rotate it (or select with 1 ◀ / 3 ▶ and rotate with 2 ⟳). The light propagates live as far as the configuration allows. Restore three end-to-end light paths.',
+  },
+  goal: { plain: 'Light the way across, three times', eng: 'Restore three end-to-end light paths' },
+  laneNames: { plain: ['◀ Previous', '⟳ Turn', 'Next ▶'], eng: ['◀ Prev', '⟳ Rotate', 'Next ▶'] },
+  start(random = Math.random, opts = {}) {
+    const s = { t: 0, random, rounds: opts.rounds ?? LPATH.sizes.length, round: 0, lives: LPATH.lives, turns: 0, solvedN: 0, between: 0, score: 0, fx: [], over: null };
+    LightPath.newPuzzle(s);
+    return s;
+  },
+  newPuzzle(s) {
+    const [cols, rows] = LPATH.sizes[Math.min(s.round, LPATH.sizes.length - 1)];
+    s.pz = lpPuzzle(s.random, cols, rows); s.time = LPATH.times[Math.min(s.round, LPATH.times.length - 1)]; s.sel = 0; s.trace = lpTrace(s.pz);
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.between > 0) {
+      if ((s.between -= dt) <= 0) { if (s.solvedN >= s.rounds) s.over = 'won'; else LightPath.newPuzzle(s); }
+      return;
+    }
+    if ((s.time -= dt) <= 0) {
+      s.lives--; float(s, 1, 'Out of time! A new set of switches…', false);
+      if (s.lives <= 0) { s.over = 'lost'; return; }
+      s.between = LPATH.next;
+    }
+  },
+  press(s, lane) {
+    if (s.over || s.between > 0) return;
+    const n = s.pz.tiles.length;
+    if (lane >= 10) { const i = lane - 10; if (i >= n) return; s.sel = i; lane = 1; }
+    if (lane === 0) { s.sel = (s.sel + n - 1) % n; return; }
+    if (lane === 2) { s.sel = (s.sel + 1) % n; return; }
+    const tile = s.pz.tiles[s.sel];
+    tile.rot = (tile.rot + 1) % 4; s.turns++;
+    s.trace = lpTrace(s.pz);
+    if (s.trace.done) {
+      s.solvedN++; s.round++;
+      const pts = 120 + Math.round(Math.max(0, s.time)) * 3; s.score += pts;
+      float(s, 1, `The light is through! +${pts}`, true);
+      s.between = LPATH.next;
+    }
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.lives === LPATH.lives };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You set ${s.solvedN} light path${s.solvedN === 1 ? '' : 's'} across the country, turning switches ${s.turns} times${s.lives < LPATH.lives ? `, and ran out of time ${LPATH.lives - s.lives} time${LPATH.lives - s.lives === 1 ? '' : 's'}` : ', always in time'}.`
+      : `${s.solvedN} end-to-end light paths restored with ${s.turns} cross-connect changes; ${LPATH.lives - s.lives} timed out.`;
+  },
+  layout(s, w, h) {
+    const top = 40, { cols, rows } = s.pz, side = Math.min((w - 110) / cols, (h - top - 16) / rows);
+    return { side, x0: (w - side * cols) / 2, y0: top + (h - top - 8 - side * rows) / 2 };
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain';
+    hud(g, w, theme, `${plain ? 'Puzzle' : 'Path'} ${Math.min(s.round + 1, s.rounds)} / ${s.rounds} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(LPATH.lives - Math.max(0, s.lives))}`, clamp01(s.time / LPATH.times[Math.min(s.round, LPATH.times.length - 1)]), s.score, s.between > 0 ? null : s.time);
+    const { side, x0, y0 } = LightPath.layout(s, w, h), pz = s.pz, lit = new Set(s.trace.lit), light = '#ffd166';
+    const C = (r, c) => [x0 + c * side + side / 2, y0 + r * side + side / 2];
+    // the two cities at either end
+    const [ax, ay] = C(pz.a, 0), [bx, by] = C(pz.b, pz.cols - 1);
+    emoji(g, '🔦', x0 - 30, ay, 24); emoji(g, s.trace.done ? '🌟' : '🏙', x0 + side * pz.cols + 30, by, 24);
+    g.fillStyle = theme.muted; g.font = `800 10px ${theme.font}`; g.textAlign = 'center';
+    g.fillText('Prismfield', x0 - 30, ay + 26); g.fillText('Spectraville', x0 + side * pz.cols + 30, by + 26);
+    g.strokeStyle = light; g.lineWidth = 6; g.beginPath(); g.moveTo(x0 - 14, ay); g.lineTo(x0, ay); g.stroke();
+    if (s.trace.done) { g.beginPath(); g.moveTo(x0 + side * pz.cols, by); g.lineTo(x0 + side * pz.cols + 14, by); g.stroke(); }
+    pz.tiles.forEach((tile, i) => {
+      const r = Math.floor(i / pz.cols), c = i % pz.cols, [cx, cy] = C(r, c), on = lit.has(i);
+      g.fillStyle = on ? 'rgba(255,209,102,0.16)' : theme.well; roundRect(g, cx - side / 2 + 3, cy - side / 2 + 3, side - 6, side - 6, 10); g.fill();
+      g.strokeStyle = i === s.sel ? theme.accent : theme.paper; g.lineWidth = i === s.sel ? 3 : 1.5; g.stroke();
+      // the road through this switch: grey, or glowing where the light runs
+      g.strokeStyle = on ? light : theme.muted; g.lineWidth = Math.max(5, side * 0.14); g.lineCap = 'round';
+      if (on) { g.shadowColor = light; g.shadowBlur = 14; }
+      g.beginPath();
+      for (const d of lpOpen(tile)) { g.moveTo(cx, cy); g.lineTo(cx + LP_DIRS[d][1] * side / 2, cy + LP_DIRS[d][0] * side / 2); }
+      g.stroke(); g.shadowBlur = 0; g.lineCap = 'butt';
+      g.fillStyle = on ? light : theme.ink; g.beginPath(); g.arc(cx, cy, Math.max(4, side * 0.08), 0, Math.PI * 2); g.fill();
+    });
+    floats(g, s, () => [w / 2, y0 - 4], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    if (!s?.pz) return null;
+    const { side, x0, y0 } = LightPath.layout(s, w, h), c = Math.floor((x - x0) / side), r = Math.floor((y - y0) / side);
+    if (c < 0 || r < 0 || c >= s.pz.cols || r >= s.pz.rows) return null;
+    return 10 + r * s.pz.cols + c;
+  },
+};
+
 // ---------------------------------------------------------------- Level 5: the fight with Lord Lag
 // The last level is a recap of the whole Quest: one round for each level before it, in a
 // game from that level picked at random (so a replay can bring a different one), short
@@ -1989,9 +2263,9 @@ const SHORT = {
   lastmile: { goal: 6 }, tetris: { goal: 8 }, storm: { rounds: 1 },
   fibercut: { goal: 4 }, beat: { seconds: 15 }, firewall: { waves: 2, build: 6 }, race: { first: 2, races: 1, need: 1 },
   repeaters: { seconds: 10 }, dive: { rounds: 1 }, splice: { fibres: 2, time: 35 }, cablelayer: { seconds: 16 },
-  rainbow: { goal: 4 }, mesh: { cuts: 2 },
+  memory: { rounds: 2 }, rainbow: { goal: 4 }, lightpath: { rounds: 1 }, mesh: { cuts: 2 },
 };
-const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'dive', 'splice', 'cablelayer'], ['rainbow', 'mesh']];
+const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'dive', 'splice', 'cablelayer'], ['memory', 'rainbow', 'lightpath', 'mesh']];
 const BOSS_TAUNTS = [
   { plain: 'Back to the city, apprentice. Let\'s see if you remember!', eng: 'Round one, the city network. Show me you still remember.' },
   { plain: 'Lucky! Now the towers and the core. Faster!', eng: 'Round two: the towers and the core. Faster this time.' },
@@ -2099,5 +2373,5 @@ export const MINIGAMES = {
   lastmile: LastMileDash, tetris: PacketTetris, storm: StormChaser,
   fibercut: StopTheFiberCut, beat: KeepTheBeat, firewall: GuardTheGate, race: PacketRace,
   repeaters: RepeaterRescue, dive: RobotDive, splice: FiberSplice, cablelayer: CableLayer,
-  rainbow: RainbowPacking, mesh: MeshRescue,
+  memory: ColourMemory, rainbow: RainbowPacking, lightpath: LightPath, mesh: MeshRescue,
 };

@@ -178,7 +178,7 @@ export const STORY = {
   },
 
   metro: {
-    stages: ['rainbow'],
+    stages: ['memory', 'rainbow'],
     questions: [
       {
         plain: { q: 'One glass fibre in Lumen City carries many conversations at once. How?', a: ['Each one travels in its own colour of light', 'They take turns, one per day', 'The fibre is split into thousands of tiny tubes'] },
@@ -209,7 +209,7 @@ export const STORY = {
   },
 
   longhaul: {
-    stages: ['mesh'],
+    stages: ['lightpath', 'mesh'],
     questions: [
       {
         plain: { q: 'A storm cuts three long fibres one after another. How does the light highway keep the towns connected?', a: ['It finds a new road for each cut, because the roads form a web, not a line', 'It closes the highway until the storm ends', 'It squeezes everything onto one road, even when it is full'] },
@@ -408,6 +408,21 @@ export const STAGES = {
       eng: 'A marine route survey keeps the lay off hazards and trawling grounds, with burial and armour where anchors could reach.',
     },
   },
+  memory: {
+    villain: { name: 'The Smudger', face: '🦝' },
+    taunt: {
+      plain: 'Hee hee! I smudged all the colours on the light ring. Now nobody knows which colour goes where. Can you remember them? I bet you can\'t!',
+      eng: 'I scrambled the channel plan on the ring. Neither end knows which wavelength carries what. Re-learn it, if you can keep up.',
+    },
+    lose: {
+      plain: 'The colours got mixed up, and the films went to the bank while the bank\'s money went to the cinema. The Smudger giggles.',
+      eng: 'Channel mismatch: services dropped on the wrong ports at the far end. The ring is misdelivering traffic.',
+    },
+    lesson: {
+      plain: 'One fibre carries many colours of light at the same time, and each colour is a separate channel, like lanes on a road. Both ends must agree which colour is which, so each message reaches the right place.',
+      eng: 'DWDM carries each service on its own wavelength; ROADMs add, drop or pass each one by colour, so the channel plan must match at every node or traffic lands on the wrong port.',
+    },
+  },
   rainbow: {
     villain: { name: 'The Spectrum Hog', face: '🐷' },
     taunt: {
@@ -421,6 +436,21 @@ export const STAGES = {
     lesson: {
       plain: 'Each link gets its own colours of light, the same all the way along, and packing them tight leaves room for more.',
       eng: 'Wavelength continuity end to end, and a well-packed spectrum, let the ring grow without new fibre.',
+    },
+  },
+  lightpath: {
+    villain: { name: 'Professor Prism', face: '🔮' },
+    taunt: {
+      plain: 'Ah-ha! I have turned every light switch between Prismfield and Spectraville the wrong way. The light goes round in circles and nowhere at all!',
+      eng: 'Every cross-connect between Prismfield and Spectraville has been scrambled. Your wavelengths now terminate in the middle of nowhere.',
+    },
+    lose: {
+      plain: 'The light never reached Spectraville, and the far city stays dark. Professor Prism takes a bow.',
+      eng: 'No end-to-end light path was restored in time; the long-haul services stay down.',
+    },
+    lesson: {
+      plain: 'At each crossroads of the light highway, a switch can send each colour straight on or round a bend, with no need to turn it into electricity first. The light only gets through if every switch on the way is set right, with no gaps.',
+      eng: 'Each ROADM degree can express or drop each wavelength, and CDC ROADMs can steer any colour any way under software control. A light path works only when every cross-connect from end to end is set consistently.',
     },
   },
   mesh: {
