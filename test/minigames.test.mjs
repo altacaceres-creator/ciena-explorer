@@ -247,7 +247,7 @@ test('Level 5, the fight with Lord Lag: a round from each level, in any game of 
     });
     return s;
   };
-  for (const picks of [['tetris', 'race', 'repeaters', 'mesh'], ['lastmile', 'beat', 'cablelayer', 'rainbow'], ['storm', 'fibercut', 'repeaters', 'mesh']]) {
+  for (const picks of [['tetris', 'race', 'repeaters', 'mesh'], ['lastmile', 'beat', 'cablelayer', 'rainbow'], ['storm', 'fibercut', 'repeaters', 'mesh'], ['tetris', 'firewall', 'dive', 'memory'], ['storm', 'firewall', 'splice', 'lightpath']]) {
     const s = play(picks);
     assert.equal(BOSS.result(s).won, true, `${picks.join(' ')}: round ${s.round}`);
     assert.equal(s.results.length, 4);

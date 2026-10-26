@@ -241,7 +241,7 @@ win or lose, so the levels can be built and reviewed one PR at a time.
 
 ## Built so far: five levels
 
-Every mini-game from the route above is built, ten in all, and each one is a stop with its own villain.
+Every mini-game from the route above is built, and five more since (fifteen in all), and each one is a stop with its own villain.
 The networks are grouped into five levels; the first four close with a final exam, the fifth is the fight
 with Lord Lag.
 
@@ -249,10 +249,10 @@ with Lord Lag.
 |---|---|---|---|
 | 1 · The city | Metro aggregation | Last Mile Dash (the Buffer Gremlin 👾), Packet Tetris (the Elephant Flows 🐘), Storm Chaser (the Broadcast Banshee 📢) | final exam |
 | 2 · The towers and the core | 5G mobile xhaul | Stop the Fiber Cut (Backhoe Bob 🚜), Keep the Beat (the Jitterbugs 🐞) | |
-| | IP/MPLS core | Packet Race (Lord Lag) | final exam |
-| 3 · Under the sea | Submarine | Repeater Rescue (the Anchor Dragger ⚓), Cable Layer (the Kraken 🦑) | final exam |
-| 4 · The light | Metro optical | Rainbow Packing (the Spectrum Hog 🐷) | |
-| | Long-haul | Mesh Rescue (Backhoe Bob's crew ⛈) | final exam |
+| | IP/MPLS core | Guard the Gate (the Botnet 🤖), Packet Race (Lord Lag) | final exam |
+| 3 · Under the sea | Submarine | Repeater Rescue (the Anchor Dragger ⚓), Robot Dive (the Jellyfish Gang 🪼), Fiber Splice (the Big Swell 🌊), Cable Layer (the Kraken 🦑) | final exam |
+| 4 · The light | Metro optical | Colour Memory (the Smudger 🦝), Rainbow Packing (the Spectrum Hog 🐷) | |
+| | Long-haul | Light Path (Professor Prism 🔮), Mesh Rescue (Backhoe Bob's crew ⛈) | final exam |
 | 5 · The final fight | | Lord Lag 😈 | the end |
 
 - **Stops:** a network can have more than one game. Each stop opens with its villain's taunt; a win shows
@@ -323,3 +323,23 @@ or a test even if they passed after”.
 - **Sounds**: little synthesized blips and jingles, no audio files; ☰ turns them off.
 - **Checks on GitHub**: the tests run on every pull request, and `dist/netlandia.html` must be rebuilt
   (it now also carries the phone viewport, so the single file lays out on a phone).
+
+## More styles: five more games
+
+From the playtests: a tower defence (“tower defense style”), and other kinds of game so the levels stay
+even. Levels 2, 3 and 4 now have four stops each; Level 1 keeps three.
+
+- **Guard the Gate** (IP core, tower defence): build guards (access rules), detectives (deep inspection)
+  and speed bumps (rate limiters) by the road to the data center; four waves teach plain bots, bots in
+  disguise, a flood, and defence in depth. Simulated players who use a detective win; those who never
+  do lose.
+- **Robot Dive** (undersea, arcade): ping the fibre and follow the echo's mark (an OTDR) to the buried
+  cut, dodging jellyfish on the robot's battery.
+- **Fiber Splice** (undersea, precision): line the cores up on a rolling ship and fire the arc; offset
+  becomes loss, and the losses add up to a budget.
+- **Colour Memory** (metro, “Simon says”): repeat the hub's pattern of colours; each colour is a channel.
+- **Light Path** (long haul, puzzle): turn the switches until the light runs from Prismfield to
+  Spectraville; it shows live how far it gets.
+
+Level 3 now tells a repair story: the anchor cuts the cable, the robot finds the cut, the ship splices
+it, and a new cable is laid.
