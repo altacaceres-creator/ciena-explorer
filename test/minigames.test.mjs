@@ -386,3 +386,9 @@ test('Light Path: every puzzle can be solved, the light stops at the first wrong
   assert.deepEqual(s.pz.tiles.map((tl) => tl.rot), before);
   assert.equal(s.turns, 4);
 });
+
+test('every game has a one-line tip in both readings, for the quick run', async () => {
+  const { TIPS } = await import('../js/minigames.js');
+  assert.deepEqual(Object.keys(TIPS).sort(), Object.keys(MINIGAMES).sort());
+  for (const [id, tip] of Object.entries(TIPS)) for (const r of ['plain', 'eng']) assert.ok(tip[r].length > 20 && tip[r].length <= 110, `${id}.${r}: ${tip[r].length}`);
+});

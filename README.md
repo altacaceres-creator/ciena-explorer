@@ -174,7 +174,10 @@ freely**. The full story plays every stop below, with the level exams (about an 
 The quick run is made for a booth (about ten minutes): one game per level, picked at
 random and played in its short version, then a two-question quiz from the level's exam;
 each win lifts the clouds off the whole level, and Lord Lag ends it with two rounds
-replaying games from the run. Each way of playing has its own board. In the
+replaying games from the run. Each way of playing has its own board. The quick run also
+keeps the reading short: one card before each game (the villain, one line of taunt, one
+line of how to play), the quiz straight after the game, and a short win card that points
+to the notebook for the full lesson. In the
 story the planet starts under cloud. Lord Lag has switched Netlandia off, and each
 network is won back stop by stop, in the order a phone's packets travel: the **city's
 businesses and homes**, the **cell towers**, the **core**. That finishes the packet

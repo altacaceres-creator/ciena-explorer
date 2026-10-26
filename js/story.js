@@ -225,8 +225,8 @@ export const STORY = {
       },
     ],
     win: {
-      plain: 'Lord Lag is beaten, and Netlandia is back on, all of it.',
-      eng: 'Three cuts restored without losing one service. Lord Lag is beaten.',
+      plain: 'The light highway is back, and every network in Netlandia is on again. Only Lord Lag is left!',
+      eng: 'Three cuts restored without losing one service. Only Lord Lag is left.',
     },
     why: {
       plain: 'The light highway is a web of roads with smart crossroads, so the network can always find another way.',

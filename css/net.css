@@ -633,3 +633,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .nb-minions li.boss.beaten { background: color-mix(in srgb, #e63946 16%, var(--paper)); }
 .nb-minions span { font-size: 24px; line-height: 1; }
 .nb-minions small { font-size: 10px; font-weight: 800; line-height: 1.15; }
+
+/* the quick run's one-line how-to */
+.q-tip { margin: 0; padding: 8px 10px; border-radius: var(--radius-s); background: color-mix(in srgb, var(--c, #2f80ed) 12%, var(--paper)); font-weight: 800; font-size: 14px; }
+[data-mode="engineer"] .q-tip { background: color-mix(in srgb, var(--c, #2f80ed) 18%, #0f1828); }

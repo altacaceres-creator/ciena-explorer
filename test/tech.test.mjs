@@ -120,10 +120,12 @@ test('the technologies the brief asked for are where it asked for them', () => {
 });
 
 // Netlandia Quest speaks Explorer's plain words too: no trade terms in its plain lines.
-test('explorer: the Quest\'s plain lines have no jargon', () => {
+test('explorer: the Quest\'s plain lines have no jargon', async () => {
   const stageLines = Object.entries(STAGES).map(([id, st]) => [id, [st.villain.name, st.taunt.plain, st.lose.plain, st.lesson.plain]]);
   const extra = Object.entries(EXTRA_QUESTIONS).map(([id, qs]) => [id, qs.flatMap((q) => [q.plain.q, ...q.plain.a])]);
   const riddles = Object.entries(TEASERS).map(([id, r]) => [id, [r.plain]]);
+  const { TIPS } = await import('../js/minigames.js');
+  riddles.push(...Object.entries(TIPS).map(([id, r]) => [id, [r.plain]]));
   for (const [id, lines] of [...stageLines, ...extra, ...riddles]) for (const x of lines) assert.ok(!JARGON.test(x) && !VPN_JARGON.test(x), `${id}: "${x}" has jargon`);
   for (const [id, ch] of Object.entries(STORY)) {
     const lines = [ch.win.plain, ch.why.plain, ch.recap.plain, ...ch.questions.flatMap((q) => [q.plain.q, ...q.plain.a])];

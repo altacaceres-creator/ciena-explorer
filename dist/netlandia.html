@@ -641,6 +641,10 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .nb-minions span { font-size: 24px; line-height: 1; }
 .nb-minions small { font-size: 10px; font-weight: 800; line-height: 1.15; }
 
+/* the quick run's one-line how-to */
+.q-tip { margin: 0; padding: 8px 10px; border-radius: var(--radius-s); background: color-mix(in srgb, var(--c, #2f80ed) 12%, var(--paper)); font-weight: 800; font-size: 14px; }
+[data-mode="engineer"] .q-tip { background: color-mix(in srgb, var(--c, #2f80ed) 18%, #0f1828); }
+
 </style>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js" } }
@@ -3830,8 +3834,8 @@ const STORY = {
       },
     ],
     win: {
-      plain: 'Lord Lag is beaten, and Netlandia is back on, all of it.',
-      eng: 'Three cuts restored without losing one service. Lord Lag is beaten.',
+      plain: 'The light highway is back, and every network in Netlandia is on again. Only Lord Lag is left!',
+      eng: 'Three cuts restored without losing one service. Only Lord Lag is left.',
     },
     why: {
       plain: 'The light highway is a web of roads with smart crossroads, so the network can always find another way.',
@@ -6740,6 +6744,24 @@ const BOSS = LordLagFight;
 
 // The short versions: Lord Lag's rounds, and the quick run's games.
 const SHORT_OPTS = SHORT;
+// How to play, in one line, for the quick run, where nobody has time to read
+const TIPS = {
+  lastmile: { plain: 'Tap a street to send its show: from the copy nearby if it has it, or from far away.', eng: 'Tap a splitter to serve its oldest request: cache hits are instant, misses go to the origin.' },
+  tetris: { plain: 'Drop each packet in its lane: calls in the fast lane, work in the middle, the rest at the bottom.', eng: 'Queue each packet: voice and sync in EF, business in AF, web and bulk in best effort.' },
+  storm: { plain: 'Switch off one link in every loop, but never cut a floor off.', eng: 'Block one link per loop to stop the broadcast storm, without partitioning the LAN.' },
+  fibercut: { plain: 'Tap the diggers before they cut the fibre. If one does, pick what the ring should do.', eng: 'Tap the excavators before they cut the ring; on a cut, pick the protection action.' },
+  beat: { plain: 'Tap each tower just as its packet reaches it.', eng: 'Tap each tower\'s lane as its timing packet arrives.' },
+  firewall: { plain: 'Tap a spot by the road, then build: 1 🧱 guard, 2 🔍 detective (spots disguises), 3 ⏱ speed bump.', eng: 'Tap a slot, then deploy: 1 🧱 ACL rule, 2 🔍 deep inspection (catches disguises), 3 ⏱ rate limiter.' },
+  race: { plain: 'At each router pick the next road, around the jams. Beat Lord Lag twice!', eng: 'Pick the next hop at each router to steer around congestion; win two races.' },
+  repeaters: { plain: 'Tap the boosters that blink red. When a cable is cut, move the traffic to the other one.', eng: 'Tap repeaters losing power; after the cut, move the traffic to the other cable.' },
+  dive: { plain: '2 📡 to see where the cut is, drive there, and stop on it. Dodge the jellyfish!', eng: '2 📡 fires the OTDR; drive the ROV to the mark and hold station on it. Avoid jellyfish.' },
+  splice: { plain: '1 ▲ and 3 ▼ to line the glowing cores up, 2 ⚡ to join them.', eng: '1 ▲ / 3 ▼ to align the cores, 2 ⚡ to fire the arc.' },
+  cablelayer: { plain: 'Steer north, middle or south to keep the new cable clear of danger.', eng: 'Switch corridors to keep the cable route clear of hazards.' },
+  memory: { plain: 'Watch the colours, then repeat them in the same order.', eng: 'Watch the wavelength sequence, then echo it in order.' },
+  rainbow: { plain: 'Move each request with ◀ ▶ and drop it where its colours are free on every span.', eng: 'Place each request where the same slots are free on every span.' },
+  lightpath: { plain: 'Tap the squares to turn them until the light runs all the way across.', eng: 'Rotate the tiles until the light path runs end to end.' },
+  mesh: { plain: 'When a link breaks, pick a way round that still has room.', eng: 'For each failed service, pick a restoration route with free capacity.' },
+};
 
 // Every game by its id; js/story.js says which network plays which.
 const MINIGAMES = {
@@ -6757,7 +6779,7 @@ const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play', NOTE_KEY = 'ne
 const BOARD_KEY = 'netlandia.board', SOUND_KEY = 'netlandia.sound';
 const LAG_COLOR = '#e63946';     // Lord Lag's own colour, for the final fight
 // the ?dev menu says which build is running; build.mjs stamps the bundle with its date
-const BUILD = "2026-10-26 21:20 UTC";
+const BUILD = "2026-10-26 22:43 UTC";
 // on with ?dev in the address, or five quick taps on the Netlandia title (for previews
 // where the address can't be changed); the menu itself can switch it off again
 const DEV_KEY = 'netlandia.dev';
@@ -7099,8 +7121,16 @@ function initQuest(hooks) {
     hooks.toGlobe();
     hooks.focusMajor(id);
     if (!seen.has(id)) { seen.add(id); renderBar(); hooks.refresh(); }
-    openCard({ kind: 'taunt', id, gid });
+    // a quick run puts the villain and the how-to on one short card
+    openCard({ kind: isQuick(story) ? 'quickstart' : 'taunt', id, gid });
   }
+  // a villain's taunt, cut down to its first sentence or two
+  const shortTaunt = (s) => {
+    const parts = s.match(/[^.!?…]+[.!?…]+["”]?\s*/g) ?? [s];
+    let out = '';
+    for (const p of parts) { out += p; if (out.length >= 40) break; }
+    return out.trim();
+  };
   // the questions missed in a challenge, with what was picked and the right answer
   const reviewOf = (c) => (!c?.wrong?.length ? '' : `<dl class="q-review"><dt>${hooks.plain() ? 'Questions to look at again' : 'Review'}</dt>${c.wrong.map((w) => {
     const q = say(c.questions[w.i]);
@@ -7134,6 +7164,15 @@ function initQuest(hooks) {
           <div><span class="q-minion">${stage.villain.name === 'Lord Lag' ? '😈 Lord Lag himself' : '😈 Lord Lag sends his minion'}</span><span class="q-k">${esc(stage.villain.name)} · ${esc(MINIGAMES[v.gid].name[words])}</span><h3>${name}</h3></div></div>
         <p class="q-say">“${esc(say(stage.taunt))}”</p>
         <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="begin">Take it back ▶</button></div>`;
+    } else if (v.kind === 'quickstart') {
+      // the quick run's one card before a game: who, one line of taunt, one line of how
+      card.innerHTML = `
+        <span class="q-level-tag">${where}</span>
+        <div class="q-villain"><span class="q-face" aria-hidden="true">${stage.villain.face}</span>
+          <div><span class="q-minion">😈 ${stage.villain.name === 'Lord Lag' ? 'Lord Lag himself' : `${esc(stage.villain.name)}, Lord Lag's minion`}</span><h3>🎮 ${esc(MINIGAMES[v.gid].name[words])}</h3></div></div>
+        <p class="q-say">“${esc(shortTaunt(say(stage.taunt)))}”</p>
+        <p class="q-tip">👉 ${esc(TIPS[v.gid][words])}</p>
+        <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="go">Start ▶</button></div>`;
     } else if (v.kind === 'question') {
       const c = v.c, q = say(c.questions[c.i]);
       const hearts = Array.from({ length: STORY_LIVES }, (_, i) => `<i class="${i < c.lives ? 'on' : ''}">♥</i>`).join('');
@@ -7143,6 +7182,7 @@ function initQuest(hooks) {
         <div class="q-time"><i></i></div>
         <h3 class="q-q">${esc(q.q)}</h3>
         <div class="q-answers">${c.order[c.i].map((k, pos) => `<button data-answer="${pos}"><kbd>${pos + 1}</kbd>${esc(q.a[k])}</button>`).join('')}</div>
+        ${!v.last && v.intro && c.i === 0 ? `<p class="q-flash ok">${esc(v.intro)}</p>` : ''}
         ${v.last ? `<p class="q-flash ${v.last.right ? 'ok' : 'bad'}">${v.last.right ? `Right! +${v.last.points}` : `${v.last.timeout ? 'Too slow!' : 'Not quite.'} ${hooks.plain() ? 'The right answer was' : 'Correct answer'}: <b>${esc(v.last.answer)}</b>`}</p>` : ''}`;
       startTimer();
     } else if (v.kind === 'how') {
@@ -7197,9 +7237,21 @@ function initQuest(hooks) {
       const ended = isQuick(story) || lvl.chapters.at(-1) === v.id, after = STORY_LEVELS.find((l) => l.n === lvl.n + 1);
       // what comes next stays a riddle: a hint, never the name
       const news = next && (DISCOVERY[next] ?? TEASERS[next]);
+      if (isQuick(story)) {
+        card.innerHTML = `
+          <span class="q-k">🏁 Level ${lvl.n} complete!</span>
+          <h3>You unlocked ${lvl.chapters.map((c) => esc(hooks.majorName(c))).join(' and ')}</h3>
+          <p class="q-say">${esc(say(ch.win))}</p>
+          ${reviewOf(v.review)}
+          <p class="q-sum">${gained(v.play, v.know)}${v.flawless ? ' · flawless bonus' : ''} · you are now <b>${esc(rankOf(story))}</b></p>
+          <p class="q-tip">📓 ${hooks.plain() ? 'What this means in a real network is in your notebook.' : 'The full lesson is in the notebook.'}</p>
+          ${news ? `<p class="q-news"><b>${hooks.plain() ? 'What\'s next?' : 'Up next'}</b> ${esc(say(news))}</p>` : after?.boss ? `<p class="q-news"><b>😈 ${hooks.plain() ? 'Lord Lag is waiting!' : 'Lord Lag is next.'}</b></p>` : ''}
+          <div class="q-btns"><button class="primary" data-q="next">Next ▶</button></div>`;
+        return;
+      }
       card.innerHTML = `
         <span class="q-k">Congratulations!</span>
-        <h3>You unlocked ${isQuick(story) ? lvl.chapters.map((c) => esc(hooks.majorName(c))).join(' and ') : name}</h3>
+        <h3>You unlocked ${name}</h3>
         <p class="q-say">${esc(say(ch.win))}</p>
         ${v.st ? `<dl><dt>Your game</dt><dd>${esc(MINIGAMES[v.gid].summary(v.st, words))}</dd></dl>` : ''}
         ${reviewOf(v.review)}
@@ -7228,7 +7280,7 @@ function initQuest(hooks) {
           <div><span class="q-k">This round goes to ${esc(minion(who))}</span><h3>You died${v.exam ? ' in the exam' : v.boss ? ' in the final fight' : ''}</h3></div></div>
         <p class="q-say">${esc(lose)}${v.exam ? ` ${hooks.plain() ? 'Your game still counts: only the exam starts again.' : 'The game result stands; retake the exam.'}` : ''}</p>
         ${reviewOf(v.review)}
-        <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : v.boss ? 'boss' : 'begin'}">Try again</button></div>`;
+        <div class="q-btns"><button data-q="later">Back to the map</button><button class="primary" data-q="${v.exam ? 'exam' : v.boss ? 'boss' : isQuick(story) ? 'go' : 'begin'}">Try again</button></div>`;
     } else if (v.kind === 'locked') {
       const next = nextChapter(story);
       card.innerHTML = `
@@ -7344,7 +7396,13 @@ function initQuest(hooks) {
       return;
     }
     // the last network of a level has its final exam still to come
-    if (isQuick(story) || examAt(v.id)) { openCard({ kind: 'exam', id: v.id, gid: v.gid, carry: points, flawless: res.flawless, st }); return; }
+    // a quick run goes straight on to its two questions
+    if (isQuick(story)) {
+      const exam = { gid: v.gid, carry: points, flawless: res.flawless, st };
+      openCard({ kind: 'question', id: v.id, c: startChallenge(v.id, Math.random, examFor(v.id)), last: null, exam, intro: `🏁 ${MINIGAMES[v.gid].name[hooks.plain() ? 'plain' : 'eng']} won! +${num(points)} · ${hooks.plain() ? 'now two quick questions' : 'two questions to unlock the level'}` });
+      return;
+    }
+    if (examAt(v.id)) { openCard({ kind: 'exam', id: v.id, gid: v.gid, carry: points, flawless: res.flawless, st }); return; }
     bank(v.id, v.gid, points, 0, res.flawless, st);
   }
   // a network won: it unlocks, its points join the score, and the win card says why

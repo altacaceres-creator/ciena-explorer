@@ -2371,6 +2371,24 @@ export const BOSS = LordLagFight;
 
 // The short versions: Lord Lag's rounds, and the quick run's games.
 export const SHORT_OPTS = SHORT;
+// How to play, in one line, for the quick run, where nobody has time to read
+export const TIPS = {
+  lastmile: { plain: 'Tap a street to send its show: from the copy nearby if it has it, or from far away.', eng: 'Tap a splitter to serve its oldest request: cache hits are instant, misses go to the origin.' },
+  tetris: { plain: 'Drop each packet in its lane: calls in the fast lane, work in the middle, the rest at the bottom.', eng: 'Queue each packet: voice and sync in EF, business in AF, web and bulk in best effort.' },
+  storm: { plain: 'Switch off one link in every loop, but never cut a floor off.', eng: 'Block one link per loop to stop the broadcast storm, without partitioning the LAN.' },
+  fibercut: { plain: 'Tap the diggers before they cut the fibre. If one does, pick what the ring should do.', eng: 'Tap the excavators before they cut the ring; on a cut, pick the protection action.' },
+  beat: { plain: 'Tap each tower just as its packet reaches it.', eng: 'Tap each tower\'s lane as its timing packet arrives.' },
+  firewall: { plain: 'Tap a spot by the road, then build: 1 🧱 guard, 2 🔍 detective (spots disguises), 3 ⏱ speed bump.', eng: 'Tap a slot, then deploy: 1 🧱 ACL rule, 2 🔍 deep inspection (catches disguises), 3 ⏱ rate limiter.' },
+  race: { plain: 'At each router pick the next road, around the jams. Beat Lord Lag twice!', eng: 'Pick the next hop at each router to steer around congestion; win two races.' },
+  repeaters: { plain: 'Tap the boosters that blink red. When a cable is cut, move the traffic to the other one.', eng: 'Tap repeaters losing power; after the cut, move the traffic to the other cable.' },
+  dive: { plain: '2 📡 to see where the cut is, drive there, and stop on it. Dodge the jellyfish!', eng: '2 📡 fires the OTDR; drive the ROV to the mark and hold station on it. Avoid jellyfish.' },
+  splice: { plain: '1 ▲ and 3 ▼ to line the glowing cores up, 2 ⚡ to join them.', eng: '1 ▲ / 3 ▼ to align the cores, 2 ⚡ to fire the arc.' },
+  cablelayer: { plain: 'Steer north, middle or south to keep the new cable clear of danger.', eng: 'Switch corridors to keep the cable route clear of hazards.' },
+  memory: { plain: 'Watch the colours, then repeat them in the same order.', eng: 'Watch the wavelength sequence, then echo it in order.' },
+  rainbow: { plain: 'Move each request with ◀ ▶ and drop it where its colours are free on every span.', eng: 'Place each request where the same slots are free on every span.' },
+  lightpath: { plain: 'Tap the squares to turn them until the light runs all the way across.', eng: 'Rotate the tiles until the light path runs end to end.' },
+  mesh: { plain: 'When a link breaks, pick a way round that still has room.', eng: 'For each failed service, pick a restoration route with free capacity.' },
+};
 
 // Every game by its id; js/story.js says which network plays which.
 export const MINIGAMES = {
