@@ -1469,6 +1469,219 @@ const CableLayer = {
   laneAt(x, y, w, h) { const top = 34; return y < top ? null : Math.min(2, Math.floor(((y - top) / (h - top - 8)) * 3)); },
 };
 
+// ---------------------------------------------------------------- Guard the Gate (IP core)
+// A tower defence at the edge of the core. The Botnet sends bots down the road from the
+// internet to the data center, mixed in with customers' packets. Build guards on the six
+// spots by the road: a guard (an access rule) stops plain bots fast, a detective (deep
+// inspection) also spots bots in disguise but checks slowly, and a speed bump (a rate
+// limiter) slows everything near it. Customers' packets are never stopped: they pay a
+// coin each when they reach the data center, and every bot stopped pays one too.
+const FWD = { lives: 6, coins: 9, build: 8, pause: 7, aspect: 1.6 };
+const FWD_PATH = [[0, 0.22], [0.3, 0.22], [0.3, 0.75], [0.62, 0.75], [0.62, 0.25], [0.86, 0.25], [0.86, 0.8], [1, 0.8]];
+const FWD_SLOTS = [[0.15, 0.47], [0.46, 0.5], [0.74, 0.5], [0.46, 0.95], [0.74, 0.05], [0.96, 0.52]];
+const FWD_TOWERS = [
+  { key: 'guard', icon: '🧱', cost: 3, range: 0.38, reload: 0.6, hits: ['bot', 'flood'], plain: 'Guard', eng: 'ACL rule' },
+  { key: 'detective', icon: '🔍', cost: 4, range: 0.42, reload: 1.0, hits: ['bot', 'mask', 'flood'], plain: 'Detective', eng: 'Deep inspection' },
+  { key: 'bump', icon: '⏱', cost: 2, range: 0.3, slow: 0.45, hits: [], plain: 'Speed bump', eng: 'Rate limiter' },
+];
+const FWD_KINDS = {
+  bot: { icon: '🤖', speed: 0.15, foe: true },
+  mask: { icon: '🥸', speed: 0.12, foe: true },
+  flood: { icon: '🌊', speed: 0.22, foe: true, small: true },
+  good: { icon: '📦', speed: 0.2, foe: false },
+};
+// each wave: what comes down the road, and the hint that opens it
+const FWD_WAVES = [
+  { mix: { bot: 6, good: 6 }, plain: 'Wave 1: bots! Build 🧱 guards by the road.', eng: 'Wave 1: known-bad sources. Deploy 🧱 ACL rules along the path.' },
+  { mix: { bot: 5, mask: 3, good: 6 }, plain: 'Wave 2: some bots wear a disguise 🥸. Only a 🔍 detective can spot them.', eng: 'Wave 2: payloads disguised as normal traffic 🥸. Only 🔍 deep inspection catches them.' },
+  { mix: { flood: 4, bot: 3, good: 6 }, plain: 'Wave 3: a flood 🌊! Too many at once for one guard: add more, or a ⏱ speed bump.', eng: 'Wave 3: a flood 🌊. One filter saturates: add capacity, or ⏱ rate-limit it.' },
+  { mix: { bot: 4, mask: 3, flood: 2, good: 6 }, plain: 'Wave 4: everything at once. Hold the gate!', eng: 'Wave 4: mixed attack. Defence in depth.' },
+];
+const fwdLen = (a, b) => Math.hypot((a[0] - b[0]) * FWD.aspect, a[1] - b[1]);
+const FWD_SEGS = FWD_PATH.slice(1).map((p, i) => fwdLen(FWD_PATH[i], p));
+const FWD_TOTAL = FWD_SEGS.reduce((a, b) => a + b, 0);
+// where on the board a packet is, d along the road from 0 (the internet) to FWD_TOTAL (the gate)
+function fwdAt(d) {
+  let i = 0;
+  while (i < FWD_SEGS.length - 1 && d > FWD_SEGS[i]) d -= FWD_SEGS[i++];
+  const k = Math.min(1, d / FWD_SEGS[i]), a = FWD_PATH[i], b = FWD_PATH[i + 1];
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+}
+// a wave's arrivals, spread out and shuffled; a flood comes as four quick ones
+function fwdSpawns(wave, random) {
+  const list = [];
+  for (const [kind, n] of Object.entries(wave.mix)) for (let i = 0; i < n; i++) list.push(kind);
+  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  const out = [];
+  let at = 0.5;
+  for (const kind of list) {
+    if (kind === 'flood') for (let k = 0; k < 4; k++) out.push({ at: at + k * 0.3, kind });
+    else out.push({ at, kind });
+    at += 1.6 + random() * 0.8;
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
+const GuardTheGate = {
+  id: 'firewall',
+  name: { plain: 'Guard the Gate', eng: 'Firewall Defense' },
+  tall: true,
+  how: {
+    plain: 'The Botnet is sending bots down the road from the internet to the data center, mixed in with customers\' packets 📦. Tap an empty spot by the road, then build: 1 🧱 a guard (stops bots, fast), 2 🔍 a detective (also spots bots in disguise, but slower), 3 ⏱ a speed bump (slows everything near it). Tap a built one to swap it for another, with half its price back. Customers always get through and pay a coin 🪙; so does every bot you stop.',
+    eng: 'Bots are routed toward the data center mixed with legitimate traffic 📦. Tap a free slot by the path, then deploy: 1 🧱 an ACL rule (drops known-bad traffic, fast), 2 🔍 deep inspection (also catches disguised payloads, slower), 3 ⏱ a rate limiter (slows all traffic in range). Tap a deployed control to replace it (half refund). Legitimate packets always pass and earn a credit 🪙; so does each drop.',
+  },
+  goal: { plain: 'Keep the bots out for four waves', eng: 'Hold the perimeter through four waves' },
+  laneNames: { plain: FWD_TOWERS.map((x) => `${x.icon} ${x.plain}`), eng: FWD_TOWERS.map((x) => `${x.icon} ${x.eng}`) },
+  start(random = Math.random, opts = {}) {
+    const waves = FWD_WAVES.slice(0, opts.waves ?? FWD_WAVES.length);
+    return {
+      t: 0, random, waves, wave: -1, wt: 0, spawns: [], pause: opts.build ?? FWD.build, packets: [], towers: FWD_SLOTS.map(() => null),
+      sel: 1, coins: FWD.coins, lives: FWD.lives, blocked: 0, delivered: 0, breaches: 0, built: 0, swapped: 0, masksStopped: 0, poor: 0,
+      zaps: [], score: 0, fx: [], over: null,
+    };
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    for (const z of s.zaps) z.t += dt;
+    s.zaps = s.zaps.filter((z) => z.t < 0.18);
+    // between waves: a pause to build, then the next wave starts
+    if (!s.spawns.length && !s.packets.length) {
+      if (s.wave === s.waves.length - 1) { s.over = 'won'; return; }
+      if ((s.pause -= dt) > 0) return;
+      s.wave++; s.wt = 0; s.spawns = fwdSpawns(s.waves[s.wave], s.random); s.pause = FWD.pause;
+      float(s, 1, s.wave === 0 ? 'Here they come!' : `Wave ${s.wave + 1}!`, false);
+    }
+    s.wt += dt;
+    while (s.spawns.length && s.spawns[0].at <= s.wt) s.packets.push({ kind: s.spawns.shift().kind, d: 0 });
+    // packets move; a speed bump slows whatever is near it
+    for (const p of s.packets) {
+      const at = fwdAt(p.d);
+      const slow = s.towers.some((tw, i) => tw?.key === 'bump' && fwdLen(at, FWD_SLOTS[i]) <= tw.range);
+      p.d += FWD_KINDS[p.kind].speed * (slow ? FWD_TOWERS[2].slow : 1) * dt;
+    }
+    // the gate: a customer pays, a bot is a breach
+    for (const p of s.packets.filter((x) => x.d >= FWD_TOTAL)) {
+      if (FWD_KINDS[p.kind].foe) { s.lives--; s.breaches++; float(s, 2, 'Breach!', false); } else { s.delivered++; s.coins++; s.score += 10; }
+    }
+    s.packets = s.packets.filter((x) => x.d < FWD_TOTAL);
+    // the guards and detectives each stop one bot at a time, then reload
+    s.towers.forEach((tw, i) => {
+      if (!tw || !tw.hits.length) return;
+      if ((tw.cd -= dt) > 0) return;
+      const target = s.packets.filter((p) => tw.hits.includes(p.kind) && fwdLen(fwdAt(p.d), FWD_SLOTS[i]) <= tw.range).sort((a, b) => b.d - a.d)[0];
+      if (!target) return;
+      tw.cd = tw.reload;
+      s.zaps.push({ from: FWD_SLOTS[i], to: fwdAt(target.d), t: 0, color: tw.key });
+      s.packets = s.packets.filter((p) => p !== target);
+      s.blocked++; s.coins++; s.score += 15;
+      if (target.kind === 'mask') s.masksStopped++;
+    });
+    if (s.lives <= 0) s.over = 'lost';
+  },
+  press(s, lane) {
+    if (s.over) return;
+    // a tap on a spot picks it, built or not (a built one can be swapped)
+    if (lane >= 10) { const k = lane - 10; if (k < FWD_SLOTS.length) s.sel = k; return; }
+    const type = FWD_TOWERS[lane];
+    if (!type || s.sel == null || s.towers[s.sel]?.key === type.key) return;
+    const cost = GuardTheGate.cost(s, lane);
+    if (s.coins < cost) { s.poor++; float(s, 1, `Need ${cost} 🪙`, false); return; }
+    if (s.towers[s.sel]) s.swapped++;
+    s.coins -= cost; s.built++;
+    s.towers[s.sel] = { ...type, cd: 0 };
+    // the next free spot is picked for the next build
+    const free = FWD_SLOTS.map((_, k) => k).filter((k) => !s.towers[k]);
+    s.sel = free.length ? free.sort((a, b) => Math.abs(a - s.sel) - Math.abs(b - s.sel))[0] : null;
+  },
+  // what building `lane` on the picked spot costs: swapping a tower gives half its price back
+  cost: (s, lane) => FWD_TOWERS[lane].cost - Math.floor((s.towers[s.sel]?.cost ?? 0) / 2),
+  lanes(s, words) {
+    if (s.sel == null) return ['—', '—', '—'];
+    const here = s.towers[s.sel];
+    return FWD_TOWERS.map((x, i) => (here?.key === x.key ? '—' : `${here ? '⇄ ' : ''}${x.icon} ${x[words]} · ${Math.max(0, GuardTheGate.cost(s, i))}🪙`));
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 40 : 0, flawless: s.breaches === 0 };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You built ${s.built} defences and stopped ${s.blocked} bots${s.masksStopped ? `, ${s.masksStopped} of them in disguise` : ''}. ${s.delivered} customers' packets got through${s.breaches ? `, and ${s.breaches} bot${s.breaches === 1 ? '' : 's'} slipped past the gate` : ', and not one bot reached the data center'}.`
+      : `${s.built} controls deployed; ${s.blocked} malicious flows dropped (${s.masksStopped} by deep inspection), ${s.delivered} legitimate packets delivered, ${s.breaches} breach${s.breaches === 1 ? '' : 'es'}.`;
+  },
+  // board coordinates: the road fills the card below the meter and the banner
+  box: (w, h) => ({ x: 26, y: 70, w: w - 52, h: h - 104 }),
+  pos(p, w, h) { const b = GuardTheGate.box(w, h); return [b.x + b.w * p[0], b.y + b.h * p[1]]; },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', P = (p) => GuardTheGate.pos(p, w, h), b = GuardTheGate.box(w, h), unit = b.h;
+    const waveN = Math.max(0, s.wave) + 1;
+    hud(g, w, theme, `${plain ? 'Wave' : 'Wave'} ${waveN} / ${s.waves.length} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(FWD.lives - Math.max(0, s.lives))} · 🪙 ${s.coins}`, s.waves.length ? (s.wave + (s.spawns.length || s.packets.length ? 0.5 : 1)) / s.waves.length : 0, s.score, null);
+    // the hint for this wave, or the countdown to the next
+    const between = !s.spawns.length && !s.packets.length;
+    const next = s.waves[Math.min(s.waves.length - 1, s.wave + (between ? 1 : 0))];
+    const say = between && s.wave < s.waves.length - 1 ? `${next[words]} ${Math.ceil(Math.max(0, s.pause))}s` : s.waves[Math.max(0, s.wave)][words];
+    g.font = `800 12px ${theme.font}`;
+    const tw = Math.min(w - 16, g.measureText(say).width + 24);
+    g.fillStyle = between ? theme.accent : theme.well; roundRect(g, (w - tw) / 2, 32, tw, 24, 12); g.fill();
+    g.fillStyle = between ? '#ffffff' : theme.ink; g.textAlign = 'center'; g.fillText(say, w / 2, 48.5, w - 28);
+    // the road from the internet to the data center
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.strokeStyle = theme.well; g.lineWidth = Math.max(22, unit * 0.13);
+    g.beginPath(); FWD_PATH.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
+    g.strokeStyle = theme.muted; g.lineWidth = 2; g.setLineDash([6, 8]);
+    g.beginPath(); FWD_PATH.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
+    g.setLineDash([]); g.lineCap = 'butt';
+    const [ix, iy] = P(FWD_PATH[0]), [gx, gy] = P(FWD_PATH.at(-1));
+    emoji(g, '🌐', ix, iy - 22, 22); emoji(g, '🏢', gx - 4, gy - 24, 28);
+    g.fillStyle = theme.muted; g.font = `800 10px ${theme.font}`; g.textAlign = 'left';
+    g.fillText(plain ? 'Internet' : 'Internet edge', ix - 6, iy + 26);
+    g.textAlign = 'right'; g.fillText(plain ? 'Data center' : 'DC', gx + 8, gy + 30);
+    // the spots: a tower, or an empty spot (the picked one glows)
+    const R = Math.max(15, unit * 0.075), pulse = 0.5 + 0.5 * Math.sin(s.t * 6);
+    FWD_SLOTS.forEach((p, i) => {
+      const [x, y] = P(p), tw = s.towers[i];
+      if (tw || i === s.sel) {
+        const range = (tw ?? FWD_TOWERS[0]).range;
+        g.strokeStyle = tw ? theme.accent : theme.muted; g.globalAlpha = tw ? 0.18 : 0.12 + 0.12 * pulse; g.lineWidth = 2;
+        g.beginPath(); g.ellipse(x, y, (range / FWD.aspect) * b.w, range * b.h, 0, 0, 7); g.stroke(); g.globalAlpha = 1;
+      }
+      g.beginPath(); g.arc(x, y, R, 0, 7);
+      g.fillStyle = tw ? theme.paper : theme.well; g.fill();
+      g.strokeStyle = i === s.sel ? theme.accent : theme.ink; g.lineWidth = i === s.sel ? 3 + pulse * 2 : 2;
+      if (!tw) g.setLineDash([4, 4]);
+      g.stroke(); g.setLineDash([]);
+      if (tw) {
+        emoji(g, tw.icon, x, y + 1, R * 1.1);
+        if (tw.reload && tw.cd > 0) { g.strokeStyle = theme.muted; g.lineWidth = 3; g.beginPath(); g.arc(x, y, R + 4, -Math.PI / 2, -Math.PI / 2 + 6.283 * (1 - tw.cd / tw.reload)); g.stroke(); }
+      } else {
+        g.fillStyle = theme.muted; g.font = `800 ${Math.round(R * 0.9)}px ${theme.font}`; g.textAlign = 'center'; g.fillText('+', x, y + R * 0.32);
+      }
+    });
+    // the zaps, then the packets on the road
+    for (const z of s.zaps) {
+      const [ax, ay] = P(z.from), [bx, by] = P(z.to);
+      g.strokeStyle = z.color === 'detective' ? '#7b2ff7' : theme.bad; g.lineWidth = 3; g.globalAlpha = 1 - z.t / 0.18;
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.globalAlpha = 1;
+      emoji(g, '💥', bx, by, 18);
+    }
+    for (const p of s.packets) {
+      const [x, y] = P(fwdAt(p.d)), k = FWD_KINDS[p.kind];
+      if (!k.foe) { g.fillStyle = theme.good; g.globalAlpha = 0.25; g.beginPath(); g.arc(x, y, 13, 0, 7); g.fill(); g.globalAlpha = 1; }
+      emoji(g, k.icon, x, y, k.small ? 16 : 22);
+    }
+    floats(g, s, (lane) => [w / 2, lane === 2 ? h - 46 : h - 28], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    // a tap on (or near) a spot by the road
+    let best = null, bd = 34;
+    FWD_SLOTS.forEach((p, i) => { const [sx, sy] = GuardTheGate.pos(p, w, h); const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; best = 10 + i; } });
+    return best;
+  },
+};
+
 // ---------------------------------------------------------------- Level 5: the fight with Lord Lag
 // The last level is a recap of the whole Quest: one round for each level before it, in a
 // game from that level picked at random (so a replay can bring a different one), short
@@ -1476,11 +1689,11 @@ const CableLayer = {
 // one of his hearts.
 const SHORT = {
   lastmile: { goal: 6 }, tetris: { goal: 8 }, storm: { rounds: 1 },
-  fibercut: { goal: 4 }, beat: { seconds: 15 }, race: { first: 2, races: 1, need: 1 },
+  fibercut: { goal: 4 }, beat: { seconds: 15 }, firewall: { waves: 2, build: 6 }, race: { first: 2, races: 1, need: 1 },
   repeaters: { seconds: 10 }, cablelayer: { seconds: 16 },
   rainbow: { goal: 4 }, mesh: { cuts: 2 },
 };
-const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'race'], ['repeaters', 'cablelayer'], ['rainbow', 'mesh']];
+const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'cablelayer'], ['rainbow', 'mesh']];
 const BOSS_TAUNTS = [
   { plain: 'Back to the city, apprentice. Let\'s see if you remember!', eng: 'Round one, the city network. Show me you still remember.' },
   { plain: 'Lucky! Now the towers and the core. Faster!', eng: 'Round two: the towers and the core. Faster this time.' },
@@ -1586,7 +1799,7 @@ export const BOSS = LordLagFight;
 // Every game by its id; js/story.js says which network plays which.
 export const MINIGAMES = {
   lastmile: LastMileDash, tetris: PacketTetris, storm: StormChaser,
-  fibercut: StopTheFiberCut, beat: KeepTheBeat, race: PacketRace,
+  fibercut: StopTheFiberCut, beat: KeepTheBeat, firewall: GuardTheGate, race: PacketRace,
   repeaters: RepeaterRescue, cablelayer: CableLayer,
   rainbow: RainbowPacking, mesh: MeshRescue,
 };

@@ -162,7 +162,7 @@ test('every network has a riddle that does not give its name away, and the dev m
   for (const id of STORY_ORDER) for (const r of ['plain', 'eng']) assert.ok(TEASERS[id][r].length > 20, `${id}.${r}`);
   const s = newStory();
   jumpTo(s, 'ipcore');
-  assert.deepEqual([s.unlocked, s.stage, nextChapter(s), nextStage(s)], [['aggregation', 'xhaul'], 0, 'ipcore', 'race']);
+  assert.deepEqual([s.unlocked, s.stage, nextChapter(s), nextStage(s)], [['aggregation', 'xhaul'], 0, 'ipcore', 'firewall']);
   jumpTo(s, 'aggregation', 2);
   assert.deepEqual([s.unlocked, nextStage(s)], [[], 'storm']);
   jumpTo(s, 'submarine', 9);

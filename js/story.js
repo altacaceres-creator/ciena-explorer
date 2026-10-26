@@ -116,7 +116,7 @@ export const STORY = {
   },
 
   ipcore: {
-    stages: ['race'],
+    stages: ['firewall', 'race'],
     questions: [
       {
         plain: { q: 'The short road between two Tidewell offices is jammed by backups. What saves the video meeting?', a: ['Send the meeting a quieter way round, through Northport', 'Stop the meeting until the backups finish', 'Make the backups bigger so they finish sooner'] },
@@ -316,6 +316,21 @@ export const STAGES = {
     lesson: {
       plain: 'Phone towers take turns to talk, so their clock messages ride the fastest lane and arrive right on the beat.',
       eng: 'PTP rides the top strict-priority queue, so delay variation stays inside the phase budget of each cell site.',
+    },
+  },
+  firewall: {
+    villain: { name: 'The Botnet', face: '🤖' },
+    taunt: {
+      plain: 'Beep boop! Thousands of my bots are heading for your data center, hidden among your customers. Some even wear a disguise. Your gate can\'t check them all!',
+      eng: 'My botnet is aimed at your data center: scans, floods, and payloads disguised as normal traffic. Let\'s see your filters hold.',
+    },
+    lose: {
+      plain: 'The bots got through the gate and the data center is overloaded. Nobody can reach their files. Lord Lag cheers.',
+      eng: 'Malicious traffic breached the perimeter; the data center is saturated and its services are down.',
+    },
+    lesson: {
+      plain: 'A gate checks every packet against a list of rules: let it in, or keep it out. Simple rules stop plain bots, a closer look catches the ones in disguise, and since every gate can only check so many at once, real networks put several in a row.',
+      eng: 'A firewall matches each packet against an ordered rule list (ACL): permit or deny. Known-bad traffic is dropped cheaply; disguised payloads need deep packet inspection (IPS); every filter has finite throughput, so floods are met with rate limiting and defence in depth.',
     },
   },
   race: {

@@ -130,6 +130,15 @@ const robots = {
     const near = s.hazards.filter((z) => z.x > 0.2 && z.x < 0.45);
     if (near.some((z) => z.lane === s.lane)) G.press(s, [0, 1, 2].find((l) => !near.some((z) => z.lane === l)));
   },
+  // a plan: guards on the middle spots, then detectives, a speed bump, and more guards
+  firewall: (G, s) => {
+    const plan = [[1, 0], [2, 0], [1, 1], [0, 1], [3, 2], [4, 0], [5, 1]];
+    const step = plan.find(([k]) => !s.towers[k]);
+    if (!step) return;
+    const costs = [3, 4, 2];
+    if (s.coins < costs[step[1]]) return;
+    G.press(s, 10 + step[0]); G.press(s, step[1]);
+  },
   // the first way round that has room
   mesh: (G, s) => {
     if (!s.asking || s.asking.t < 1) return;
@@ -262,4 +271,32 @@ test('Stop the Fiber Cut and Cable Layer: the wrong move loses', () => {
   const C = MINIGAMES.cablelayer, c = C.start(seeded(2));
   run(C, c, 60, (s) => { const z = s.hazards.find((h) => h.x > 0.2 && h.x < 0.3); if (z) C.press(s, z.lane); });
   assert.equal(C.result(c).won, false, 'steering into every hazard sinks the lay');
+});
+
+test('Guard the Gate: guards alone let the disguised bots through; a detective stops them; customers always pass', () => {
+  const G = MINIGAMES.firewall;
+  // only guards, as many as can be afforded
+  const s = G.start(seeded(3));
+  run(G, s, 400, (x) => { const k = x.towers.findIndex((t, i) => !t && i < 6); if (k >= 0 && x.coins >= 3) { G.press(x, 10 + k); G.press(x, 0); } });
+  assert.ok(s.breaches > 0 && s.masksStopped === 0, `masks get past plain rules (${s.breaches} breaches)`);
+  assert.ok(s.towers.every((t) => !t || t.key === 'guard'));
+  // a detective stops a disguised bot in range
+  const d = G.start(seeded(3), { build: 0 });
+  d.coins = 10; G.press(d, 10 + 1); G.press(d, 1);
+  d.packets = [{ kind: 'mask', d: 1.6 }, { kind: 'good', d: 1.62 }];
+  d.spawns = [{ at: 99, kind: 'good' }]; d.wave = 0;
+  for (let i = 0; i < 30; i++) G.tick(d, 1 / 60);
+  assert.equal(d.masksStopped, 1);
+  assert.ok(d.packets.some((p) => p.kind === 'good'), 'the customer is never stopped');
+  // building needs coins, and a built spot can't be built on again
+  const c = G.start(seeded(3));
+  c.coins = 2; G.press(c, 10 + 0); G.press(c, 0);
+  assert.equal(c.towers[0], null); assert.equal(c.poor, 1);
+  G.press(c, 2);
+  assert.equal(c.towers[0].key, 'bump'); assert.equal(c.coins, 0);
+  // a built spot can be swapped, with half its price back
+  c.coins = 3; G.press(c, 10 + 0); G.press(c, 2);
+  assert.equal(c.coins, 3, 'the same tower again does nothing');
+  G.press(c, 1);
+  assert.deepEqual([c.towers[0].key, c.coins, c.swapped], ['detective', 3 - (4 - 1), 1]);
 });
