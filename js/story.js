@@ -147,7 +147,7 @@ export const STORY = {
   },
 
   submarine: {
-    stages: ['repeaters', 'dive', 'cablelayer'],
+    stages: ['repeaters', 'dive', 'splice', 'cablelayer'],
     questions: [
       {
         plain: { q: 'Light gets weaker as it travels thousands of kilometres under the sea. What keeps it strong?', a: ['Boosters on the sea floor every so often, powered through the cable', 'Fish swimming beside the cable', 'Nothing: it is just very bright when it starts'] },
@@ -376,6 +376,21 @@ export const STAGES = {
     lesson: {
       plain: 'To find a break at the bottom of the sea, engineers send a flash of light down the cable from the shore and time its echo: the longer it takes to come back, the farther away the break is. Then the robot goes straight there.',
       eng: 'An OTDR fires pulses into the fibre and times the reflection from the break, locating the fault to within metres from the landing station, so the repair ship and its ROV head straight for it.',
+    },
+  },
+  splice: {
+    villain: { name: 'The Big Swell', face: '🌊' },
+    taunt: {
+      plain: 'Heave-ho! I will rock your little ship back and forth, and your tiny glass threads will never line up again!',
+      eng: 'Sea state five and rising. Good luck aligning cores a few microns wide on a rolling deck.',
+    },
+    lose: {
+      plain: 'The joins leak too much light, and the storm is here. The cable goes back into the sea still broken.',
+      eng: 'Splice loss blew the link budget before the weather window closed; the repair is abandoned.',
+    },
+    lesson: {
+      plain: 'The glass core that carries the light is thinner than a hair, so the two ends must line up almost perfectly before they are melted together. Every join loses a little light, and all those little losses add up along the cable, so each one has to be as good as it can be.',
+      eng: 'A fusion splicer aligns cores of about 9 µm before firing the arc; lateral offset becomes splice loss (dB). Losses add up in the link budget along with the fibre and the connectors, so every splice is measured and remade if it is over tolerance.',
     },
   },
   cablelayer: {

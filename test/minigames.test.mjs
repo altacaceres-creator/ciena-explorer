@@ -148,6 +148,12 @@ const robots = {
     const danger = s.jellies.some((j) => (j.x - s.x) * ahead > 0 && Math.abs(j.x - s.x) < 0.09 && Math.abs(G.jellyY(j, s.t) - 0.6) < 0.2);
     if (danger) { s.goto = null; s.dir = 0; } else if (s.goto !== s.mark.x) G.press(s, 10 + Math.round(s.mark.x * 100));
   },
+  // nudge toward the middle, join when lined up
+  splice: (G, s) => {
+    if (s.arc > 0 || (s.nextNudge ?? 0) > s.t) return;
+    if (Math.abs(s.o) < 0.12) G.press(s, 1);
+    else { G.press(s, s.o > 0 ? 0 : 2); s.nextNudge = s.t + 0.12; }
+  },
   // the first way round that has room
   mesh: (G, s) => {
     if (!s.asking || s.asking.t < 1) return;
@@ -320,4 +326,23 @@ test('Robot Dive: each ping marks the cut more closely; searching by lamp alone 
   const blind = G.start(seeded(5));
   run(G, blind, 400, (x) => { if (x.between > 0 || x.dir) return; G.press(x, x.x < 0.5 ? 2 : 0); });
   assert.ok(blind.found < 3, `found ${blind.found}`);
+});
+
+test('Fiber Splice: an offset core loses light; too far off must be redone; the losses add up to a budget', () => {
+  const G = MINIGAMES.splice;
+  const s = G.start(seeded(2));
+  s.o = 0; G.press(s, 1);
+  assert.equal(s.done.length, 1); assert.ok(s.done[0] < 0.03, 'lined up: almost nothing lost');
+  run(G, s, 2);
+  s.o = 0.5; G.press(s, 1);
+  assert.ok(s.done[1] > s.done[0] * 4, 'off by half a core: much more lost');
+  run(G, s, 2);
+  s.o = 0.9; G.press(s, 1);
+  assert.deepEqual([s.done.length, s.redone, s.lives], [2, 1, 2], 'too far off: redone, a life gone');
+  // sloppy joins blow the budget even without a redo
+  const b = G.start(seeded(2));
+  for (let i = 0; i < 6 && !b.over; i++) { b.o = 0.62; b.arc = 0; G.press(b, 1); }
+  assert.equal(b.over, 'lost'); assert.equal(b.why, 'budget');
+  // nudges move the fibre
+  const n = G.start(seeded(2)); n.o = 0; G.press(n, 0); G.press(n, 0); assert.ok(Math.abs(n.o + 0.32) < 1e-9);
 });

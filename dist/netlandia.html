@@ -3736,7 +3736,7 @@ const STORY = {
   },
 
   submarine: {
-    stages: ['repeaters', 'dive', 'cablelayer'],
+    stages: ['repeaters', 'dive', 'splice', 'cablelayer'],
     questions: [
       {
         plain: { q: 'Light gets weaker as it travels thousands of kilometres under the sea. What keeps it strong?', a: ['Boosters on the sea floor every so often, powered through the cable', 'Fish swimming beside the cable', 'Nothing: it is just very bright when it starts'] },
@@ -3965,6 +3965,21 @@ const STAGES = {
     lesson: {
       plain: 'To find a break at the bottom of the sea, engineers send a flash of light down the cable from the shore and time its echo: the longer it takes to come back, the farther away the break is. Then the robot goes straight there.',
       eng: 'An OTDR fires pulses into the fibre and times the reflection from the break, locating the fault to within metres from the landing station, so the repair ship and its ROV head straight for it.',
+    },
+  },
+  splice: {
+    villain: { name: 'The Big Swell', face: '🌊' },
+    taunt: {
+      plain: 'Heave-ho! I will rock your little ship back and forth, and your tiny glass threads will never line up again!',
+      eng: 'Sea state five and rising. Good luck aligning cores a few microns wide on a rolling deck.',
+    },
+    lose: {
+      plain: 'The joins leak too much light, and the storm is here. The cable goes back into the sea still broken.',
+      eng: 'Splice loss blew the link budget before the weather window closed; the repair is abandoned.',
+    },
+    lesson: {
+      plain: 'The glass core that carries the light is thinner than a hair, so the two ends must line up almost perfectly before they are melted together. Every join loses a little light, and all those little losses add up along the cable, so each one has to be as good as it can be.',
+      eng: 'A fusion splicer aligns cores of about 9 µm before firing the arc; lateral offset becomes splice loss (dB). Losses add up in the link budget along with the fibre and the connectors, so every splice is measured and remade if it is over tolerance.',
     },
   },
   cablelayer: {
@@ -6120,6 +6135,132 @@ const RobotDive = {
   },
 };
 
+// ---------------------------------------------------------------- Fiber Splice (undersea cables)
+// On the repair ship, the two ends of each broken fibre meet in the splicer. The swell
+// rocks the ship and the right-hand end drifts; nudge it up or down until its core lines
+// up with the left one, then fire the arc. The better the cores line up, the less light
+// the splice loses; a splice too far off leaks so much it must be redone. Six fibres,
+// before the storm arrives, and the losses add up to a budget the link can afford.
+const SPLICE = { fibres: 6, lives: 3, time: 80, nudge: 0.16, budget: 1.0, perfect: 0.15, good: 0.35, ok: 0.65, swell: [0.35, 1.0], arc: 1.2 };
+const spliceLoss = (o) => 0.02 + 0.5 * o * o;
+const FiberSplice = {
+  id: 'splice',
+  name: { plain: 'Fiber Splice', eng: 'Fusion Splice' },
+  how: {
+    plain: 'The cable is up on the ship, and each fibre in it must be joined again. The two glowing cores must line up before you melt them together, but the waves keep rocking the right one. Press 1 ▲ or 3 ▼ (or tap above or below) to nudge it, and 2 ⚡ (or tap the middle) to join them when the cores line up. The straighter the join, the less light it loses. Six fibres before the storm!',
+    eng: 'Fusion-splice the six fibres of the recovered cable. Swell moves the right fibre: nudge it with 1 ▲ / 3 ▼ (or tap above or below the joint) until the cores align, then 2 ⚡ (or tap the joint) to fire the arc. Core offset becomes splice loss; a splice over tolerance must be remade, and the total must fit the loss budget.',
+  },
+  goal: { plain: 'Join six fibres before the storm, without losing too much light', eng: 'Six splices within the weather window and the loss budget' },
+  laneNames: { plain: ['▲ Up', '⚡ Join', '▼ Down'], eng: ['▲ Up', '⚡ Arc', '▼ Down'] },
+  start(random = Math.random, opts = {}) {
+    return {
+      t: 0, random, fibres: opts.fibres ?? SPLICE.fibres, done: [], fibre: 0, o: 0.8, v: 0, ph: random() * 6.28, lives: SPLICE.lives,
+      time: opts.time ?? SPLICE.time, total: 0, redone: 0, arc: 0, last: null, score: 0, fx: [], over: null,
+    };
+  },
+  // how hard the swell rocks this fibre: more with every one done
+  swell: (s) => SPLICE.swell[0] + (SPLICE.swell[1] - SPLICE.swell[0]) * (s.fibre / Math.max(1, s.fibres - 1)),
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt; s.time -= dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.arc > 0) {
+      // the next fibre slides in, off-centre
+      if ((s.arc -= dt) <= 0) { if (s.last?.kept) { s.o = (s.random() < 0.5 ? -1 : 1) * (0.6 + s.random() * 0.5); s.v = 0; } s.slide = 0.5; }
+    } else {
+      s.slide = Math.max(0, (s.slide ?? 0) - dt);
+      // the swell: a slow roll plus a wander
+      s.v += (s.random() - 0.5) * 1.4 * dt - s.v * 0.8 * dt;
+      s.o += (Math.cos(s.t * 0.8 + s.ph) * 0.8 * FiberSplice.swell(s) + s.v) * dt;
+      s.o = Math.max(-1.6, Math.min(1.6, s.o));
+    }
+    if (s.time <= 0 && !s.over) { s.over = 'lost'; s.why = 'storm'; }
+  },
+  press(s, lane) {
+    if (s.over || s.arc > 0) return;
+    // a tap above, below or on the joint
+    if (lane >= 10) lane = lane - 10;
+    if (lane === 0) { s.o -= SPLICE.nudge; return; }
+    if (lane === 2) { s.o += SPLICE.nudge; return; }
+    if (s.slide > 0) return;
+    const off = Math.abs(s.o), loss = spliceLoss(off);
+    s.arc = SPLICE.arc;
+    if (off >= SPLICE.ok) {
+      s.lives--; s.redone++; s.last = { loss, kept: false, off };
+      float(s, 1, `Light leaks out (${loss.toFixed(2)} dB): cut and try again`, false);
+      if (s.lives <= 0) { s.over = 'lost'; s.why = 'leaks'; }
+      return;
+    }
+    s.total += loss; s.done.push(loss); s.fibre++;
+    s.last = { loss, kept: true, off };
+    const word = off < SPLICE.perfect ? 'Perfect!' : off < SPLICE.good ? 'Good' : 'OK';
+    const pts = Math.round(150 * (1 - off / SPLICE.ok)) + 30; s.score += pts;
+    float(s, 1, `${word} ${loss.toFixed(2)} dB  +${pts}`, off < SPLICE.good);
+    if (s.total > SPLICE.budget) { s.over = 'lost'; s.why = 'budget'; return; }
+    if (s.fibre >= s.fibres) s.over = 'won';
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + Math.round(Math.max(0, s.time)) * 3 : 0, flawless: s.redone === 0 && s.done.every((l) => l < spliceLoss(SPLICE.good)) };
+  },
+  summary(s, words) {
+    const best = s.done.length ? Math.min(...s.done) : 0;
+    return words === 'plain'
+      ? `You joined ${s.done.length} fibres, losing ${s.total.toFixed(2)} dB of light in all (the best join lost only ${best.toFixed(2)} dB)${s.redone ? `, and ${s.redone} join${s.redone === 1 ? '' : 's'} had to be done again` : ', and never had to redo one'}.`
+      : `${s.done.length} splices, ${s.total.toFixed(2)} dB total of a ${SPLICE.budget} dB budget (best ${best.toFixed(2)} dB), ${s.redone} remade.`;
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', top = 62, cx = w / 2, cy = top + (h - top - 40) / 2;
+    hud(g, w, theme, `${plain ? 'Fibre' : 'Fibre'} ${Math.min(s.fibre + 1, s.fibres)} / ${s.fibres} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(SPLICE.lives - Math.max(0, s.lives))}`, clamp01(s.time / SPLICE.time), s.score, s.time);
+    // the light budget, as a bar
+    const bw = Math.min(260, w - 40), bx = (w - bw) / 2;
+    g.fillStyle = theme.well; roundRect(g, bx, 34, bw, 12, 6); g.fill();
+    g.fillStyle = s.total > SPLICE.budget * 0.75 ? theme.bad : theme.good; roundRect(g, bx, 34, Math.max(8, bw * clamp01(s.total / SPLICE.budget)), 12, 6); g.fill();
+    g.fillStyle = theme.ink; g.font = `800 10px ${theme.font}`; g.textAlign = 'center';
+    g.fillText(`${plain ? 'Light lost' : 'Loss'} ${s.total.toFixed(2)} / ${SPLICE.budget} dB`, w / 2, 56);
+    // the splicer's view: a dark screen, two fibres, the cores glowing
+    const vw = Math.min(w - 24, 560), vh = h - top - 40, vx = (w - vw) / 2;
+    g.fillStyle = '#0d1b2a'; roundRect(g, vx, top, vw, vh, 12); g.fill();
+    const unit = Math.min(26, vh / 9), clad = unit * 3.2, core = unit * 0.9, gap = 10;
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.setLineDash([5, 6]); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(vx + 10, cy); g.lineTo(vx + vw - 10, cy); g.stroke(); g.setLineDash([]);
+    const ry = cy + (s.arc > 0 && s.last?.kept ? s.last.off * Math.sign(s.o || 1) : s.o) * unit;
+    const fibre = (x0, x1, y) => {
+      g.fillStyle = '#c9d6e3'; g.globalAlpha = 0.55; g.fillRect(x0, y - clad / 2, x1 - x0, clad); g.globalAlpha = 1;
+      g.fillStyle = '#5ee7ff'; g.shadowColor = '#5ee7ff'; g.shadowBlur = 12; g.fillRect(x0, y - core / 2, x1 - x0, core); g.shadowBlur = 0;
+    };
+    fibre(vx + 8, cx - gap / 2, cy);
+    fibre(cx + gap / 2 + (s.slide ?? 0) * vw, vx + vw - 8 + (s.slide ?? 0) * vw, ry);
+    // the arc, then the join glowing (or the leak)
+    if (s.arc > 0) {
+      const k = 1 - s.arc / SPLICE.arc;
+      if (k < 0.35) { g.strokeStyle = '#fff6a8'; g.lineWidth = 3; g.shadowColor = '#fff6a8'; g.shadowBlur = 20; g.beginPath(); g.moveTo(cx, cy - clad); for (let i = 1; i <= 6; i++) g.lineTo(cx + (i % 2 ? 6 : -6), cy - clad + (i * clad) / 3); g.stroke(); g.shadowBlur = 0; }
+      else if (s.last?.kept) { g.fillStyle = '#5ee7ff'; g.globalAlpha = 0.6 * (1 - k); g.beginPath(); g.arc(cx, (cy + ry) / 2, 18, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1; }
+      else emoji(g, '💨', cx + 14, cy - clad, 22);
+    }
+    // the guide marks for "lined up"
+    g.strokeStyle = 'rgba(125,255,176,0.5)'; g.lineWidth = 2;
+    for (const d of [-1, 1]) { g.beginPath(); g.moveTo(cx + gap, cy + d * SPLICE.good * unit); g.lineTo(cx + gap + 30, cy + d * SPLICE.good * unit); g.stroke(); }
+    const off = Math.abs(s.o);
+    g.fillStyle = off < SPLICE.perfect ? '#7dffb0' : off < SPLICE.good ? '#c8ff7d' : off < SPLICE.ok ? '#ffc43d' : '#ff8a94';
+    g.font = `800 12px ${theme.font}`; g.textAlign = 'right';
+    g.fillText(off < SPLICE.perfect ? (plain ? 'Lined up!' : 'Aligned') : off < SPLICE.ok ? (plain ? 'Almost…' : 'Offset') : (plain ? 'Too far off' : 'Out of tolerance'), vx + vw - 12, top + 20);
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.textAlign = 'left'; g.font = `700 10px ${theme.font}`;
+    g.fillText(plain ? 'splicer view · ×400' : 'core view · ×400', vx + 12, top + 18);
+    // the fibres done so far, as little dots
+    for (let i = 0; i < s.fibres; i++) { g.fillStyle = i < s.done.length ? (s.done[i] < spliceLoss(SPLICE.good) ? '#7dffb0' : '#ffc43d') : 'rgba(255,255,255,0.2)'; g.beginPath(); g.arc(vx + 16 + i * 14, top + vh - 14, 5, 0, Math.PI * 2); g.fill(); }
+    floats(g, s, () => [w / 2, h - 14], theme);
+  },
+  laneAt(x, y, w, h) {
+    // above the joint nudges up, below nudges down, on it joins
+    const top = 62, cy = top + (h - top - 40) / 2;
+    if (y < top) return null;
+    return 10 + (Math.abs(y - cy) < 26 ? 1 : y < cy ? 0 : 2);
+  },
+};
+
 // ---------------------------------------------------------------- Level 5: the fight with Lord Lag
 // The last level is a recap of the whole Quest: one round for each level before it, in a
 // game from that level picked at random (so a replay can bring a different one), short
@@ -6128,10 +6269,10 @@ const RobotDive = {
 const SHORT = {
   lastmile: { goal: 6 }, tetris: { goal: 8 }, storm: { rounds: 1 },
   fibercut: { goal: 4 }, beat: { seconds: 15 }, firewall: { waves: 2, build: 6 }, race: { first: 2, races: 1, need: 1 },
-  repeaters: { seconds: 10 }, dive: { rounds: 1 }, cablelayer: { seconds: 16 },
+  repeaters: { seconds: 10 }, dive: { rounds: 1 }, splice: { fibres: 2, time: 35 }, cablelayer: { seconds: 16 },
   rainbow: { goal: 4 }, mesh: { cuts: 2 },
 };
-const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'dive', 'cablelayer'], ['rainbow', 'mesh']];
+const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'dive', 'splice', 'cablelayer'], ['rainbow', 'mesh']];
 const BOSS_TAUNTS = [
   { plain: 'Back to the city, apprentice. Let\'s see if you remember!', eng: 'Round one, the city network. Show me you still remember.' },
   { plain: 'Lucky! Now the towers and the core. Faster!', eng: 'Round two: the towers and the core. Faster this time.' },
@@ -6238,7 +6379,7 @@ const BOSS = LordLagFight;
 const MINIGAMES = {
   lastmile: LastMileDash, tetris: PacketTetris, storm: StormChaser,
   fibercut: StopTheFiberCut, beat: KeepTheBeat, firewall: GuardTheGate, race: PacketRace,
-  repeaters: RepeaterRescue, dive: RobotDive, cablelayer: CableLayer,
+  repeaters: RepeaterRescue, dive: RobotDive, splice: FiberSplice, cablelayer: CableLayer,
   rainbow: RainbowPacking, mesh: MeshRescue,
 };
 
@@ -6250,7 +6391,7 @@ const QUEST_KEY = 'netlandia.quest', PLAY_KEY = 'netlandia.play', NOTE_KEY = 'ne
 const BOARD_KEY = 'netlandia.board', SOUND_KEY = 'netlandia.sound';
 const LAG_COLOR = '#e63946';     // Lord Lag's own colour, for the final fight
 // the ?dev menu says which build is running; build.mjs stamps the bundle with its date
-const BUILD = "2026-10-26 20:33 UTC";
+const BUILD = "2026-10-26 20:36 UTC";
 // on with ?dev in the address, or five quick taps on the Netlandia title (for previews
 // where the address can't be changed); the menu itself can switch it off again
 const DEV_KEY = 'netlandia.dev';
