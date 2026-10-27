@@ -457,7 +457,7 @@ export function initQuest(hooks) {
         <p class="q-sum">${gained(v.points)}${v.flawless ? ' · flawless bonus' : ''} · ☁ ${name}: ${left} more stop${left === 1 ? '' : 's'} before the clouds lift</p>
         <div class="q-btns"><button data-q="later">Later</button><button class="primary" data-q="next">Next stop: ${esc(MINIGAMES[nextG].name[words])} ▶</button></div>`;
     } else if (v.kind === 'exam') {
-      const n = isQuick(story) ? 2 : examAt(v.id).length;
+      const n = examAt(v.id).length;
       card.innerHTML = `
         <span class="q-level-tag">${where}</span>
         <span class="q-k">🏁 ${esc(MINIGAMES[v.gid].name[words])} won · +${v.carry.toLocaleString('en')} pts</span>
@@ -642,9 +642,9 @@ export function initQuest(hooks) {
   }
   // a network won: it unlocks, its points join the score, and the win card says why
   function bank(id, gid, play, know, flawless, st = null, review = null) {
-    if (levelOf(id).chapters.at(-1) === id) sfx('fanfare');
+    if (isQuick(story) || levelOf(id).chapters.at(-1) === id) sfx('fanfare');
     winChapter(story, { id, over: 'won', points: know }, play);
-    noteChapter(notebook, id);
+    for (const c of isQuick(story) ? levelOf(id).chapters : [id]) noteChapter(notebook, c);
     save();
     // a quick run lifts the clouds off the whole level at once
     applyLocks(isQuick(story) ? levelOf(id).chapters : id);
@@ -669,7 +669,7 @@ export function initQuest(hooks) {
     const res = answer(c, pos, seconds);
     noteAnswer(notebook, q, res.right, picked);
     sfx(c.over === 'lost' ? 'lose' : res.right ? 'good' : 'bad');
-    if (c.over) noteExam(notebook, c.id, c.over === 'won');
+    if (c.over) noteExam(notebook, levelOf(c.id).chapters.at(-1), c.over === 'won');
     save();
     if (c.over === 'won') {
       const ex = view.exam;
@@ -696,7 +696,6 @@ export function initQuest(hooks) {
     else if (what === 'nbclose') { intro.hidden = true; if (nbFrom === 'intro') showIntro(); }
     else if (what === 'play') { setPlaying(true); goNext(); }
     else if (what === 'play-quick' || what === 'play-full') { restartStory(story, what === 'play-quick' ? 'quick' : 'full'); boarded = false; save(); setPlaying(true); goNext(); }
-    else if (what === 'restart') { restartStory(story); boarded = false; save(); setPlaying(true); goNext(); }
     else if (what === 'explore' || what === 'free') { closeCard(); setPlaying(false); }
     else if (what === 'next') goNext();
     else if (what === 'begin' && v) openCard({ kind: 'how', id: v.id, gid: v.gid });

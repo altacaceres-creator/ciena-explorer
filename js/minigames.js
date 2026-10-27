@@ -1585,7 +1585,9 @@ const GuardTheGate = {
     // a tap on a spot picks it, built or not (a built one can be swapped)
     if (lane >= 10) { const k = lane - 10; if (k < FWD_SLOTS.length) s.sel = k; return; }
     const type = FWD_TOWERS[lane];
-    if (!type || s.sel == null || s.towers[s.sel]?.key === type.key) return;
+    if (!type || s.sel == null) return;
+    // the key of the tower already there moves the pick on to the next spot (for keyboards)
+    if (s.towers[s.sel]?.key === type.key) { s.sel = (s.sel + 1) % FWD_SLOTS.length; return; }
     const cost = GuardTheGate.cost(s, lane);
     if (s.coins < cost) { s.poor++; float(s, 1, `Need ${cost} 🪙`, false); return; }
     if (s.towers[s.sel]) s.swapped++;
@@ -1593,14 +1595,15 @@ const GuardTheGate = {
     s.towers[s.sel] = { ...type, cd: 0 };
     // the next free spot is picked for the next build
     const free = FWD_SLOTS.map((_, k) => k).filter((k) => !s.towers[k]);
-    s.sel = free.length ? free.sort((a, b) => Math.abs(a - s.sel) - Math.abs(b - s.sel))[0] : null;
+    // the next free spot is picked; with none left, this one stays picked so it can be swapped
+    if (free.length) s.sel = free.sort((a, b) => Math.abs(a - s.sel) - Math.abs(b - s.sel))[0];
   },
   // what building `lane` on the picked spot costs: swapping a tower gives half its price back
   cost: (s, lane) => FWD_TOWERS[lane].cost - Math.floor((s.towers[s.sel]?.cost ?? 0) / 2),
   lanes(s, words) {
     if (s.sel == null) return ['—', '—', '—'];
     const here = s.towers[s.sel];
-    return FWD_TOWERS.map((x, i) => (here?.key === x.key ? '—' : `${here ? '⇄ ' : ''}${x.icon} ${x[words]} · ${Math.max(0, GuardTheGate.cost(s, i))}🪙`));
+    return FWD_TOWERS.map((x, i) => (here?.key === x.key ? (words === 'plain' ? 'Next spot ▶' : 'Next slot ▶') : `${here ? '⇄ ' : ''}${x.icon} ${x[words]} · ${Math.max(0, GuardTheGate.cost(s, i))}🪙`));
   },
   result(s) {
     if (!s.over) return null;
@@ -1781,7 +1784,7 @@ const RobotDive = {
   summary(s, words) {
     return words === 'plain'
       ? `You found ${s.found} cut${s.found === 1 ? '' : 's'} on the sea floor with ${s.pings} flash${s.pings === 1 ? '' : 'es'} of light${s.hits ? `, and bumped into ${s.hits} jellyfish on the way` : ', and never touched a jellyfish'}.`
-      : `${s.found} faults located with ${s.pings} OTDR shot${s.pings === 1 ? '' : 's'}; ${s.hits} ROV collision${s.hits === 1 ? '' : 's'}, ${DIVE.lives - s.lives} recovery${DIVE.lives - s.lives === 1 ? '' : 'ies'}.`;
+      : `${s.found} faults located with ${s.pings} OTDR shot${s.pings === 1 ? '' : 's'}; ${s.hits} ROV collision${s.hits === 1 ? '' : 's'}, ${DIVE.lives - s.lives} recover${DIVE.lives - s.lives === 1 ? 'y' : 'ies'}.`;
   },
   box: (w, h) => ({ x: 14, y: 34, w: w - 28, h: h - 42 }),
   draw(g, s, w, h, words, theme) {
@@ -2002,7 +2005,7 @@ const ColourMemory = {
   laneNames: { plain: MEM_COLOURS.map((c) => c.plain), eng: MEM_COLOURS.map((c) => c.eng) },
   start(random = Math.random, opts = {}) {
     const seq = Array.from({ length: MEM.start }, () => Math.floor(random() * 3));
-    return { t: 0, random, rounds: opts.rounds ?? MEM.rounds, round: 0, seq, phase: 'pause', pt: 0.8, step: 0, pos: 0, wait: 0, lit: null, pulses: [], lives: MEM.lives, right: 0, wrong: 0, timeouts: 0, score: 0, fx: [], over: null };
+    return { t: 0, random, rounds: opts.rounds ?? MEM.rounds, round: 0, seq, longest: 0, phase: 'pause', pt: 0.8, step: 0, pos: 0, wait: 0, lit: null, pulses: [], lives: MEM.lives, right: 0, wrong: 0, timeouts: 0, score: 0, fx: [], over: null };
   },
   speed: (s) => MEM.show[Math.min(MEM.show.length - 1, s.round)],
   tick(s, dt) {
@@ -2040,7 +2043,7 @@ const ColourMemory = {
     if (lane !== s.seq[s.pos]) { ColourMemory.miss(s, `Wrong colour! That was ${MEM_COLOURS[s.seq[s.pos]].plain.toLowerCase()}`); return; }
     s.pos++; s.right++; s.score += 20;
     if (s.pos < s.seq.length) return;
-    s.round++; s.score += 50; float(s, 1, `Pattern matched! +${20 * s.seq.length + 50}`, true);
+    s.round++; s.score += 50; s.longest = s.seq.length; float(s, 1, `Pattern matched! +${20 * s.seq.length + 50}`, true);
     if (s.round >= s.rounds) { s.over = 'won'; return; }
     s.seq.push(Math.floor(s.random() * 3));
     s.phase = 'pause'; s.pt = MEM.pause;
@@ -2052,7 +2055,7 @@ const ColourMemory = {
     return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.wrong === 0 };
   },
   summary(s, words) {
-    const longest = s.seq.length - (s.over === 'won' ? 0 : 1);
+    const longest = s.longest;
     return words === 'plain'
       ? `You sent back ${s.right} colours in the right order, up to a pattern ${longest} colours long${s.wrong ? `, and mixed ${s.wrong} up along the way` : ', without a single mix-up'}.`
       : `${s.right} wavelengths echoed in order; longest sequence ${longest}; ${s.wrong} mismatch${s.wrong === 1 ? '' : 'es'} (${s.timeouts} timed out).`;
@@ -2139,7 +2142,7 @@ function lpPuzzle(random, cols, rows) {
   const solved = tiles.map((tl) => tl.rot);
   for (const tl of tiles) tl.rot = Math.floor(random() * 4);
   const pz = { cols, rows, a, b, tiles, solved };
-  if (lpTrace(pz).done) tiles.find((tl) => tl.path).rot = (tiles.find((tl) => tl.path).rot + 1) % 4;
+  for (let n = 0; n < 40 && lpTrace(pz).done; n++) { const lit = lpTrace(pz).lit; const tl = tiles[lit[Math.floor(random() * lit.length)]]; tl.rot = (tl.rot + 1) % 4; }
   return pz;
 }
 // follow the light from the source: the tiles it lights, and whether it reaches the far side
@@ -2327,7 +2330,9 @@ const LordLagFight = {
       g.fillStyle = theme.ink; g.font = `800 16px ${theme.font}`; g.textAlign = 'center';
       g.fillText(`Round ${s.round + 1} of ${s.picks.length} · ${MINIGAMES[s.picks[s.round]].name[words]}`, w / 2, h * 0.6);
       g.font = `700 14px ${theme.font}`; g.fillStyle = theme.muted;
-      g.fillText(`“${BOSS_TAUNTS[s.round][words]}”`, w / 2, h * 0.7, w - 40);
+      // the taunt goes with the level the round's game comes from, whatever the round
+      const lvl = Math.max(0, BOSS_LEVELS.findIndex((games) => games.includes(s.picks[s.round])));
+      g.fillText(`“${BOSS_TAUNTS[lvl][words]}”`, w / 2, h * 0.7, w - 40);
     }
     // Lord Lag's hearts, one lost for every round you win
     const left = s.picks.length - s.results.length;

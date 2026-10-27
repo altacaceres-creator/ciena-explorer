@@ -626,9 +626,7 @@ export function restartStory(s, mode = s.mode, random = Math.random) {
 }
 // the quiz that closes a level in a quick run: a couple of its exam's questions, at random
 export function quickQuiz(id, random = Math.random) {
-  const all = [...examAt(levelOf(id).chapters.at(-1))];
-  for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
-  return all.slice(0, QUICK_QUIZ);
+  return shuffle([...examAt(levelOf(id).chapters.at(-1))], random).slice(0, QUICK_QUIZ);
 }
 // For testing (the ?dev menu): put the story just before a stop, every network before
 // it already won. `id` null means just before the fight with Lord Lag.

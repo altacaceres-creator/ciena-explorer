@@ -319,8 +319,8 @@ test('Guard the Gate: guards alone let the disguised bots through; a detective s
   assert.equal(c.towers[0].key, 'bump'); assert.equal(c.coins, 0);
   // a built spot can be swapped, with half its price back
   c.coins = 3; G.press(c, 10 + 0); G.press(c, 2);
-  assert.equal(c.coins, 3, 'the same tower again does nothing');
-  G.press(c, 1);
+  assert.deepEqual([c.coins, c.sel], [3, 1], 'the same tower\'s key moves the pick on, for keyboards');
+  G.press(c, 10 + 0); G.press(c, 1);
   assert.deepEqual([c.towers[0].key, c.coins, c.swapped], ['detective', 3 - (4 - 1), 1]);
 });
 
@@ -373,9 +373,9 @@ test('Colour Memory: the pattern grows a colour a round; a wrong colour shows th
 
 test('Light Path: every puzzle can be solved, the light stops at the first wrong switch, and four turns come back round', () => {
   const G = MINIGAMES.lightpath;
-  for (let seed = 1; seed <= 30; seed++) {
+  for (let seed = 1; seed <= 300; seed++) {
     const s = G.start(seeded(seed));
-    assert.equal(s.trace.done, false, 'never solved from the start');
+    assert.equal(s.trace.done, false, `never solved from the start (seed ${seed})`);
     for (let k = 0; k < s.pz.tiles.length; k++) if (s.pz.tiles[k].path) s.pz.tiles[k].rot = s.pz.solved[k];
     G.press(s, 10 + s.pz.tiles.findIndex((tl) => tl.path)); for (let n = 0; n < 3; n++) G.press(s, 1);   // a full turn of one switch
     assert.equal(s.trace.done, true, `seed ${seed}`);
@@ -391,4 +391,21 @@ test('every game has a one-line tip in both readings, for the quick run', async 
   const { TIPS } = await import('../js/minigames.js');
   assert.deepEqual(Object.keys(TIPS).sort(), Object.keys(MINIGAMES).sort());
   for (const [id, tip] of Object.entries(TIPS)) for (const r of ['plain', 'eng']) assert.ok(tip[r].length > 20 && tip[r].length <= 110, `${id}.${r}: ${tip[r].length}`);
+});
+
+test('fixes: a lost first pattern repeated nothing; plurals; a keyboard can swap once every spot is built', () => {
+  const M = MINIGAMES.memory, m = M.start(seeded(6));
+  for (let i = 0; i < 3 && !m.over; i++) { for (let k = 0; k < 2000 && m.phase !== 'input'; k++) M.tick(m, 1 / 60); M.press(m, (m.seq[m.pos] + 1) % 3); }
+  assert.equal(m.over, 'lost');
+  assert.match(M.summary(m, 'plain'), /up to a pattern 0 colours long/);
+  const D = MINIGAMES.dive, d = D.start(seeded(2));
+  d.lives = 1; assert.match(D.summary(d, 'eng'), /2 recoveries/);
+  d.lives = 2; assert.match(D.summary(d, 'eng'), /1 recovery\./);
+  const G = MINIGAMES.firewall, s = G.start(seeded(3));
+  s.coins = 99;
+  for (let i = 0; i < 6; i++) G.press(s, 0);
+  assert.ok(s.towers.every((x) => x?.key === 'guard'), 'six guards by keys alone');
+  assert.notEqual(s.sel, null, 'a spot stays picked');
+  G.press(s, 0); G.press(s, 1);
+  assert.equal(s.towers.filter((x) => x.key === 'detective').length, 1, 'and one is swapped for a detective by keys alone');
 });
