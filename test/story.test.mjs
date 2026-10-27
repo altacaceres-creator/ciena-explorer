@@ -7,7 +7,7 @@ import {
   STORY, STAGES, STORY_ORDER, STORY_LEVELS, STORY_RANKS, STORY_LIVES, STORY_SECONDS, FLAWLESS_BONUS, answerPoints, newStory, loadStory,
   nextChapter, nextStage, isUnlocked, rankOf, storyDone, bossNext, startChallenge, answer, winStage, winChapter, winFinal, restartStory,
   levelOf, examAt, jumpTo, TEASERS, EXTRA_QUESTIONS,
-  newNotebook, loadNotebook, BOARD_SIZE, boardName, loadBoard, addToBoard, noteGame, noteExam, noteAnswer, noteChapter, questionKey, questionOf,
+  newNotebook, loadNotebook, quickPicks, stagesOf, quickQuiz, ownerOf, isQuick, QUICK_QUIZ, BOARD_SIZE, boardName, loadBoard, addToBoard, noteGame, noteExam, noteAnswer, noteChapter, questionKey, questionOf,
 } from '../js/story.js';
 import { MINIGAMES } from '../js/minigames.js';
 
@@ -162,7 +162,7 @@ test('every network has a riddle that does not give its name away, and the dev m
   for (const id of STORY_ORDER) for (const r of ['plain', 'eng']) assert.ok(TEASERS[id][r].length > 20, `${id}.${r}`);
   const s = newStory();
   jumpTo(s, 'ipcore');
-  assert.deepEqual([s.unlocked, s.stage, nextChapter(s), nextStage(s)], [['aggregation', 'xhaul'], 0, 'ipcore', 'race']);
+  assert.deepEqual([s.unlocked, s.stage, nextChapter(s), nextStage(s)], [['aggregation', 'xhaul'], 0, 'ipcore', 'firewall']);
   jumpTo(s, 'aggregation', 2);
   assert.deepEqual([s.unlocked, nextStage(s)], [[], 'storm']);
   jumpTo(s, 'submarine', 9);
@@ -229,3 +229,38 @@ test('the board keeps the ten best runs with their two scores, and only clean na
   assert.deepEqual(loadBoard([{ name: '<>', score: 50 }, { name: 'Ok', score: -3 }, 'junk', { name: 'Fine', score: 70.4, rank: 'Emperor' }]), [{ name: 'Fine', score: 70, know: 0, play: 0, rank: STORY_RANKS[0], at: 0 }]);
   assert.deepEqual(loadBoard('nonsense'), []);
 });
+
+test('the quick run: one game a level, picked at random, and each win brings the whole level back', () => {
+  const s = newStory('quick', seeded2(4));
+  assert.ok(isQuick(s));
+  const levels = STORY_LEVELS.filter((l) => !l.boss);
+  for (const l of levels) assert.ok(l.chapters.some((id) => STORY[id].stages.includes(s.picks[l.n])), `level ${l.n} picks its own game`);
+  for (const l of levels) {
+    const id = nextChapter(s), gid = s.picks[l.n];
+    assert.equal(id, ownerOf(gid), 'the next network is the one that plays the game');
+    assert.deepEqual(stagesOf(s, id), [gid]);
+    assert.equal(nextStage(s), gid);
+    const quiz = quickQuiz(id, seeded2(1));
+    assert.equal(quiz.length, QUICK_QUIZ);
+    for (const q of quiz) assert.ok(examAt(l.chapters.at(-1)).includes(q), 'the quiz comes from the level\'s exam');
+    winChapter(s, { id, over: 'won', points: 200 }, 300);
+    assert.ok(l.chapters.every((c) => isUnlocked(s, c)), `level ${l.n} is back whole`);
+    assert.equal(s.stage, 0);
+  }
+  assert.ok(bossNext(s));
+  winFinal(s, 500);
+  assert.ok(storyDone(s));
+  assert.deepEqual(loadStory(JSON.parse(JSON.stringify(s))), s);
+  // a save that only half won a level, or picked another level's game, is put right
+  const odd = loadStory({ mode: 'quick', picks: { 1: 'mesh', 2: 'firewall', 3: 'dive', 4: 'memory' }, unlocked: ['aggregation', 'xhaul'] });
+  assert.deepEqual(odd.unlocked, ['aggregation']);
+  assert.ok(STORY.aggregation.stages.includes(odd.picks[1]));
+  assert.equal(odd.picks[2], 'firewall');
+  // the picks change from run to run, and starting over picks again
+  const runs = new Set(Array.from({ length: 12 }, (_, i) => JSON.stringify(quickPicks(seeded2(i + 1)))));
+  assert.ok(runs.size > 3);
+  restartStory(s, 'full');
+  assert.deepEqual([s.mode, s.picks, s.unlocked], ['full', {}, []]);
+  assert.deepEqual(stagesOf(s, 'submarine'), STORY.submarine.stages);
+});
+const seeded2 = (n) => () => ((n = (n * 16807) % 2147483647) / 2147483647);

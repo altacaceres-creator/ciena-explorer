@@ -130,6 +130,38 @@ const robots = {
     const near = s.hazards.filter((z) => z.x > 0.2 && z.x < 0.45);
     if (near.some((z) => z.lane === s.lane)) G.press(s, [0, 1, 2].find((l) => !near.some((z) => z.lane === l)));
   },
+  // a plan: guards on the middle spots, then detectives, a speed bump, and more guards
+  firewall: (G, s) => {
+    const plan = [[1, 0], [2, 0], [1, 1], [0, 1], [3, 2], [4, 0], [5, 1]];
+    const step = plan.find(([k]) => !s.towers[k]);
+    if (!step) return;
+    const costs = [3, 4, 2];
+    if (s.coins < costs[step[1]]) return;
+    G.press(s, 10 + step[0]); G.press(s, step[1]);
+  },
+  // ping, drive to the mark (waiting for jellyfish to drift by), ping again closer
+  dive: (G, s) => {
+    if (s.between > 0) return;
+    if (!s.mark) { if (!s.pulse) G.press(s, 1); return; }
+    if (Math.abs(s.x - s.mark.x) < 0.01 && !s.pulse && s.mark.band > 0.02) { G.press(s, 1); return; }
+    const ahead = Math.sign(s.mark.x - s.x);
+    const danger = s.jellies.some((j) => (j.x - s.x) * ahead > 0 && Math.abs(j.x - s.x) < 0.09 && Math.abs(G.jellyY(j, s.t) - 0.6) < 0.2);
+    if (danger) { s.goto = null; s.dir = 0; } else if (s.goto !== s.mark.x) G.press(s, 10 + Math.round(s.mark.x * 100));
+  },
+  // nudge toward the middle, join when lined up
+  splice: (G, s) => {
+    if (s.arc > 0 || (s.nextNudge ?? 0) > s.t) return;
+    if (Math.abs(s.o) < 0.12) G.press(s, 1);
+    else { G.press(s, s.o > 0 ? 0 : 2); s.nextNudge = s.t + 0.12; }
+  },
+  // repeat what was shown
+  memory: (G, s) => { if (s.phase === 'input' && s.wait > 0.3) G.press(s, s.seq[s.pos]); },
+  // turn each switch on the planned path until it is right, one turn every so often
+  lightpath: (G, s) => {
+    if (s.between > 0 || (s.nextTurn ?? 0) > s.t) return;
+    const i = s.pz.tiles.findIndex((tl, k) => tl.path && (tl.kind === 'straight' ? tl.rot % 2 !== s.pz.solved[k] % 2 : tl.rot !== s.pz.solved[k]));
+    if (i >= 0) { G.press(s, 10 + i); s.nextTurn = s.t + 0.25; }
+  },
   // the first way round that has room
   mesh: (G, s) => {
     if (!s.asking || s.asking.t < 1) return;
@@ -215,7 +247,7 @@ test('Level 5, the fight with Lord Lag: a round from each level, in any game of 
     });
     return s;
   };
-  for (const picks of [['tetris', 'race', 'repeaters', 'mesh'], ['lastmile', 'beat', 'cablelayer', 'rainbow'], ['storm', 'fibercut', 'repeaters', 'mesh']]) {
+  for (const picks of [['tetris', 'race', 'repeaters', 'mesh'], ['lastmile', 'beat', 'cablelayer', 'rainbow'], ['storm', 'fibercut', 'repeaters', 'mesh'], ['tetris', 'firewall', 'dive', 'memory'], ['storm', 'firewall', 'splice', 'lightpath']]) {
     const s = play(picks);
     assert.equal(BOSS.result(s).won, true, `${picks.join(' ')}: round ${s.round}`);
     assert.equal(s.results.length, 4);
@@ -262,4 +294,118 @@ test('Stop the Fiber Cut and Cable Layer: the wrong move loses', () => {
   const C = MINIGAMES.cablelayer, c = C.start(seeded(2));
   run(C, c, 60, (s) => { const z = s.hazards.find((h) => h.x > 0.2 && h.x < 0.3); if (z) C.press(s, z.lane); });
   assert.equal(C.result(c).won, false, 'steering into every hazard sinks the lay');
+});
+
+test('Guard the Gate: guards alone let the disguised bots through; a detective stops them; customers always pass', () => {
+  const G = MINIGAMES.firewall;
+  // only guards, as many as can be afforded
+  const s = G.start(seeded(3));
+  run(G, s, 400, (x) => { const k = x.towers.findIndex((t, i) => !t && i < 6); if (k >= 0 && x.coins >= 3) { G.press(x, 10 + k); G.press(x, 0); } });
+  assert.ok(s.breaches > 0 && s.masksStopped === 0, `masks get past plain rules (${s.breaches} breaches)`);
+  assert.ok(s.towers.every((t) => !t || t.key === 'guard'));
+  // a detective stops a disguised bot in range
+  const d = G.start(seeded(3), { build: 0 });
+  d.coins = 10; G.press(d, 10 + 1); G.press(d, 1);
+  d.packets = [{ kind: 'mask', d: 1.6 }, { kind: 'good', d: 1.62 }];
+  d.spawns = [{ at: 99, kind: 'good' }]; d.wave = 0;
+  for (let i = 0; i < 30; i++) G.tick(d, 1 / 60);
+  assert.equal(d.masksStopped, 1);
+  assert.ok(d.packets.some((p) => p.kind === 'good'), 'the customer is never stopped');
+  // building needs coins, and a built spot can't be built on again
+  const c = G.start(seeded(3));
+  c.coins = 2; G.press(c, 10 + 0); G.press(c, 0);
+  assert.equal(c.towers[0], null); assert.equal(c.poor, 1);
+  G.press(c, 2);
+  assert.equal(c.towers[0].key, 'bump'); assert.equal(c.coins, 0);
+  // a built spot can be swapped, with half its price back
+  c.coins = 3; G.press(c, 10 + 0); G.press(c, 2);
+  assert.deepEqual([c.coins, c.sel], [3, 1], 'the same tower\'s key moves the pick on, for keyboards');
+  G.press(c, 10 + 0); G.press(c, 1);
+  assert.deepEqual([c.towers[0].key, c.coins, c.swapped], ['detective', 3 - (4 - 1), 1]);
+});
+
+test('Robot Dive: each ping marks the cut more closely; searching by lamp alone runs the battery down', () => {
+  const G = MINIGAMES.dive;
+  const s = G.start(seeded(5));
+  const bands = [];
+  for (let i = 0; i < 3; i++) { G.press(s, 1); run(G, s, 2); bands.push(s.mark.band); assert.ok(Math.abs(s.mark.x - s.cut) <= s.mark.band / 2 + 1e-9); }
+  assert.deepEqual(bands, [0.12, 0.05, 0.015]);
+  // never pinging: drive slowly back and forth by lamp, and lose to the battery
+  const blind = G.start(seeded(5));
+  run(G, blind, 400, (x) => { if (x.between > 0 || x.dir) return; G.press(x, x.x < 0.5 ? 2 : 0); });
+  assert.ok(blind.found < 3, `found ${blind.found}`);
+});
+
+test('Fiber Splice: an offset core loses light; too far off must be redone; the losses add up to a budget', () => {
+  const G = MINIGAMES.splice;
+  const s = G.start(seeded(2));
+  s.o = 0; G.press(s, 1);
+  assert.equal(s.done.length, 1); assert.ok(s.done[0] < 0.03, 'lined up: almost nothing lost');
+  run(G, s, 2);
+  s.o = 0.5; G.press(s, 1);
+  assert.ok(s.done[1] > s.done[0] * 4, 'off by half a core: much more lost');
+  run(G, s, 2);
+  s.o = 0.9; G.press(s, 1);
+  assert.deepEqual([s.done.length, s.redone, s.lives], [2, 1, 2], 'too far off: redone, a life gone');
+  // sloppy joins blow the budget even without a redo
+  const b = G.start(seeded(2));
+  for (let i = 0; i < 6 && !b.over; i++) { b.o = 0.62; b.arc = 0; G.press(b, 1); }
+  assert.equal(b.over, 'lost'); assert.equal(b.why, 'budget');
+  // nudges move the fibre
+  const n = G.start(seeded(2)); n.o = 0; G.press(n, 0); G.press(n, 0); assert.ok(Math.abs(n.o + 0.32) < 1e-9);
+});
+
+test('Colour Memory: the pattern grows a colour a round; a wrong colour shows the same pattern again', () => {
+  const G = MINIGAMES.memory;
+  const s = G.start(seeded(6));
+  const at = (phase) => { for (let i = 0; i < 2000 && s.phase !== phase && !s.over; i++) G.tick(s, 1 / 60); };
+  at('input');
+  const first = [...s.seq];
+  assert.equal(first.length, 3);
+  G.press(s, (s.seq[0] + 1) % 3);
+  assert.deepEqual([s.lives, s.phase], [2, 'pause']);
+  at('input');
+  assert.deepEqual(s.seq, first, 'the same pattern again');
+  for (const c of first) G.press(s, c);
+  assert.equal(s.seq.length, 4, 'one colour more');
+  assert.deepEqual(s.seq.slice(0, 3), first);
+});
+
+test('Light Path: every puzzle can be solved, the light stops at the first wrong switch, and four turns come back round', () => {
+  const G = MINIGAMES.lightpath;
+  for (let seed = 1; seed <= 300; seed++) {
+    const s = G.start(seeded(seed));
+    assert.equal(s.trace.done, false, `never solved from the start (seed ${seed})`);
+    for (let k = 0; k < s.pz.tiles.length; k++) if (s.pz.tiles[k].path) s.pz.tiles[k].rot = s.pz.solved[k];
+    G.press(s, 10 + s.pz.tiles.findIndex((tl) => tl.path)); for (let n = 0; n < 3; n++) G.press(s, 1);   // a full turn of one switch
+    assert.equal(s.trace.done, true, `seed ${seed}`);
+  }
+  const s = G.start(seeded(4));
+  const before = s.pz.tiles.map((tl) => tl.rot);
+  G.press(s, 10); for (let n = 0; n < 3; n++) G.press(s, 1);
+  assert.deepEqual(s.pz.tiles.map((tl) => tl.rot), before);
+  assert.equal(s.turns, 4);
+});
+
+test('every game has a one-line tip in both readings, for the quick run', async () => {
+  const { TIPS } = await import('../js/minigames.js');
+  assert.deepEqual(Object.keys(TIPS).sort(), Object.keys(MINIGAMES).sort());
+  for (const [id, tip] of Object.entries(TIPS)) for (const r of ['plain', 'eng']) assert.ok(tip[r].length > 20 && tip[r].length <= 110, `${id}.${r}: ${tip[r].length}`);
+});
+
+test('fixes: a lost first pattern repeated nothing; plurals; a keyboard can swap once every spot is built', () => {
+  const M = MINIGAMES.memory, m = M.start(seeded(6));
+  for (let i = 0; i < 3 && !m.over; i++) { for (let k = 0; k < 2000 && m.phase !== 'input'; k++) M.tick(m, 1 / 60); M.press(m, (m.seq[m.pos] + 1) % 3); }
+  assert.equal(m.over, 'lost');
+  assert.match(M.summary(m, 'plain'), /up to a pattern 0 colours long/);
+  const D = MINIGAMES.dive, d = D.start(seeded(2));
+  d.lives = 1; assert.match(D.summary(d, 'eng'), /2 recoveries/);
+  d.lives = 2; assert.match(D.summary(d, 'eng'), /1 recovery\./);
+  const G = MINIGAMES.firewall, s = G.start(seeded(3));
+  s.coins = 99;
+  for (let i = 0; i < 6; i++) G.press(s, 0);
+  assert.ok(s.towers.every((x) => x?.key === 'guard'), 'six guards by keys alone');
+  assert.notEqual(s.sel, null, 'a spot stays picked');
+  G.press(s, 0); G.press(s, 1);
+  assert.equal(s.towers.filter((x) => x.key === 'detective').length, 1, 'and one is swapped for a detective by keys alone');
 });

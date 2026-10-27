@@ -116,7 +116,7 @@ export const STORY = {
   },
 
   ipcore: {
-    stages: ['race'],
+    stages: ['firewall', 'race'],
     questions: [
       {
         plain: { q: 'The short road between two Tidewell offices is jammed by backups. What saves the video meeting?', a: ['Send the meeting a quieter way round, through Northport', 'Stop the meeting until the backups finish', 'Make the backups bigger so they finish sooner'] },
@@ -147,7 +147,7 @@ export const STORY = {
   },
 
   submarine: {
-    stages: ['repeaters', 'cablelayer'],
+    stages: ['repeaters', 'dive', 'splice', 'cablelayer'],
     questions: [
       {
         plain: { q: 'Light gets weaker as it travels thousands of kilometres under the sea. What keeps it strong?', a: ['Boosters on the sea floor every so often, powered through the cable', 'Fish swimming beside the cable', 'Nothing: it is just very bright when it starts'] },
@@ -178,7 +178,7 @@ export const STORY = {
   },
 
   metro: {
-    stages: ['rainbow'],
+    stages: ['memory', 'rainbow'],
     questions: [
       {
         plain: { q: 'One glass fibre in Lumen City carries many conversations at once. How?', a: ['Each one travels in its own colour of light', 'They take turns, one per day', 'The fibre is split into thousands of tiny tubes'] },
@@ -209,7 +209,7 @@ export const STORY = {
   },
 
   longhaul: {
-    stages: ['mesh'],
+    stages: ['lightpath', 'mesh'],
     questions: [
       {
         plain: { q: 'A storm cuts three long fibres one after another. How does the light highway keep the towns connected?', a: ['It finds a new road for each cut, because the roads form a web, not a line', 'It closes the highway until the storm ends', 'It squeezes everything onto one road, even when it is full'] },
@@ -225,8 +225,8 @@ export const STORY = {
       },
     ],
     win: {
-      plain: 'Lord Lag is beaten, and Netlandia is back on, all of it.',
-      eng: 'Three cuts restored without losing one service. Lord Lag is beaten.',
+      plain: 'The light highway is back, and every network in Netlandia is on again. Only Lord Lag is left!',
+      eng: 'Three cuts restored without losing one service. Only Lord Lag is left.',
     },
     why: {
       plain: 'The light highway is a web of roads with smart crossroads, so the network can always find another way.',
@@ -318,6 +318,21 @@ export const STAGES = {
       eng: 'PTP rides the top strict-priority queue, so delay variation stays inside the phase budget of each cell site.',
     },
   },
+  firewall: {
+    villain: { name: 'The Botnet', face: '🤖' },
+    taunt: {
+      plain: 'Beep boop! Thousands of my bots are heading for your data center, hidden among your customers. Some even wear a disguise. Your gate can\'t check them all!',
+      eng: 'My botnet is aimed at your data center: scans, floods, and payloads disguised as normal traffic. Let\'s see your filters hold.',
+    },
+    lose: {
+      plain: 'The bots got through the gate and the data center is overloaded. Nobody can reach their files. Lord Lag cheers.',
+      eng: 'Malicious traffic breached the perimeter; the data center is saturated and its services are down.',
+    },
+    lesson: {
+      plain: 'A gate checks every packet against a list of rules: let it in, or keep it out. Simple rules stop plain bots, a closer look catches the ones in disguise, and since every gate can only check so many at once, real networks put several in a row.',
+      eng: 'A firewall matches each packet against an ordered rule list (ACL): permit or deny. Known-bad traffic is dropped cheaply; disguised payloads need deep packet inspection (IPS); every filter has finite throughput, so floods are met with rate limiting and defence in depth.',
+    },
+  },
   race: {
     villain: { name: 'Lord Lag', face: '😈' },
     taunt: {
@@ -348,6 +363,36 @@ export const STAGES = {
       eng: 'Powered repeater chains keep the signal up; diverse cables and landings turn a cut into a repair job.',
     },
   },
+  dive: {
+    villain: { name: 'The Jellyfish Gang', face: '🪼' },
+    taunt: {
+      plain: 'Blub blub! The cable is cut somewhere down in the dark, and we are everywhere. Good luck finding it before your little robot runs out of power!',
+      eng: 'The break is somewhere on a long, dark seabed, and we drift right across your ROV\'s path. Find it before the battery dies.',
+    },
+    lose: {
+      plain: 'The robot\'s battery ran out three times and the cut is still lost in the dark. The island stays offline.',
+      eng: 'Three ROV dives ended on a flat battery with the fault unlocated; the island remains on its last path.',
+    },
+    lesson: {
+      plain: 'To find a break at the bottom of the sea, engineers send a flash of light down the cable from the shore and time its echo: the longer it takes to come back, the farther away the break is. Then the robot goes straight there.',
+      eng: 'An OTDR fires pulses into the fibre and times the reflection from the break, locating the fault to within metres from the landing station, so the repair ship and its ROV head straight for it.',
+    },
+  },
+  splice: {
+    villain: { name: 'The Big Swell', face: '🌊' },
+    taunt: {
+      plain: 'Heave-ho! I will rock your little ship back and forth, and your tiny glass threads will never line up again!',
+      eng: 'Sea state five and rising. Good luck aligning cores a few microns wide on a rolling deck.',
+    },
+    lose: {
+      plain: 'The joins leak too much light, and the storm is here. The cable goes back into the sea still broken.',
+      eng: 'Splice loss blew the link budget before the weather window closed; the repair is abandoned.',
+    },
+    lesson: {
+      plain: 'The glass core that carries the light is thinner than a hair, so the two ends must line up almost perfectly before they are melted together. Every join loses a little light, and all those little losses add up along the cable, so each one has to be as good as it can be.',
+      eng: 'A fusion splicer aligns cores of about 9 µm before firing the arc; lateral offset becomes splice loss (dB). Losses add up in the link budget along with the fibre and the connectors, so every splice is measured and remade if it is over tolerance.',
+    },
+  },
   cablelayer: {
     villain: { name: 'The Kraken', face: '🦑' },
     taunt: {
@@ -363,6 +408,21 @@ export const STAGES = {
       eng: 'A marine route survey keeps the lay off hazards and trawling grounds, with burial and armour where anchors could reach.',
     },
   },
+  memory: {
+    villain: { name: 'The Smudger', face: '🦝' },
+    taunt: {
+      plain: 'Hee hee! I smudged all the colours on the light ring. Now nobody knows which colour goes where. Can you remember them? I bet you can\'t!',
+      eng: 'I scrambled the channel plan on the ring. Neither end knows which wavelength carries what. Re-learn it, if you can keep up.',
+    },
+    lose: {
+      plain: 'The colours got mixed up, and the films went to the bank while the bank\'s money went to the cinema. The Smudger giggles.',
+      eng: 'Channel mismatch: services dropped on the wrong ports at the far end. The ring is misdelivering traffic.',
+    },
+    lesson: {
+      plain: 'One fibre carries many colours of light at the same time, and each colour is a separate channel, like lanes on a road. Both ends must agree which colour is which, so each message reaches the right place.',
+      eng: 'DWDM carries each service on its own wavelength; ROADMs add, drop or pass each one by colour, so the channel plan must match at every node or traffic lands on the wrong port.',
+    },
+  },
   rainbow: {
     villain: { name: 'The Spectrum Hog', face: '🐷' },
     taunt: {
@@ -376,6 +436,21 @@ export const STAGES = {
     lesson: {
       plain: 'Each link gets its own colours of light, the same all the way along, and packing them tight leaves room for more.',
       eng: 'Wavelength continuity end to end, and a well-packed spectrum, let the ring grow without new fibre.',
+    },
+  },
+  lightpath: {
+    villain: { name: 'Professor Prism', face: '🔮' },
+    taunt: {
+      plain: 'Ah-ha! I have turned every light switch between Prismfield and Spectraville the wrong way. The light goes round in circles and nowhere at all!',
+      eng: 'Every cross-connect between Prismfield and Spectraville has been scrambled. Your wavelengths now terminate in the middle of nowhere.',
+    },
+    lose: {
+      plain: 'The light never reached Spectraville, and the far city stays dark. Professor Prism takes a bow.',
+      eng: 'No end-to-end light path was restored in time; the long-haul services stay down.',
+    },
+    lesson: {
+      plain: 'At each crossroads of the light highway, a switch can send each colour straight on or round a bend, with no need to turn it into electricity first. The light only gets through if every switch on the way is set right, with no gaps.',
+      eng: 'Each ROADM degree can express or drop each wavelength, and CDC ROADMs can steer any colour any way under software control. A light path works only when every cross-connect from end to end is set consistently.',
     },
   },
   mesh: {
@@ -429,19 +504,46 @@ export function answerPoints(right, seconds) {
 // A challenge won without a single mistake earns a bonus.
 export const FLAWLESS_BONUS = 200;
 
-export function newStory() {
-  // the score is two scores added up: knowledge (questions and exams) and games
-  return { unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0, best: 0 };
+// Two ways to play. The full story plays every stop of every network (about an hour).
+// The quick run, for a booth, plays one game per level, picked at random, in its short
+// version, then a short quiz; each win brings back the level's networks together, and
+// Lord Lag ends it with two rounds from the games just played (about ten minutes).
+export const STORY_MODES = ['quick', 'full'];
+export const QUICK_QUIZ = 2;
+// a quick run's games: one from each level, at random
+export function quickPicks(random = Math.random) {
+  return Object.fromEntries(STORY_LEVELS.filter((l) => !l.boss).map((l) => {
+    const games = l.chapters.flatMap((id) => STORY[id].stages);
+    return [l.n, games[Math.floor(random() * games.length)]];
+  }));
 }
+export function newStory(mode = 'full', random = Math.random) {
+  // the score is two scores added up: knowledge (questions and exams) and games
+  return { mode, picks: mode === 'quick' ? quickPicks(random) : {}, unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0, best: 0 };
+}
+export const isQuick = (s) => s.mode === 'quick';
+// the network that plays a game
+export const ownerOf = (gid) => STORY_ORDER.find((id) => STORY[id].stages.includes(gid)) ?? null;
 // Saved progress, checked: anything unknown or out of order is dropped.
 export function loadStory(saved) {
   const s = newStory();
   if (!saved || typeof saved !== 'object') return s;
+  if (saved.mode === 'quick') {
+    s.mode = 'quick';
+    // a pick has to be one of its own level's games, else a fresh one
+    const fresh = quickPicks();
+    for (const l of STORY_LEVELS.filter((x) => !x.boss)) {
+      const p = saved.picks?.[l.n];
+      s.picks[l.n] = l.chapters.some((id) => STORY[id].stages.includes(p)) ? p : fresh[l.n];
+    }
+  }
   for (const id of Array.isArray(saved.unlocked) ? saved.unlocked : []) {
     if (id === STORY_ORDER[s.unlocked.length]) s.unlocked.push(id); else break;
   }
+  // a quick run brings a level back whole, so a level half won is not won at all
+  if (isQuick(s)) s.unlocked = s.unlocked.filter((id) => levelOf(id).chapters.every((c) => s.unlocked.includes(c)));
   const next = nextChapter(s);
-  s.stage = next && Number.isInteger(saved.stage) && saved.stage > 0 && saved.stage < STORY[next].stages.length ? saved.stage : 0;
+  s.stage = next && Number.isInteger(saved.stage) && saved.stage > 0 && saved.stage < stagesOf(s, next).length ? saved.stage : 0;
   s.final = saved.final === true && s.unlocked.length === STORY_ORDER.length;
   const pts = (x) => (Number.isFinite(x) && x > 0 ? Math.round(x) : 0);
   s.know = pts(saved.know);
@@ -451,9 +553,15 @@ export function loadStory(saved) {
   s.best = Math.max(s.score, pts(saved.best));
   return s;
 }
-export const nextChapter = (s) => STORY_ORDER[s.unlocked.length] ?? null;
+// the network to win back next; in a quick run, the one that plays its level's game
+export function nextChapter(s) {
+  const id = STORY_ORDER[s.unlocked.length] ?? null;
+  return id && isQuick(s) ? ownerOf(s.picks[levelOf(id).n]) : id;
+}
+// a network's stops: all of them, or in a quick run just its level's game
+export const stagesOf = (s, id) => (isQuick(s) ? [s.picks[levelOf(id).n]] : STORY[id].stages);
 // the game to play next in the network being won back
-export const nextStage = (s) => { const id = nextChapter(s); return id ? STORY[id].stages[s.stage] : null; };
+export const nextStage = (s) => { const id = nextChapter(s); return id ? stagesOf(s, id)[s.stage] : null; };
 export const isUnlocked = (s, id) => s.unlocked.includes(id);
 // every network back, and Lord Lag still to beat
 export const bossNext = (s) => !nextChapter(s) && !s.final;
@@ -465,7 +573,7 @@ const bankPoints = (s, play, know = 0) => {
 };
 // A stop cleared that is not the network's last: on to its next game.
 export function winStage(s, id, points) {
-  if (nextChapter(s) !== id || s.stage >= STORY[id].stages.length - 1) return s;
+  if (nextChapter(s) !== id || s.stage >= stagesOf(s, id).length - 1) return s;
   s.stage++;
   bankPoints(s, points);
   return s;
@@ -498,7 +606,9 @@ export function answer(c, pick, seconds) {
 // the points join the score: the questions' to knowledge, the last game's (`play`) to games.
 export function winChapter(s, c, play = 0) {
   if (c.over !== 'won' || nextChapter(s) !== c.id) return s;
-  s.unlocked.push(c.id);
+  // a quick run brings back the whole level at once
+  if (isQuick(s)) s.unlocked.push(...levelOf(c.id).chapters.filter((id) => !s.unlocked.includes(id)));
+  else s.unlocked.push(c.id);
   s.stage = 0;
   bankPoints(s, play, c.points);
   return s;
@@ -511,15 +621,20 @@ export function winFinal(s, points) {
   return s;
 }
 // Start the story again from the top, keeping the best score.
-export function restartStory(s) {
-  return Object.assign(s, { unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0 });
+export function restartStory(s, mode = s.mode, random = Math.random) {
+  return Object.assign(s, { mode, picks: mode === 'quick' ? quickPicks(random) : {}, unlocked: [], stage: 0, final: false, score: 0, know: 0, play: 0 });
+}
+// the quiz that closes a level in a quick run: a couple of its exam's questions, at random
+export function quickQuiz(id, random = Math.random) {
+  return shuffle([...examAt(levelOf(id).chapters.at(-1))], random).slice(0, QUICK_QUIZ);
 }
 // For testing (the ?dev menu): put the story just before a stop, every network before
 // it already won. `id` null means just before the fight with Lord Lag.
 export function jumpTo(s, id, stage = 0) {
   const k = id ? STORY_ORDER.indexOf(id) : STORY_ORDER.length;
   if (k < 0) return s;
-  return Object.assign(s, { unlocked: STORY_ORDER.slice(0, k), stage: id ? Math.max(0, Math.min(stage, STORY[id].stages.length - 1)) : 0, final: false });
+  // a jump is into the full story, where every stop has its place
+  return Object.assign(s, { mode: 'full', picks: {}, unlocked: STORY_ORDER.slice(0, k), stage: id ? Math.max(0, Math.min(stage, STORY[id].stages.length - 1)) : 0, final: false });
 }
 
 // What the story lets slip about the next network before you get there: a riddle,

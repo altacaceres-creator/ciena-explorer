@@ -169,7 +169,15 @@ make sure it only touches sites and links that exist there.
 
 ## Netlandia Quest: the story mode
 
-The first visit offers a choice: **Play the story** or **Explore freely**. In the
+The first visit offers a choice: a **⚡ Quick run**, a **📖 Full story**, or **Explore
+freely**. The full story plays every stop below, with the level exams (about an hour).
+The quick run is made for a booth (about ten minutes): one game per level, picked at
+random and played in its short version, then a two-question quiz from the level's exam;
+each win lifts the clouds off the whole level, and Lord Lag ends it with two rounds
+replaying games from the run. Each way of playing has its own board. The quick run also
+keeps the reading short: one card before each game (the villain, one line of taunt, one
+line of how to play), the quiz straight after the game, and a short win card that points
+to the notebook for the full lesson. In the
 story the planet starts under cloud. Lord Lag has switched Netlandia off, and each
 network is won back stop by stop, in the order a phone's packets travel: the **city's
 businesses and homes**, the **cell towers**, the **core**. That finishes the packet
@@ -177,16 +185,17 @@ world on side B, and the **undersea cables** appear as a new discovery. Across t
 ocean wait the **metro optical ring** and the **long-haul mesh**.
 
 Every stop is a mini-game on a board in the card, played by touch, click or the keys
-1, 2 and 3, and each opens with the taunt of the villain who holds it. A won stop
+1, 2 and 3, and each opens with the taunt of the villain who holds it: every one of them
+is one of Lord Lag's minions, and the notebook keeps a line-up of the ones beaten. A won stop
 shows **Stop cleared** with the story of your game in numbers and what it means in a
 real network; a network is unlocked when its last stop is won. There are five levels:
 
 | level | networks | stops |
 |---|---|---|
 | 1. The city | city network | Last Mile Dash, Packet Tetris, Storm Chaser |
-| 2. The towers and the core | cell towers, core | Stop the Fiber Cut, Keep the Beat, Packet Race |
-| 3. Under the sea | undersea cables | Repeater Rescue, Cable Layer |
-| 4. The light | metro ring, long haul | Rainbow Packing, Mesh Rescue |
+| 2. The towers and the core | cell towers, core | Stop the Fiber Cut, Keep the Beat, Guard the Gate, Packet Race |
+| 3. Under the sea | undersea cables | Repeater Rescue, Robot Dive, Fiber Splice, Cable Layer |
+| 4. The light | metro ring, long haul | Colour Memory, Rainbow Packing, Light Path, Mesh Rescue |
 | 5. The final fight | | Lord Lag |
 
 - **Last Mile Dash**: homes ask for videos; send each one from the nearby cache when
@@ -200,14 +209,28 @@ real network; a network is unlocked when its last stop is won. There are five le
   and when one does, choose what the ring does about it.
 - **Keep the Beat**: timing packets race from the hub to three towers; tap each one as
   it reaches its tower.
+- **Guard the Gate**: a tower defence at the core. The Botnet's bots come down the road
+  to the data center among customers' packets; build a guard (an access rule, fast), a
+  detective (deep inspection, also spots bots in disguise) or a speed bump (a rate
+  limiter) on the spots by the road, and swap one for half its price back. Four waves:
+  plain bots, bots in disguise, a flood, all at once.
 - **Packet Race**: your video packet races Lord Lag's three times; at each router you
   pick the next hop while the elephants jam a road and, in the last race, a fibre is cut.
 - **Repeater Rescue**: tap each repeater that blinks red before it loses power, then,
   when the anchor cuts the north or south cable, move the island's traffic to the other.
+- **Robot Dive**: the cut is somewhere along the dark seabed. A ping sends a flash
+  down the fibre whose echo marks roughly where the cut is, more closely each time (an
+  OTDR); drive the robot there by its lamp, dodging jellyfish, and stop to check it.
+- **Fiber Splice**: on the rolling repair ship, nudge each fibre until its core lines
+  up and fire the arc; offset becomes lost light, and six joins must fit a 1 dB budget.
 - **Cable Layer**: steer the new cable north, middle or south round underwater
   volcanoes, seamounts and fishing grounds while the Kraken stirs the seabed.
+- **Colour Memory**: the hub sends a pattern of colours down the ring, each colour a
+  channel; send it back in the same order, one colour longer every round.
 - **Rainbow Packing**: a tetris of light; columns are colours, rows the ring's spans,
   and a request over two spans needs the same colours free on both.
+- **Light Path**: tap the switches between Prismfield and Spectraville to turn them; the
+  light runs live as far as they let it, until it gets all the way across.
 - **Mesh Rescue**: a storm cuts fibre after fibre; for each service that drops, pick
   one of three ways round, with only two waves per fibre.
 
@@ -294,7 +317,7 @@ inlined, so it can be shared as one file.
 | `js/basics.js` | the introduction-to-networking topics for each network (Explorer mode) |
 | `js/vocab.js` | the two reading modes: every name, label and sentence the HUD prints, in plain words and in the trade's |
 | `js/story.js` | Netlandia Quest with no page in it: the order the networks unlock in, the five levels, each network's stops and questions, each stop's villain, taunt, loss and lesson, the riddles for what's next, in both readings, the two scores and the notebook's records, and the rules (points, lives, ranks, saved progress) |
-| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Last Mile Dash, Packet Tetris, Storm Chaser, Stop the Fiber Cut, Keep the Beat, Packet Race, Repeater Rescue, Cable Layer, Rainbow Packing, Mesh Rescue, and the fight with Lord Lag built from one game per level |
+| `js/minigames.js` | the Quest's mini-games as small simulations a test can play (start, tick, press, result, summary) plus a 2D-canvas draw: Last Mile Dash, Packet Tetris, Storm Chaser, Stop the Fiber Cut, Keep the Beat, Guard the Gate, Packet Race, Repeater Rescue, Robot Dive, Fiber Splice, Cable Layer, Colour Memory, Rainbow Packing, Light Path, Mesh Rescue, and the fight with Lord Lag built from one game per level |
 | `js/game.js` | the Quest on screen: the start screen, the score bar and the challenge card; reaches the globe only through the hooks main.js hands it |
 | `js/main.js` | globe camera and side switch, the networks as clickable regions with their halos and the Quest's cloud cover, the airliner, switching views, labels, picking, the site card |
 | `css/net.css` | the HUD, and the Engineer theme as a second set of tokens |

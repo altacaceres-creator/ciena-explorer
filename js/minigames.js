@@ -1469,6 +1469,795 @@ const CableLayer = {
   laneAt(x, y, w, h) { const top = 34; return y < top ? null : Math.min(2, Math.floor(((y - top) / (h - top - 8)) * 3)); },
 };
 
+// ---------------------------------------------------------------- Guard the Gate (IP core)
+// A tower defence at the edge of the core. The Botnet sends bots down the road from the
+// internet to the data center, mixed in with customers' packets. Build guards on the six
+// spots by the road: a guard (an access rule) stops plain bots fast, a detective (deep
+// inspection) also spots bots in disguise but checks slowly, and a speed bump (a rate
+// limiter) slows everything near it. Customers' packets are never stopped: they pay a
+// coin each when they reach the data center, and every bot stopped pays one too.
+const FWD = { lives: 6, coins: 9, build: 8, pause: 7, aspect: 1.6 };
+const FWD_PATH = [[0, 0.22], [0.3, 0.22], [0.3, 0.75], [0.62, 0.75], [0.62, 0.25], [0.86, 0.25], [0.86, 0.8], [1, 0.8]];
+const FWD_SLOTS = [[0.15, 0.47], [0.46, 0.5], [0.74, 0.5], [0.46, 0.95], [0.74, 0.05], [0.96, 0.52]];
+const FWD_TOWERS = [
+  { key: 'guard', icon: '🧱', cost: 3, range: 0.38, reload: 0.6, hits: ['bot', 'flood'], plain: 'Guard', eng: 'ACL rule' },
+  { key: 'detective', icon: '🔍', cost: 4, range: 0.42, reload: 1.0, hits: ['bot', 'mask', 'flood'], plain: 'Detective', eng: 'Deep inspection' },
+  { key: 'bump', icon: '⏱', cost: 2, range: 0.3, slow: 0.45, hits: [], plain: 'Speed bump', eng: 'Rate limiter' },
+];
+const FWD_KINDS = {
+  bot: { icon: '🤖', speed: 0.15, foe: true },
+  mask: { icon: '🥸', speed: 0.12, foe: true },
+  flood: { icon: '🌊', speed: 0.22, foe: true, small: true },
+  good: { icon: '📦', speed: 0.2, foe: false },
+};
+// each wave: what comes down the road, and the hint that opens it
+const FWD_WAVES = [
+  { mix: { bot: 6, good: 6 }, plain: 'Wave 1: bots! Build 🧱 guards by the road.', eng: 'Wave 1: known-bad sources. Deploy 🧱 ACL rules along the path.' },
+  { mix: { bot: 5, mask: 3, good: 6 }, plain: 'Wave 2: some bots wear a disguise 🥸. Only a 🔍 detective can spot them.', eng: 'Wave 2: payloads disguised as normal traffic 🥸. Only 🔍 deep inspection catches them.' },
+  { mix: { flood: 4, bot: 3, good: 6 }, plain: 'Wave 3: a flood 🌊! Too many at once for one guard: add more, or a ⏱ speed bump.', eng: 'Wave 3: a flood 🌊. One filter saturates: add capacity, or ⏱ rate-limit it.' },
+  { mix: { bot: 4, mask: 3, flood: 2, good: 6 }, plain: 'Wave 4: everything at once. Hold the gate!', eng: 'Wave 4: mixed attack. Defence in depth.' },
+];
+const fwdLen = (a, b) => Math.hypot((a[0] - b[0]) * FWD.aspect, a[1] - b[1]);
+const FWD_SEGS = FWD_PATH.slice(1).map((p, i) => fwdLen(FWD_PATH[i], p));
+const FWD_TOTAL = FWD_SEGS.reduce((a, b) => a + b, 0);
+// where on the board a packet is, d along the road from 0 (the internet) to FWD_TOTAL (the gate)
+function fwdAt(d) {
+  let i = 0;
+  while (i < FWD_SEGS.length - 1 && d > FWD_SEGS[i]) d -= FWD_SEGS[i++];
+  const k = Math.min(1, d / FWD_SEGS[i]), a = FWD_PATH[i], b = FWD_PATH[i + 1];
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+}
+// a wave's arrivals, spread out and shuffled; a flood comes as four quick ones
+function fwdSpawns(wave, random) {
+  const list = [];
+  for (const [kind, n] of Object.entries(wave.mix)) for (let i = 0; i < n; i++) list.push(kind);
+  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  const out = [];
+  let at = 0.5;
+  for (const kind of list) {
+    if (kind === 'flood') for (let k = 0; k < 4; k++) out.push({ at: at + k * 0.3, kind });
+    else out.push({ at, kind });
+    at += 1.6 + random() * 0.8;
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
+const GuardTheGate = {
+  id: 'firewall',
+  name: { plain: 'Guard the Gate', eng: 'Firewall Defense' },
+  tall: true,
+  how: {
+    plain: 'The Botnet is sending bots down the road from the internet to the data center, mixed in with customers\' packets 📦. Tap an empty spot by the road, then build: 1 🧱 a guard (stops bots, fast), 2 🔍 a detective (also spots bots in disguise, but slower), 3 ⏱ a speed bump (slows everything near it). Tap a built one to swap it for another, with half its price back. Customers always get through and pay a coin 🪙; so does every bot you stop.',
+    eng: 'Bots are routed toward the data center mixed with legitimate traffic 📦. Tap a free slot by the path, then deploy: 1 🧱 an ACL rule (drops known-bad traffic, fast), 2 🔍 deep inspection (also catches disguised payloads, slower), 3 ⏱ a rate limiter (slows all traffic in range). Tap a deployed control to replace it (half refund). Legitimate packets always pass and earn a credit 🪙; so does each drop.',
+  },
+  goal: { plain: 'Keep the bots out for four waves', eng: 'Hold the perimeter through four waves' },
+  laneNames: { plain: FWD_TOWERS.map((x) => `${x.icon} ${x.plain}`), eng: FWD_TOWERS.map((x) => `${x.icon} ${x.eng}`) },
+  start(random = Math.random, opts = {}) {
+    const waves = FWD_WAVES.slice(0, opts.waves ?? FWD_WAVES.length);
+    return {
+      t: 0, random, waves, wave: -1, wt: 0, spawns: [], pause: opts.build ?? FWD.build, packets: [], towers: FWD_SLOTS.map(() => null),
+      sel: 1, coins: FWD.coins, lives: FWD.lives, blocked: 0, delivered: 0, breaches: 0, built: 0, swapped: 0, masksStopped: 0, poor: 0,
+      zaps: [], score: 0, fx: [], over: null,
+    };
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    for (const z of s.zaps) z.t += dt;
+    s.zaps = s.zaps.filter((z) => z.t < 0.18);
+    // between waves: a pause to build, then the next wave starts
+    if (!s.spawns.length && !s.packets.length) {
+      if (s.wave === s.waves.length - 1) { s.over = 'won'; return; }
+      if ((s.pause -= dt) > 0) return;
+      s.wave++; s.wt = 0; s.spawns = fwdSpawns(s.waves[s.wave], s.random); s.pause = FWD.pause;
+      float(s, 1, s.wave === 0 ? 'Here they come!' : `Wave ${s.wave + 1}!`, false);
+    }
+    s.wt += dt;
+    while (s.spawns.length && s.spawns[0].at <= s.wt) s.packets.push({ kind: s.spawns.shift().kind, d: 0 });
+    // packets move; a speed bump slows whatever is near it
+    for (const p of s.packets) {
+      const at = fwdAt(p.d);
+      const slow = s.towers.some((tw, i) => tw?.key === 'bump' && fwdLen(at, FWD_SLOTS[i]) <= tw.range);
+      p.d += FWD_KINDS[p.kind].speed * (slow ? FWD_TOWERS[2].slow : 1) * dt;
+    }
+    // the gate: a customer pays, a bot is a breach
+    for (const p of s.packets.filter((x) => x.d >= FWD_TOTAL)) {
+      if (FWD_KINDS[p.kind].foe) { s.lives--; s.breaches++; float(s, 2, 'Breach!', false); } else { s.delivered++; s.coins++; s.score += 10; }
+    }
+    s.packets = s.packets.filter((x) => x.d < FWD_TOTAL);
+    // the guards and detectives each stop one bot at a time, then reload
+    s.towers.forEach((tw, i) => {
+      if (!tw || !tw.hits.length) return;
+      if ((tw.cd -= dt) > 0) return;
+      const target = s.packets.filter((p) => tw.hits.includes(p.kind) && fwdLen(fwdAt(p.d), FWD_SLOTS[i]) <= tw.range).sort((a, b) => b.d - a.d)[0];
+      if (!target) return;
+      tw.cd = tw.reload;
+      s.zaps.push({ from: FWD_SLOTS[i], to: fwdAt(target.d), t: 0, color: tw.key });
+      s.packets = s.packets.filter((p) => p !== target);
+      s.blocked++; s.coins++; s.score += 15;
+      if (target.kind === 'mask') s.masksStopped++;
+    });
+    if (s.lives <= 0) s.over = 'lost';
+  },
+  press(s, lane) {
+    if (s.over) return;
+    // a tap on a spot picks it, built or not (a built one can be swapped)
+    if (lane >= 10) { const k = lane - 10; if (k < FWD_SLOTS.length) s.sel = k; return; }
+    const type = FWD_TOWERS[lane];
+    if (!type || s.sel == null) return;
+    // the key of the tower already there moves the pick on to the next spot (for keyboards)
+    if (s.towers[s.sel]?.key === type.key) { s.sel = (s.sel + 1) % FWD_SLOTS.length; return; }
+    const cost = GuardTheGate.cost(s, lane);
+    if (s.coins < cost) { s.poor++; float(s, 1, `Need ${cost} 🪙`, false); return; }
+    if (s.towers[s.sel]) s.swapped++;
+    s.coins -= cost; s.built++;
+    s.towers[s.sel] = { ...type, cd: 0 };
+    // the next free spot is picked for the next build
+    const free = FWD_SLOTS.map((_, k) => k).filter((k) => !s.towers[k]);
+    // the next free spot is picked; with none left, this one stays picked so it can be swapped
+    if (free.length) s.sel = free.sort((a, b) => Math.abs(a - s.sel) - Math.abs(b - s.sel))[0];
+  },
+  // what building `lane` on the picked spot costs: swapping a tower gives half its price back
+  cost: (s, lane) => FWD_TOWERS[lane].cost - Math.floor((s.towers[s.sel]?.cost ?? 0) / 2),
+  lanes(s, words) {
+    if (s.sel == null) return ['—', '—', '—'];
+    const here = s.towers[s.sel];
+    return FWD_TOWERS.map((x, i) => (here?.key === x.key ? (words === 'plain' ? 'Next spot ▶' : 'Next slot ▶') : `${here ? '⇄ ' : ''}${x.icon} ${x[words]} · ${Math.max(0, GuardTheGate.cost(s, i))}🪙`));
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 40 : 0, flawless: s.breaches === 0 };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You built ${s.built} defences and stopped ${s.blocked} bots${s.masksStopped ? `, ${s.masksStopped} of them in disguise` : ''}. ${s.delivered} customers' packets got through${s.breaches ? `, and ${s.breaches} bot${s.breaches === 1 ? '' : 's'} slipped past the gate` : ', and not one bot reached the data center'}.`
+      : `${s.built} controls deployed; ${s.blocked} malicious flows dropped (${s.masksStopped} by deep inspection), ${s.delivered} legitimate packets delivered, ${s.breaches} breach${s.breaches === 1 ? '' : 'es'}.`;
+  },
+  // board coordinates: the road fills the card below the meter and the banner
+  box: (w, h) => ({ x: 26, y: 70, w: w - 52, h: h - 104 }),
+  pos(p, w, h) { const b = GuardTheGate.box(w, h); return [b.x + b.w * p[0], b.y + b.h * p[1]]; },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', P = (p) => GuardTheGate.pos(p, w, h), b = GuardTheGate.box(w, h), unit = b.h;
+    const waveN = Math.max(0, s.wave) + 1;
+    hud(g, w, theme, `${plain ? 'Wave' : 'Wave'} ${waveN} / ${s.waves.length} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(FWD.lives - Math.max(0, s.lives))} · 🪙 ${s.coins}`, s.waves.length ? (s.wave + (s.spawns.length || s.packets.length ? 0.5 : 1)) / s.waves.length : 0, s.score, null);
+    // the hint for this wave, or the countdown to the next
+    const between = !s.spawns.length && !s.packets.length;
+    const next = s.waves[Math.min(s.waves.length - 1, s.wave + (between ? 1 : 0))];
+    const say = between && s.wave < s.waves.length - 1 ? `${next[words]} ${Math.ceil(Math.max(0, s.pause))}s` : s.waves[Math.max(0, s.wave)][words];
+    g.font = `800 12px ${theme.font}`;
+    const tw = Math.min(w - 16, g.measureText(say).width + 24);
+    g.fillStyle = between ? theme.accent : theme.well; roundRect(g, (w - tw) / 2, 32, tw, 24, 12); g.fill();
+    g.fillStyle = between ? '#ffffff' : theme.ink; g.textAlign = 'center'; g.fillText(say, w / 2, 48.5, w - 28);
+    // the road from the internet to the data center
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.strokeStyle = theme.well; g.lineWidth = Math.max(22, unit * 0.13);
+    g.beginPath(); FWD_PATH.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
+    g.strokeStyle = theme.muted; g.lineWidth = 2; g.setLineDash([6, 8]);
+    g.beginPath(); FWD_PATH.forEach((p, i) => { const [x, y] = P(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke();
+    g.setLineDash([]); g.lineCap = 'butt';
+    const [ix, iy] = P(FWD_PATH[0]), [gx, gy] = P(FWD_PATH.at(-1));
+    emoji(g, '🌐', ix, iy - 22, 22); emoji(g, '🏢', gx - 4, gy - 24, 28);
+    g.fillStyle = theme.muted; g.font = `800 10px ${theme.font}`; g.textAlign = 'left';
+    g.fillText(plain ? 'Internet' : 'Internet edge', ix - 6, iy + 26);
+    g.textAlign = 'right'; g.fillText(plain ? 'Data center' : 'DC', gx + 8, gy + 30);
+    // the spots: a tower, or an empty spot (the picked one glows)
+    const R = Math.max(15, unit * 0.075), pulse = 0.5 + 0.5 * Math.sin(s.t * 6);
+    FWD_SLOTS.forEach((p, i) => {
+      const [x, y] = P(p), tw = s.towers[i];
+      if (tw || i === s.sel) {
+        const range = (tw ?? FWD_TOWERS[0]).range;
+        g.strokeStyle = tw ? theme.accent : theme.muted; g.globalAlpha = tw ? 0.18 : 0.12 + 0.12 * pulse; g.lineWidth = 2;
+        g.beginPath(); g.ellipse(x, y, (range / FWD.aspect) * b.w, range * b.h, 0, 0, 7); g.stroke(); g.globalAlpha = 1;
+      }
+      g.beginPath(); g.arc(x, y, R, 0, 7);
+      g.fillStyle = tw ? theme.paper : theme.well; g.fill();
+      g.strokeStyle = i === s.sel ? theme.accent : theme.ink; g.lineWidth = i === s.sel ? 3 + pulse * 2 : 2;
+      if (!tw) g.setLineDash([4, 4]);
+      g.stroke(); g.setLineDash([]);
+      if (tw) {
+        emoji(g, tw.icon, x, y + 1, R * 1.1);
+        if (tw.reload && tw.cd > 0) { g.strokeStyle = theme.muted; g.lineWidth = 3; g.beginPath(); g.arc(x, y, R + 4, -Math.PI / 2, -Math.PI / 2 + 6.283 * (1 - tw.cd / tw.reload)); g.stroke(); }
+      } else {
+        g.fillStyle = theme.muted; g.font = `800 ${Math.round(R * 0.9)}px ${theme.font}`; g.textAlign = 'center'; g.fillText('+', x, y + R * 0.32);
+      }
+    });
+    // the zaps, then the packets on the road
+    for (const z of s.zaps) {
+      const [ax, ay] = P(z.from), [bx, by] = P(z.to);
+      g.strokeStyle = z.color === 'detective' ? '#7b2ff7' : theme.bad; g.lineWidth = 3; g.globalAlpha = 1 - z.t / 0.18;
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.globalAlpha = 1;
+      emoji(g, '💥', bx, by, 18);
+    }
+    for (const p of s.packets) {
+      const [x, y] = P(fwdAt(p.d)), k = FWD_KINDS[p.kind];
+      if (!k.foe) { g.fillStyle = theme.good; g.globalAlpha = 0.25; g.beginPath(); g.arc(x, y, 13, 0, 7); g.fill(); g.globalAlpha = 1; }
+      emoji(g, k.icon, x, y, k.small ? 16 : 22);
+    }
+    floats(g, s, (lane) => [w / 2, lane === 2 ? h - 46 : h - 28], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    // a tap on (or near) a spot by the road
+    let best = null, bd = 34;
+    FWD_SLOTS.forEach((p, i) => { const [sx, sy] = GuardTheGate.pos(p, w, h); const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; best = 10 + i; } });
+    return best;
+  },
+};
+
+// ---------------------------------------------------------------- Robot Dive (undersea cables)
+// The anchor cut a cable somewhere along the seabed, in the dark. A ping sends a flash
+// of light down the fibre from the shore; its echo comes back from the cut and marks
+// roughly where it is, more closely with every ping (that is what an OTDR does). Drive
+// the robot there by its headlamp, dodging the glowing jellyfish, before its battery
+// runs out. Three cuts to find.
+const DIVE = { rounds: 3, lives: 3, battery: 26, speed: 0.12, ping: 2, echo: 1.2, hit: 5, see: 0.09, found: 0.025, check: 0.5, bands: [0.12, 0.05, 0.015], robotY: 0.6 };
+const RobotDive = {
+  id: 'dive',
+  name: { plain: 'Robot Dive', eng: 'Robot Dive' },
+  how: {
+    plain: 'Somewhere along the sea floor the cable is cut, buried in the sand where nobody can see it. Press 2 📡 to send a flash of light down the cable: its echo bounces back from the cut and marks 📍 about where it is, closer with every flash. Drive the robot there with ◀ ▶ (press again to stop) or tap where it should go, and stop on the spot: the robot checks the cable under it. Dodge the jellyfish 🪼: they drain the battery. Find three cuts!',
+    eng: 'A fibre break lies somewhere along a buried seabed cable. Press 2 📡 to fire an OTDR pulse from the landing station: the reflection from the break gives its distance 📍, more precisely with each shot. Drive the ROV there with ◀ ▶ (press again to stop) or tap a position, and hold station to inspect the cable below. Avoid the jellyfish 🪼: each hit drains the battery. Locate three faults.',
+  },
+  goal: { plain: 'Find all three cuts before the battery runs out', eng: 'Locate three faults within battery' },
+  laneNames: { plain: ['◀ Left', '📡 Ping', 'Right ▶'], eng: ['◀ Back', '📡 OTDR', 'Ahead ▶'] },
+  start(random = Math.random, opts = {}) {
+    const s = { t: 0, random, rounds: opts.rounds ?? DIVE.rounds, round: 0, lives: DIVE.lives, found: 0, hits: 0, pings: 0, score: 0, fx: [], over: null };
+    RobotDive.newRound(s);
+    return s;
+  },
+  newRound(s) {
+    const r = s.random;
+    s.x = 0.04; s.dir = 0; s.goto = null; s.battery = DIVE.battery; s.cut = 0.32 + r() * 0.6;
+    s.pulse = null; s.mark = null; s.roundPings = 0; s.shield = 0; s.between = 0; s.dwell = 0; s.checking = 0;
+    s.jellies = Array.from({ length: 3 + s.round }, (_, i) => ({ x: 0.2 + (0.72 * (i + r() * 0.6)) / (3 + s.round), ph: r() * 6.28, w: 0.9 + r() * 0.6 }));
+  },
+  jellyY: (j, t) => 0.42 + 0.3 * Math.sin(j.ph + t * j.w),
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.between > 0) { if ((s.between -= dt) <= 0) RobotDive.newRound(s); return; }
+    s.battery -= dt; s.shield = Math.max(0, s.shield - dt);
+    // the robot drives toward a tapped spot, or keeps going the way it was sent
+    if (s.goto != null) {
+      const d = s.goto - s.x;
+      if (Math.abs(d) < 0.006) { s.goto = null; s.dir = 0; } else s.dir = Math.sign(d);
+    }
+    s.x = clamp01(s.x + s.dir * DIVE.speed * dt);
+    if (s.x <= 0 || s.x >= 1) { s.dir = 0; s.goto = null; }
+    // a ping's flash runs down the cable to the cut and back
+    if (s.pulse) {
+      s.pulse.t += dt;
+      if (s.pulse.t >= DIVE.echo) {
+        const band = DIVE.bands[Math.min(DIVE.bands.length - 1, s.roundPings - 1)];
+        s.mark = { x: clamp01(s.cut + (s.random() - 0.5) * band), band };
+        s.pulse = null;
+      }
+    }
+    // jellyfish
+    if (!s.shield) for (const j of s.jellies) {
+      if (Math.abs(j.x - s.x) < 0.045 && Math.abs(RobotDive.jellyY(j, s.t) - DIVE.robotY) < 0.07) {
+        s.battery -= DIVE.hit; s.hits++; s.shield = 1.5; float(s, 1, 'Ouch! 🪼 −battery', false);
+        break;
+      }
+    }
+    // the cable is buried: the robot checks the spot it stops on, and there it is, or not
+    if (s.dir === 0 && s.goto == null) s.dwell += dt; else s.dwell = 0;
+    s.checking = s.dwell > 0.05 ? Math.min(1, s.dwell / DIVE.check) : 0;
+    if (s.dwell >= DIVE.check && s.dwell - dt < DIVE.check && Math.abs(s.x - s.cut) >= DIVE.found) float(s, 1, 'Nothing here…', false);
+    if (s.dwell >= DIVE.check && Math.abs(s.x - s.cut) < DIVE.found) {
+      s.found++; const pts = 100 + Math.round(Math.max(0, s.battery) * 5); s.score += pts;
+      float(s, 1, `Found it! +${pts}`, true);
+      s.dir = 0; s.goto = null; s.dwell = 0;
+      if (s.found >= s.rounds) { s.over = 'won'; return; }
+      s.round++; s.between = 1.6; s.why = 'found';
+      return;
+    }
+    if (s.battery <= 0) {
+      s.lives--; float(s, 1, 'Battery flat! The robot is hauled up', false);
+      if (s.lives <= 0) { s.over = 'lost'; return; }
+      s.between = 1.6; s.why = 'flat';
+    }
+  },
+  press(s, lane) {
+    if (s.over || s.between > 0) return;
+    if (lane >= 10) { s.goto = clamp01((lane - 10) / 100); return; }
+    if (lane === 1) {
+      if (s.pulse) return;
+      s.pulse = { t: 0 }; s.pings++; s.roundPings++; s.battery -= DIVE.ping;
+      return;
+    }
+    const d = lane === 0 ? -1 : 1;
+    s.goto = null;
+    s.dir = s.dir === d ? 0 : d;
+  },
+  lanes(s, words) {
+    const names = RobotDive.laneNames[words];
+    return [s.dir === -1 ? '■ Stop' : names[0], s.pulse ? '📡 …' : names[1], s.dir === 1 ? '■ Stop' : names[2]];
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.hits === 0 && s.lives === DIVE.lives };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You found ${s.found} cut${s.found === 1 ? '' : 's'} on the sea floor with ${s.pings} flash${s.pings === 1 ? '' : 'es'} of light${s.hits ? `, and bumped into ${s.hits} jellyfish on the way` : ', and never touched a jellyfish'}.`
+      : `${s.found} faults located with ${s.pings} OTDR shot${s.pings === 1 ? '' : 's'}; ${s.hits} ROV collision${s.hits === 1 ? '' : 's'}, ${DIVE.lives - s.lives} recover${DIVE.lives - s.lives === 1 ? 'y' : 'ies'}.`;
+  },
+  box: (w, h) => ({ x: 14, y: 34, w: w - 28, h: h - 42 }),
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', b = RobotDive.box(w, h), X = (x) => b.x + 24 + (b.w - 48) * x, Y = (y) => b.y + b.h * y;
+    hud(g, w, theme, `${plain ? 'Cut' : 'Fault'} ${Math.min(s.found + 1, s.rounds)} / ${s.rounds} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(DIVE.lives - Math.max(0, s.lives))} · 🔋`, clamp01(s.battery / DIVE.battery), s.score, null);
+    // the deep sea, the seabed and the cable along it
+    const sea = g.createLinearGradient(0, b.y, 0, b.y + b.h);
+    sea.addColorStop(0, '#1b6fa8'); sea.addColorStop(1, '#06233a');
+    g.fillStyle = sea; roundRect(g, b.x, b.y, b.w, b.h, 10); g.fill();
+    g.fillStyle = '#c9a66b'; g.fillRect(b.x, Y(0.9), b.w, b.h * 0.1);
+    const cy = Y(0.86);
+    g.strokeStyle = '#ffc43d'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(X(0) - 20, cy); g.lineTo(X(s.cut) - 3, cy); g.moveTo(X(s.cut) + 3, cy); g.lineTo(X(1) + 20, cy); g.stroke();
+    const rx = X(s.x), ry = Y(DIVE.robotY);
+    // the dark: all but the headlamp's pool of light
+    const light = (b.w - 48) * DIVE.see * 1.6, lx = rx, ly = (ry + cy) / 2;
+    g.save(); roundRect(g, b.x, b.y, b.w, b.h, 10); g.moveTo(lx + light, ly); g.arc(lx, ly, light, 0, Math.PI * 2, true);
+    g.fillStyle = 'rgba(2, 12, 24, 0.88)'; g.fill('evenodd'); g.restore();
+    // the ship up top, and the robot's tether down to it
+    emoji(g, '🚢', X(0.02), b.y + 16, 22);
+    g.strokeStyle = 'rgba(255,255,255,0.45)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X(0.02), b.y + 26); g.quadraticCurveTo((X(0.02) + rx) / 2, ry, rx, ry); g.stroke();
+    const glow = g.createRadialGradient(lx, ly, 0, lx, ly, light);
+    glow.addColorStop(0, 'rgba(255,240,180,0.22)'); glow.addColorStop(1, 'rgba(255,240,180,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(lx, ly, light, 0, Math.PI * 2); g.fill();
+    // the cable is faintly seen all the way, so you know where to look
+    g.strokeStyle = 'rgba(255,196,61,0.25)'; g.lineWidth = 2; g.beginPath(); g.moveTo(X(0), cy); g.lineTo(X(1), cy); g.stroke();
+    // the robot checking the spot under it: a ring that fills
+    if (s.checking) { g.strokeStyle = '#7dffb0'; g.lineWidth = 3; g.beginPath(); g.arc(X(s.x), cy, 12, -Math.PI / 2, -Math.PI / 2 + 6.283 * s.checking); g.stroke(); }
+    if (s.why === 'found' && s.between > 0) emoji(g, '✂', X(s.cut), cy - 14, 18);
+    // the ping's flash running along it, and where its echo says the cut is
+    if (s.pulse) {
+      const k = s.pulse.t / DIVE.echo, at = k < 0.5 ? s.cut * k * 2 : s.cut * (2 - k * 2);
+      g.fillStyle = '#ffffff'; g.shadowColor = '#ffffff'; g.shadowBlur = 16; g.beginPath(); g.arc(X(at), cy, 5, 0, 7); g.fill(); g.shadowBlur = 0;
+    }
+    if (s.mark) {
+      // the echo's guess: a pin, and a bracket on the cable for how sure it is
+      const x0 = X(s.mark.x - s.mark.band / 2), x1 = X(s.mark.x + s.mark.band / 2);
+      g.strokeStyle = '#ffc43d'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(x0, cy - 9); g.lineTo(x0, cy + 9); g.moveTo(x1, cy - 9); g.lineTo(x1, cy + 9); g.moveTo(x0, cy + 9); g.lineTo(x1, cy + 9); g.stroke();
+      emoji(g, '📍', X(s.mark.x), cy - 20, 20);
+    }
+    // the jellyfish glow in the dark
+    for (const j of s.jellies) {
+      const jx = X(j.x), jy = Y(RobotDive.jellyY(j, s.t));
+      const halo = g.createRadialGradient(jx, jy, 0, jx, jy, 22);
+      halo.addColorStop(0, 'rgba(255,140,220,0.45)'); halo.addColorStop(1, 'rgba(255,140,220,0)');
+      g.fillStyle = halo; g.beginPath(); g.arc(jx, jy, 22, 0, Math.PI * 2); g.fill();
+      emoji(g, '🪼', jx, jy, 22);
+    }
+    // the robot: a little yellow submarine with a lamp
+    g.globalAlpha = s.shield ? 0.5 + 0.5 * Math.sin(s.t * 30) : 1;
+    g.fillStyle = '#ffc43d'; roundRect(g, rx - 16, ry - 10, 32, 20, 9); g.fill();
+    g.strokeStyle = '#1d2a44'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#9fd8ff'; g.beginPath(); g.arc(rx + (s.dir < 0 ? -6 : 6), ry - 1, 5, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#1d2a44'; g.fillRect(rx + (s.dir < 0 ? 15 : -21), ry - 5, 6, 10);
+    g.globalAlpha = 1;
+    // the shore and the island at either end
+    g.fillStyle = 'rgba(255,255,255,0.75)'; g.font = `800 10px ${theme.font}`; g.textAlign = 'left';
+    g.fillText(plain ? 'Shore' : 'Landing station', b.x + 6, b.y + b.h - 4);
+    g.textAlign = 'right'; g.fillText(plain ? 'Island' : 'Coherent Isle', b.x + b.w - 6, b.y + b.h - 4);
+    if (s.between > 0 && s.over == null) { g.fillStyle = '#ffffff'; g.font = `800 15px ${theme.font}`; g.textAlign = 'center'; g.fillText(s.why === 'found' ? (plain ? 'Next cut…' : 'Next fault…') : (plain ? 'New robot coming down…' : 'Relaunching the ROV…'), w / 2, Y(0.3)); }
+    floats(g, s, () => [w / 2, Y(0.2)], { ...theme, good: '#7dffb0', bad: '#ff8a94' });
+  },
+  laneAt(x, y, w, h, s) {
+    // a tap in the water sends the robot to that spot
+    const b = RobotDive.box(w, h);
+    if (y < b.y || !s) return null;
+    return 10 + Math.round(clamp01((x - b.x - 24) / (b.w - 48)) * 100);
+  },
+};
+
+// ---------------------------------------------------------------- Fiber Splice (undersea cables)
+// On the repair ship, the two ends of each broken fibre meet in the splicer. The swell
+// rocks the ship and the right-hand end drifts; nudge it up or down until its core lines
+// up with the left one, then fire the arc. The better the cores line up, the less light
+// the splice loses; a splice too far off leaks so much it must be redone. Six fibres,
+// before the storm arrives, and the losses add up to a budget the link can afford.
+const SPLICE = { fibres: 6, lives: 3, time: 80, nudge: 0.16, budget: 1.0, perfect: 0.15, good: 0.35, ok: 0.65, swell: [0.35, 1.0], arc: 1.2 };
+const spliceLoss = (o) => 0.02 + 0.5 * o * o;
+const FiberSplice = {
+  id: 'splice',
+  name: { plain: 'Fiber Splice', eng: 'Fusion Splice' },
+  how: {
+    plain: 'The cable is up on the ship, and each fibre in it must be joined again. The two glowing cores must line up before you melt them together, but the waves keep rocking the right one. Press 1 ▲ or 3 ▼ (or tap above or below) to nudge it, and 2 ⚡ (or tap the middle) to join them when the cores line up. The straighter the join, the less light it loses. Six fibres before the storm!',
+    eng: 'Fusion-splice the six fibres of the recovered cable. Swell moves the right fibre: nudge it with 1 ▲ / 3 ▼ (or tap above or below the joint) until the cores align, then 2 ⚡ (or tap the joint) to fire the arc. Core offset becomes splice loss; a splice over tolerance must be remade, and the total must fit the loss budget.',
+  },
+  goal: { plain: 'Join six fibres before the storm, without losing too much light', eng: 'Six splices within the weather window and the loss budget' },
+  laneNames: { plain: ['▲ Up', '⚡ Join', '▼ Down'], eng: ['▲ Up', '⚡ Arc', '▼ Down'] },
+  start(random = Math.random, opts = {}) {
+    return {
+      t: 0, random, fibres: opts.fibres ?? SPLICE.fibres, done: [], fibre: 0, o: 0.8, v: 0, ph: random() * 6.28, lives: SPLICE.lives,
+      time: opts.time ?? SPLICE.time, total: 0, redone: 0, arc: 0, last: null, score: 0, fx: [], over: null,
+    };
+  },
+  // how hard the swell rocks this fibre: more with every one done
+  swell: (s) => SPLICE.swell[0] + (SPLICE.swell[1] - SPLICE.swell[0]) * (s.fibre / Math.max(1, s.fibres - 1)),
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt; s.time -= dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.arc > 0) {
+      // the next fibre slides in, off-centre
+      if ((s.arc -= dt) <= 0) { if (s.last?.kept) { s.o = (s.random() < 0.5 ? -1 : 1) * (0.6 + s.random() * 0.5); s.v = 0; } s.slide = 0.5; }
+    } else {
+      s.slide = Math.max(0, (s.slide ?? 0) - dt);
+      // the swell: a slow roll plus a wander
+      s.v += (s.random() - 0.5) * 1.4 * dt - s.v * 0.8 * dt;
+      s.o += (Math.cos(s.t * 0.8 + s.ph) * 0.8 * FiberSplice.swell(s) + s.v) * dt;
+      s.o = Math.max(-1.6, Math.min(1.6, s.o));
+    }
+    if (s.time <= 0 && !s.over) { s.over = 'lost'; s.why = 'storm'; }
+  },
+  press(s, lane) {
+    if (s.over || s.arc > 0) return;
+    // a tap above, below or on the joint
+    if (lane >= 10) lane = lane - 10;
+    if (lane === 0) { s.o -= SPLICE.nudge; return; }
+    if (lane === 2) { s.o += SPLICE.nudge; return; }
+    if (s.slide > 0) return;
+    const off = Math.abs(s.o), loss = spliceLoss(off);
+    s.arc = SPLICE.arc;
+    if (off >= SPLICE.ok) {
+      s.lives--; s.redone++; s.last = { loss, kept: false, off };
+      float(s, 1, `Light leaks out (${loss.toFixed(2)} dB): cut and try again`, false);
+      if (s.lives <= 0) { s.over = 'lost'; s.why = 'leaks'; }
+      return;
+    }
+    s.total += loss; s.done.push(loss); s.fibre++;
+    s.last = { loss, kept: true, off };
+    const word = off < SPLICE.perfect ? 'Perfect!' : off < SPLICE.good ? 'Good' : 'OK';
+    const pts = Math.round(150 * (1 - off / SPLICE.ok)) + 30; s.score += pts;
+    float(s, 1, `${word} ${loss.toFixed(2)} dB  +${pts}`, off < SPLICE.good);
+    if (s.total > SPLICE.budget) { s.over = 'lost'; s.why = 'budget'; return; }
+    if (s.fibre >= s.fibres) s.over = 'won';
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + Math.round(Math.max(0, s.time)) * 3 : 0, flawless: s.redone === 0 && s.done.every((l) => l < spliceLoss(SPLICE.good)) };
+  },
+  summary(s, words) {
+    const best = s.done.length ? Math.min(...s.done) : 0;
+    return words === 'plain'
+      ? `You joined ${s.done.length} fibres, losing ${s.total.toFixed(2)} dB of light in all (the best join lost only ${best.toFixed(2)} dB)${s.redone ? `, and ${s.redone} join${s.redone === 1 ? '' : 's'} had to be done again` : ', and never had to redo one'}.`
+      : `${s.done.length} splices, ${s.total.toFixed(2)} dB total of a ${SPLICE.budget} dB budget (best ${best.toFixed(2)} dB), ${s.redone} remade.`;
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', top = 62, cx = w / 2, cy = top + (h - top - 40) / 2;
+    hud(g, w, theme, `${plain ? 'Fibre' : 'Fibre'} ${Math.min(s.fibre + 1, s.fibres)} / ${s.fibres} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(SPLICE.lives - Math.max(0, s.lives))}`, clamp01(s.time / SPLICE.time), s.score, s.time);
+    // the light budget, as a bar
+    const bw = Math.min(260, w - 40), bx = (w - bw) / 2;
+    g.fillStyle = theme.well; roundRect(g, bx, 34, bw, 12, 6); g.fill();
+    g.fillStyle = s.total > SPLICE.budget * 0.75 ? theme.bad : theme.good; roundRect(g, bx, 34, Math.max(8, bw * clamp01(s.total / SPLICE.budget)), 12, 6); g.fill();
+    g.fillStyle = theme.ink; g.font = `800 10px ${theme.font}`; g.textAlign = 'center';
+    g.fillText(`${plain ? 'Light lost' : 'Loss'} ${s.total.toFixed(2)} / ${SPLICE.budget} dB`, w / 2, 56);
+    // the splicer's view: a dark screen, two fibres, the cores glowing
+    const vw = Math.min(w - 24, 560), vh = h - top - 40, vx = (w - vw) / 2;
+    g.fillStyle = '#0d1b2a'; roundRect(g, vx, top, vw, vh, 12); g.fill();
+    g.strokeStyle = theme.muted; g.lineWidth = 1.5; g.stroke();
+    const unit = Math.min(26, vh / 9), clad = unit * 3.2, core = unit * 0.9, gap = 10;
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.setLineDash([5, 6]); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(vx + 10, cy); g.lineTo(vx + vw - 10, cy); g.stroke(); g.setLineDash([]);
+    const ry = cy + (s.arc > 0 && s.last?.kept ? s.last.off * Math.sign(s.o || 1) : s.o) * unit;
+    const fibre = (x0, x1, y) => {
+      g.fillStyle = '#c9d6e3'; g.globalAlpha = 0.55; g.fillRect(x0, y - clad / 2, x1 - x0, clad); g.globalAlpha = 1;
+      g.fillStyle = '#5ee7ff'; g.shadowColor = '#5ee7ff'; g.shadowBlur = 12; g.fillRect(x0, y - core / 2, x1 - x0, core); g.shadowBlur = 0;
+    };
+    fibre(vx + 8, cx - gap / 2, cy);
+    fibre(cx + gap / 2 + (s.slide ?? 0) * vw, vx + vw - 8 + (s.slide ?? 0) * vw, ry);
+    // the arc, then the join glowing (or the leak)
+    if (s.arc > 0) {
+      const k = 1 - s.arc / SPLICE.arc;
+      if (k < 0.35) { g.strokeStyle = '#fff6a8'; g.lineWidth = 3; g.shadowColor = '#fff6a8'; g.shadowBlur = 20; g.beginPath(); g.moveTo(cx, cy - clad); for (let i = 1; i <= 6; i++) g.lineTo(cx + (i % 2 ? 6 : -6), cy - clad + (i * clad) / 3); g.stroke(); g.shadowBlur = 0; }
+      else if (s.last?.kept) { g.fillStyle = '#5ee7ff'; g.globalAlpha = 0.6 * (1 - k); g.beginPath(); g.arc(cx, (cy + ry) / 2, 18, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1; }
+      else emoji(g, '💨', cx + 14, cy - clad, 22);
+    }
+    // the guide marks for "lined up"
+    g.strokeStyle = 'rgba(125,255,176,0.5)'; g.lineWidth = 2;
+    for (const d of [-1, 1]) { g.beginPath(); g.moveTo(cx + gap, cy + d * SPLICE.good * unit); g.lineTo(cx + gap + 30, cy + d * SPLICE.good * unit); g.stroke(); }
+    const off = Math.abs(s.o);
+    g.fillStyle = off < SPLICE.perfect ? '#7dffb0' : off < SPLICE.good ? '#c8ff7d' : off < SPLICE.ok ? '#ffc43d' : '#ff8a94';
+    g.font = `800 12px ${theme.font}`; g.textAlign = 'right';
+    g.fillText(off < SPLICE.perfect ? (plain ? 'Lined up!' : 'Aligned') : off < SPLICE.ok ? (plain ? 'Almost…' : 'Offset') : (plain ? 'Too far off' : 'Out of tolerance'), vx + vw - 12, top + 20);
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.textAlign = 'left'; g.font = `700 10px ${theme.font}`;
+    g.fillText(plain ? 'splicer view · ×400' : 'core view · ×400', vx + 12, top + 18);
+    // the fibres done so far, as little dots
+    for (let i = 0; i < s.fibres; i++) { g.fillStyle = i < s.done.length ? (s.done[i] < spliceLoss(SPLICE.good) ? '#7dffb0' : '#ffc43d') : 'rgba(255,255,255,0.2)'; g.beginPath(); g.arc(vx + 16 + i * 14, top + vh - 14, 5, 0, Math.PI * 2); g.fill(); }
+    floats(g, s, () => [w / 2, h - 14], theme);
+  },
+  laneAt(x, y, w, h) {
+    // above the joint nudges up, below nudges down, on it joins
+    const top = 62, cy = top + (h - top - 40) / 2;
+    if (y < top) return null;
+    return 10 + (Math.abs(y - cy) < 26 ? 1 : y < cy ? 0 : 2);
+  },
+};
+
+// ---------------------------------------------------------------- Colour Memory (metro optical ring)
+// The hub sends a test pattern down the fibre, one colour at a time: each colour is its
+// own channel. Send the same pattern back, so both ends agree which colour goes where.
+// Every round adds a colour, and from the third the pattern plays faster.
+const MEM = { rounds: 5, start: 3, lives: 3, wait: 6, show: [0.75, 0.75, 0.6, 0.55, 0.5], gap: 0.22, pause: 1.1 };
+const MEM_COLOURS = [
+  { key: 'red', hex: '#ff4d6d', plain: 'Red', eng: 'λ1 red' },
+  { key: 'green', hex: '#2ecc71', plain: 'Green', eng: 'λ2 green' },
+  { key: 'blue', hex: '#3d8bff', plain: 'Blue', eng: 'λ3 blue' },
+];
+const ColourMemory = {
+  id: 'memory',
+  name: { plain: 'Colour Memory', eng: 'Channel Memory' },
+  how: {
+    plain: 'The hub sends a pattern of colours down the light ring, one at a time: each colour is its own channel. Watch it, then send the same colours back in the same order with 1 🔴, 2 🟢, 3 🔵 (or tap the pads). Every round adds one colour, and it gets faster!',
+    eng: 'The hub transmits a test sequence across the ring, one wavelength at a time. Echo it back in order with 1 🔴, 2 🟢, 3 🔵 (or tap the pads) so both ends agree on the channel plan. Each round adds a channel, and the sequence speeds up.',
+  },
+  goal: { plain: 'Repeat five patterns of colours', eng: 'Echo five channel sequences' },
+  laneNames: { plain: MEM_COLOURS.map((c) => c.plain), eng: MEM_COLOURS.map((c) => c.eng) },
+  start(random = Math.random, opts = {}) {
+    const seq = Array.from({ length: MEM.start }, () => Math.floor(random() * 3));
+    return { t: 0, random, rounds: opts.rounds ?? MEM.rounds, round: 0, seq, longest: 0, phase: 'pause', pt: 0.8, step: 0, pos: 0, wait: 0, lit: null, pulses: [], lives: MEM.lives, right: 0, wrong: 0, timeouts: 0, score: 0, fx: [], over: null };
+  },
+  speed: (s) => MEM.show[Math.min(MEM.show.length - 1, s.round)],
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    for (const p of s.pulses) p.k += dt / 0.9;
+    s.pulses = s.pulses.filter((p) => p.k < 1);
+    if (s.lit) { s.lit.t -= dt; if (s.lit.t <= 0) s.lit = null; }
+    if (s.phase === 'pause') {
+      if ((s.pt -= dt) <= 0) { s.phase = 'show'; s.step = 0; s.pt = 0; }
+    } else if (s.phase === 'show') {
+      // one colour at a time, sent from the hub across the ring
+      if ((s.pt -= dt) <= 0) {
+        if (s.step >= s.seq.length) { s.phase = 'input'; s.pos = 0; s.wait = 0; return; }
+        const c = s.seq[s.step++];
+        s.lit = { c, t: ColourMemory.speed(s) }; s.pulses.push({ c, k: 0, back: false });
+        s.pt = ColourMemory.speed(s) + MEM.gap;
+      }
+    } else if (s.phase === 'input') {
+      if ((s.wait += dt) > MEM.wait) { s.timeouts++; ColourMemory.miss(s, 'Too slow! The channel timed out'); }
+    }
+  },
+  miss(s, why) {
+    s.lives--; s.wrong++; float(s, 1, why, false);
+    if (s.lives <= 0) { s.over = 'lost'; return; }
+    s.phase = 'pause'; s.pt = MEM.pause;           // the same pattern again
+  },
+  press(s, lane) {
+    if (s.over || s.phase !== 'input') return;
+    if (lane >= 10) lane -= 10;
+    if (lane < 0 || lane > 2) return;
+    s.lit = { c: lane, t: 0.25 }; s.pulses.push({ c: lane, k: 0, back: true }); s.wait = 0;
+    if (lane !== s.seq[s.pos]) { ColourMemory.miss(s, `Wrong colour! That was ${MEM_COLOURS[s.seq[s.pos]].plain.toLowerCase()}`); return; }
+    s.pos++; s.right++; s.score += 20;
+    if (s.pos < s.seq.length) return;
+    s.round++; s.score += 50; s.longest = s.seq.length; float(s, 1, `Pattern matched! +${20 * s.seq.length + 50}`, true);
+    if (s.round >= s.rounds) { s.over = 'won'; return; }
+    s.seq.push(Math.floor(s.random() * 3));
+    s.phase = 'pause'; s.pt = MEM.pause;
+  },
+  lanes(s, words) { return MEM_COLOURS.map((c) => (s.phase === 'input' ? c[words] : '…')); },
+  laneColors: () => MEM_COLOURS.map((c) => c.hex),
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.wrong === 0 };
+  },
+  summary(s, words) {
+    const longest = s.longest;
+    return words === 'plain'
+      ? `You sent back ${s.right} colours in the right order, up to a pattern ${longest} colours long${s.wrong ? `, and mixed ${s.wrong} up along the way` : ', without a single mix-up'}.`
+      : `${s.right} wavelengths echoed in order; longest sequence ${longest}; ${s.wrong} mismatch${s.wrong === 1 ? '' : 'es'} (${s.timeouts} timed out).`;
+  },
+  pads(w, h) {
+    const top = 34, padY = top + (h - top) * 0.58, padH = h - padY - 10, padW = (w - 40) / 3;
+    return { padY, padH, padW };
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain', top = 34;
+    hud(g, w, theme, `${plain ? 'Pattern' : 'Sequence'} ${Math.min(s.round + 1, s.rounds)} / ${s.rounds} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(MEM.lives - Math.max(0, s.lives))}`, s.phase === 'input' ? 1 - s.wait / MEM.wait : s.round / s.rounds, s.score, null);
+    // the fibre between the hub and the data center, with the colours running along it
+    const fy = top + (h - top) * 0.3, x0 = 56, x1 = w - 56;
+    g.strokeStyle = theme.well; g.lineWidth = 14; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, fy); g.lineTo(x1, fy); g.stroke();
+    g.strokeStyle = theme.muted; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, fy); g.lineTo(x1, fy); g.stroke(); g.lineCap = 'butt';
+    for (const p of s.pulses) {
+      const x = p.back ? x1 - (x1 - x0) * p.k : x0 + (x1 - x0) * p.k, c = MEM_COLOURS[p.c].hex;
+      g.fillStyle = c; g.shadowColor = c; g.shadowBlur = 18; g.beginPath(); g.ellipse(x, fy, 18, 7, 0, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+    }
+    emoji(g, '📡', x0 - 24, fy, 26); emoji(g, '🏢', x1 + 24, fy, 26);
+    g.fillStyle = theme.muted; g.font = `800 10px ${theme.font}`; g.textAlign = 'center';
+    g.fillText(plain ? 'Hub' : 'Hub ROADM', x0 - 24, fy + 28); g.fillText(plain ? 'Data center' : 'DC ROADM', x1 + 24, fy + 28);
+    // what to do now
+    g.fillStyle = theme.ink; g.font = `800 14px ${theme.font}`;
+    const say = s.phase === 'show' ? (plain ? '👀 Watch the colours…' : '👀 Receiving sequence…') : s.phase === 'input' ? (plain ? `Your turn: ${s.pos} / ${s.seq.length}` : `Echo it: ${s.pos} / ${s.seq.length}`) : (plain ? 'Get ready…' : 'Stand by…');
+    g.fillText(say, w / 2, fy + 52);
+    // the progress dots for this pattern
+    s.seq.forEach((c, i) => {
+      const x = w / 2 + (i - (s.seq.length - 1) / 2) * 18, y = fy + 70;
+      g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2);
+      g.fillStyle = s.phase === 'input' && i < s.pos ? MEM_COLOURS[c].hex : theme.well; g.fill();
+    });
+    // the three pads, lit when shown or pressed
+    const { padY, padH, padW } = ColourMemory.pads(w, h);
+    MEM_COLOURS.forEach((c, i) => {
+      const x = 20 + i * padW, on = s.lit?.c === i;
+      g.fillStyle = c.hex; g.globalAlpha = on ? 1 : s.phase === 'input' ? 0.55 : 0.3;
+      if (on) { g.shadowColor = c.hex; g.shadowBlur = 24; }
+      roundRect(g, x + 6, padY, padW - 12, padH, 16); g.fill(); g.shadowBlur = 0; g.globalAlpha = 1;
+      g.fillStyle = '#ffffff'; g.font = `800 ${Math.min(18, padH / 3)}px ${theme.font}`; g.textAlign = 'center';
+      g.fillText(c[words], x + padW / 2, padY + padH / 2 + 6);
+    });
+    floats(g, s, () => [w / 2, fy - 24], theme);
+  },
+  laneAt(x, y, w, h) {
+    const { padY, padW } = ColourMemory.pads(w, h);
+    if (y < padY - 10) return null;
+    return 10 + Math.max(0, Math.min(2, Math.floor((x - 20) / padW)));
+  },
+};
+
+// ---------------------------------------------------------------- Light Path (long-haul mesh)
+// Professor Prism has scrambled the light switches between Prismfield and Spectraville.
+// Each tile is a switch with a straight or a bent path through it; tap one to turn it.
+// The light runs live from the source as far as the switches let it: set every one on
+// the way and it reaches the far city. Three puzzles, each bigger, each against a clock.
+const LPATH = { lives: 3, sizes: [[4, 3], [5, 3], [6, 4]], times: [45, 55, 70], next: 1.4 };
+const LP_DIRS = [[-1, 0], [0, 1], [1, 0], [0, -1]];          // N, E, S, W as [row, col]
+const lpOpen = (tile) => (tile.kind === 'straight' ? [1, 3] : [0, 1]).map((d) => (d + tile.rot) % 4);
+// the turn of a straight or bent tile that opens exactly these two sides
+function lpFit(kind, a, b) {
+  for (let r = 0; r < 4; r++) { const o = lpOpen({ kind, rot: r }); if (o.includes(a) && o.includes(b)) return r; }
+  return null;
+}
+// a puzzle: a path from the left edge to the right one, column by column, with
+// the rest of the grid filled in, then every switch turned at random
+function lpPuzzle(random, cols, rows) {
+  const a = Math.floor(random() * rows), b = Math.floor(random() * rows);
+  const tiles = Array.from({ length: rows * cols }, () => ({ kind: random() < 0.5 ? 'straight' : 'corner', rot: 0, path: false }));
+  const put = (r, c, from, to) => { const kind = (from + 2) % 4 === to ? 'straight' : 'corner'; tiles[r * cols + c] = { kind, rot: lpFit(kind, from, to), path: true }; };
+  let y = a;
+  for (let c = 0; c < cols; c++) {
+    const to = c === cols - 1 ? b : Math.floor(random() * rows);
+    if (to === y) put(y, c, 3, 1);
+    else {
+      const d = to > y ? 2 : 0;
+      put(y, c, 3, d);
+      for (let r = y + (to > y ? 1 : -1); r !== to; r += to > y ? 1 : -1) put(r, c, (d + 2) % 4, d);
+      put(to, c, (d + 2) % 4, 1);
+      y = to;
+    }
+  }
+  const solved = tiles.map((tl) => tl.rot);
+  for (const tl of tiles) tl.rot = Math.floor(random() * 4);
+  const pz = { cols, rows, a, b, tiles, solved };
+  for (let n = 0; n < 40 && lpTrace(pz).done; n++) { const lit = lpTrace(pz).lit; const tl = tiles[lit[Math.floor(random() * lit.length)]]; tl.rot = (tl.rot + 1) % 4; }
+  return pz;
+}
+// follow the light from the source: the tiles it lights, and whether it reaches the far side
+function lpTrace(pz) {
+  const lit = [];
+  let r = pz.a, c = 0, from = 3;
+  for (let n = 0; n < pz.cols * pz.rows + 2; n++) {
+    if (r < 0 || r >= pz.rows) return { lit, done: false };
+    if (c >= pz.cols) return { lit, done: r === pz.b && from === 3 };
+    const i = r * pz.cols + c, o = lpOpen(pz.tiles[i]);
+    if (!o.includes(from) || lit.includes(i)) return { lit, done: false };
+    lit.push(i);
+    const out = o.find((d) => d !== from);
+    r += LP_DIRS[out][0]; c += LP_DIRS[out][1]; from = (out + 2) % 4;
+    if (c < 0) return { lit, done: false };
+  }
+  return { lit, done: false };
+}
+const LightPath = {
+  id: 'lightpath',
+  name: { plain: 'Light Path', eng: 'Light Path' },
+  how: {
+    plain: 'Professor Prism has scrambled the light switches between two cities. Each square is a switch with a straight or a bent road for the light: tap it to turn it (or pick one with 1 ◀ and 3 ▶, and turn it with 2 ⟳). The light shines as far as the switches let it, so you can see where it stops. Get it all the way across, three times!',
+    eng: 'The ROADM cross-connects between Prismfield and Spectraville were scrambled. Each tile is a switch with an express or a bent path: tap to rotate it (or select with 1 ◀ / 3 ▶ and rotate with 2 ⟳). The light propagates live as far as the configuration allows. Restore three end-to-end light paths.',
+  },
+  goal: { plain: 'Light the way across, three times', eng: 'Restore three end-to-end light paths' },
+  laneNames: { plain: ['◀ Previous', '⟳ Turn', 'Next ▶'], eng: ['◀ Prev', '⟳ Rotate', 'Next ▶'] },
+  start(random = Math.random, opts = {}) {
+    const s = { t: 0, random, rounds: opts.rounds ?? LPATH.sizes.length, round: 0, lives: LPATH.lives, turns: 0, solvedN: 0, between: 0, score: 0, fx: [], over: null };
+    LightPath.newPuzzle(s);
+    return s;
+  },
+  newPuzzle(s) {
+    const [cols, rows] = LPATH.sizes[Math.min(s.round, LPATH.sizes.length - 1)];
+    s.pz = lpPuzzle(s.random, cols, rows); s.time = LPATH.times[Math.min(s.round, LPATH.times.length - 1)]; s.sel = 0; s.trace = lpTrace(s.pz);
+  },
+  tick(s, dt) {
+    if (s.over) return;
+    s.t += dt;
+    for (const f of s.fx) f.t += dt;
+    s.fx = s.fx.filter((f) => f.t < 1.4);
+    if (s.between > 0) {
+      if ((s.between -= dt) <= 0) { if (s.solvedN >= s.rounds) s.over = 'won'; else LightPath.newPuzzle(s); }
+      return;
+    }
+    if ((s.time -= dt) <= 0) {
+      s.lives--; float(s, 1, 'Out of time! A new set of switches…', false);
+      if (s.lives <= 0) { s.over = 'lost'; return; }
+      s.between = LPATH.next;
+    }
+  },
+  press(s, lane) {
+    if (s.over || s.between > 0) return;
+    const n = s.pz.tiles.length;
+    if (lane >= 10) { const i = lane - 10; if (i >= n) return; s.sel = i; lane = 1; }
+    if (lane === 0) { s.sel = (s.sel + n - 1) % n; return; }
+    if (lane === 2) { s.sel = (s.sel + 1) % n; return; }
+    const tile = s.pz.tiles[s.sel];
+    tile.rot = (tile.rot + 1) % 4; s.turns++;
+    s.trace = lpTrace(s.pz);
+    if (s.trace.done) {
+      s.solvedN++; s.round++;
+      const pts = 120 + Math.round(Math.max(0, s.time)) * 3; s.score += pts;
+      float(s, 1, `The light is through! +${pts}`, true);
+      s.between = LPATH.next;
+    }
+  },
+  result(s) {
+    if (!s.over) return null;
+    return { won: s.over === 'won', points: s.over === 'won' ? s.score + s.lives * 50 : 0, flawless: s.lives === LPATH.lives };
+  },
+  summary(s, words) {
+    return words === 'plain'
+      ? `You set ${s.solvedN} light path${s.solvedN === 1 ? '' : 's'} across the country, turning switches ${s.turns} times${s.lives < LPATH.lives ? `, and ran out of time ${LPATH.lives - s.lives} time${LPATH.lives - s.lives === 1 ? '' : 's'}` : ', always in time'}.`
+      : `${s.solvedN} end-to-end light paths restored with ${s.turns} cross-connect changes; ${LPATH.lives - s.lives} timed out.`;
+  },
+  layout(s, w, h) {
+    const top = 40, { cols, rows } = s.pz, side = Math.min((w - 110) / cols, (h - top - 16) / rows);
+    return { side, x0: (w - side * cols) / 2, y0: top + (h - top - 8 - side * rows) / 2 };
+  },
+  draw(g, s, w, h, words, theme) {
+    g.clearRect(0, 0, w, h);
+    const plain = words === 'plain';
+    hud(g, w, theme, `${plain ? 'Puzzle' : 'Path'} ${Math.min(s.round + 1, s.rounds)} / ${s.rounds} · ${'♥'.repeat(Math.max(0, s.lives))}${'♡'.repeat(LPATH.lives - Math.max(0, s.lives))}`, clamp01(s.time / LPATH.times[Math.min(s.round, LPATH.times.length - 1)]), s.score, s.between > 0 ? null : s.time);
+    const { side, x0, y0 } = LightPath.layout(s, w, h), pz = s.pz, lit = new Set(s.trace.lit), light = '#ffd166';
+    const C = (r, c) => [x0 + c * side + side / 2, y0 + r * side + side / 2];
+    // the two cities at either end
+    const [ax, ay] = C(pz.a, 0), [bx, by] = C(pz.b, pz.cols - 1);
+    emoji(g, '🔦', x0 - 30, ay, 24); emoji(g, s.trace.done ? '🌟' : '🏙', x0 + side * pz.cols + 30, by, 24);
+    g.fillStyle = theme.muted; g.font = `800 10px ${theme.font}`; g.textAlign = 'center';
+    g.fillText('Prismfield', x0 - 30, ay + 26); g.fillText('Spectraville', x0 + side * pz.cols + 30, by + 26);
+    g.strokeStyle = light; g.lineWidth = 6; g.beginPath(); g.moveTo(x0 - 14, ay); g.lineTo(x0, ay); g.stroke();
+    if (s.trace.done) { g.beginPath(); g.moveTo(x0 + side * pz.cols, by); g.lineTo(x0 + side * pz.cols + 14, by); g.stroke(); }
+    pz.tiles.forEach((tile, i) => {
+      const r = Math.floor(i / pz.cols), c = i % pz.cols, [cx, cy] = C(r, c), on = lit.has(i);
+      g.fillStyle = on ? 'rgba(255,209,102,0.16)' : theme.well; roundRect(g, cx - side / 2 + 3, cy - side / 2 + 3, side - 6, side - 6, 10); g.fill();
+      g.strokeStyle = i === s.sel ? theme.accent : theme.paper; g.lineWidth = i === s.sel ? 3 : 1.5; g.stroke();
+      // the road through this switch: grey, or glowing where the light runs
+      g.strokeStyle = on ? light : theme.muted; g.lineWidth = Math.max(5, side * 0.14); g.lineCap = 'round';
+      if (on) { g.shadowColor = light; g.shadowBlur = 14; }
+      g.beginPath();
+      for (const d of lpOpen(tile)) { g.moveTo(cx, cy); g.lineTo(cx + LP_DIRS[d][1] * side / 2, cy + LP_DIRS[d][0] * side / 2); }
+      g.stroke(); g.shadowBlur = 0; g.lineCap = 'butt';
+      g.fillStyle = on ? light : theme.ink; g.beginPath(); g.arc(cx, cy, Math.max(4, side * 0.08), 0, Math.PI * 2); g.fill();
+    });
+    floats(g, s, () => [w / 2, y0 - 4], theme);
+  },
+  laneAt(x, y, w, h, s) {
+    if (!s?.pz) return null;
+    const { side, x0, y0 } = LightPath.layout(s, w, h), c = Math.floor((x - x0) / side), r = Math.floor((y - y0) / side);
+    if (c < 0 || r < 0 || c >= s.pz.cols || r >= s.pz.rows) return null;
+    return 10 + r * s.pz.cols + c;
+  },
+};
+
 // ---------------------------------------------------------------- Level 5: the fight with Lord Lag
 // The last level is a recap of the whole Quest: one round for each level before it, in a
 // game from that level picked at random (so a replay can bring a different one), short
@@ -1476,11 +2265,11 @@ const CableLayer = {
 // one of his hearts.
 const SHORT = {
   lastmile: { goal: 6 }, tetris: { goal: 8 }, storm: { rounds: 1 },
-  fibercut: { goal: 4 }, beat: { seconds: 15 }, race: { first: 2, races: 1, need: 1 },
-  repeaters: { seconds: 10 }, cablelayer: { seconds: 16 },
-  rainbow: { goal: 4 }, mesh: { cuts: 2 },
+  fibercut: { goal: 4 }, beat: { seconds: 15 }, firewall: { waves: 2, build: 6 }, race: { first: 2, races: 1, need: 1 },
+  repeaters: { seconds: 10 }, dive: { rounds: 1 }, splice: { fibres: 2, time: 35 }, cablelayer: { seconds: 16 },
+  memory: { rounds: 2 }, rainbow: { goal: 4 }, lightpath: { rounds: 1 }, mesh: { cuts: 2 },
 };
-const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'race'], ['repeaters', 'cablelayer'], ['rainbow', 'mesh']];
+const BOSS_LEVELS = [['lastmile', 'tetris', 'storm'], ['fibercut', 'beat', 'firewall', 'race'], ['repeaters', 'dive', 'splice', 'cablelayer'], ['memory', 'rainbow', 'lightpath', 'mesh']];
 const BOSS_TAUNTS = [
   { plain: 'Back to the city, apprentice. Let\'s see if you remember!', eng: 'Round one, the city network. Show me you still remember.' },
   { plain: 'Lucky! Now the towers and the core. Faster!', eng: 'Round two: the towers and the core. Faster this time.' },
@@ -1541,7 +2330,9 @@ const LordLagFight = {
       g.fillStyle = theme.ink; g.font = `800 16px ${theme.font}`; g.textAlign = 'center';
       g.fillText(`Round ${s.round + 1} of ${s.picks.length} · ${MINIGAMES[s.picks[s.round]].name[words]}`, w / 2, h * 0.6);
       g.font = `700 14px ${theme.font}`; g.fillStyle = theme.muted;
-      g.fillText(`“${BOSS_TAUNTS[s.round][words]}”`, w / 2, h * 0.7, w - 40);
+      // the taunt goes with the level the round's game comes from, whatever the round
+      const lvl = Math.max(0, BOSS_LEVELS.findIndex((games) => games.includes(s.picks[s.round])));
+      g.fillText(`“${BOSS_TAUNTS[lvl][words]}”`, w / 2, h * 0.7, w - 40);
     }
     // Lord Lag's hearts, one lost for every round you win
     const left = s.picks.length - s.results.length;
@@ -1583,10 +2374,31 @@ function floats(g, s, at, theme) {
 // The finale, Level 5.
 export const BOSS = LordLagFight;
 
+// The short versions: Lord Lag's rounds, and the quick run's games.
+export const SHORT_OPTS = SHORT;
+// How to play, in one line, for the quick run, where nobody has time to read
+export const TIPS = {
+  lastmile: { plain: 'Tap a street to send its show: from the copy nearby if it has it, or from far away.', eng: 'Tap a splitter to serve its oldest request: cache hits are instant, misses go to the origin.' },
+  tetris: { plain: 'Drop each packet in its lane: calls in the fast lane, work in the middle, the rest at the bottom.', eng: 'Queue each packet: voice and sync in EF, business in AF, web and bulk in best effort.' },
+  storm: { plain: 'Switch off one link in every loop, but never cut a floor off.', eng: 'Block one link per loop to stop the broadcast storm, without partitioning the LAN.' },
+  fibercut: { plain: 'Tap the diggers before they cut the fibre. If one does, pick what the ring should do.', eng: 'Tap the excavators before they cut the ring; on a cut, pick the protection action.' },
+  beat: { plain: 'Tap each tower just as its packet reaches it.', eng: 'Tap each tower\'s lane as its timing packet arrives.' },
+  firewall: { plain: 'Tap a spot by the road, then build: 1 🧱 guard, 2 🔍 detective (spots disguises), 3 ⏱ speed bump.', eng: 'Tap a slot, then deploy: 1 🧱 ACL rule, 2 🔍 deep inspection (catches disguises), 3 ⏱ rate limiter.' },
+  race: { plain: 'At each router pick the next road, around the jams. Beat Lord Lag twice!', eng: 'Pick the next hop at each router to steer around congestion; win two races.' },
+  repeaters: { plain: 'Tap the boosters that blink red. When a cable is cut, move the traffic to the other one.', eng: 'Tap repeaters losing power; after the cut, move the traffic to the other cable.' },
+  dive: { plain: '2 📡 to see where the cut is, drive there, and stop on it. Dodge the jellyfish!', eng: '2 📡 fires the OTDR; drive the ROV to the mark and hold station on it. Avoid jellyfish.' },
+  splice: { plain: '1 ▲ and 3 ▼ to line the glowing cores up, 2 ⚡ to join them.', eng: '1 ▲ / 3 ▼ to align the cores, 2 ⚡ to fire the arc.' },
+  cablelayer: { plain: 'Steer north, middle or south to keep the new cable clear of danger.', eng: 'Switch corridors to keep the cable route clear of hazards.' },
+  memory: { plain: 'Watch the colours, then repeat them in the same order.', eng: 'Watch the wavelength sequence, then echo it in order.' },
+  rainbow: { plain: 'Move each request with ◀ ▶ and drop it where its colours are free on every span.', eng: 'Place each request where the same slots are free on every span.' },
+  lightpath: { plain: 'Tap the squares to turn them until the light runs all the way across.', eng: 'Rotate the tiles until the light path runs end to end.' },
+  mesh: { plain: 'When a link breaks, pick a way round that still has room.', eng: 'For each failed service, pick a restoration route with free capacity.' },
+};
+
 // Every game by its id; js/story.js says which network plays which.
 export const MINIGAMES = {
   lastmile: LastMileDash, tetris: PacketTetris, storm: StormChaser,
-  fibercut: StopTheFiberCut, beat: KeepTheBeat, race: PacketRace,
-  repeaters: RepeaterRescue, cablelayer: CableLayer,
-  rainbow: RainbowPacking, mesh: MeshRescue,
+  fibercut: StopTheFiberCut, beat: KeepTheBeat, firewall: GuardTheGate, race: PacketRace,
+  repeaters: RepeaterRescue, dive: RobotDive, splice: FiberSplice, cablelayer: CableLayer,
+  memory: ColourMemory, rainbow: RainbowPacking, lightpath: LightPath, mesh: MeshRescue,
 };

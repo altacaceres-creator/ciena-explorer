@@ -617,3 +617,23 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 760px) { .b-rank { display: none; } .board li { grid-template-columns: 26px 1fr auto; } }
 [data-mode="engineer"] .board li.mine { background: #2a2210; border-color: #7a6020; }
 [data-mode="engineer"] .b-name input { background: #0f1828; color: #e6ebf2; }
+
+/* two ways to play, on the start screen */
+.i-mode { display: grid; justify-items: center; gap: 2px; }
+.i-mode small { font-size: 11px; font-weight: 700; opacity: 0.8; }
+
+/* every villain works for Lord Lag */
+.q-minion { display: block; font-size: 11px; font-weight: 800; color: #e63946; letter-spacing: 0.04em; text-transform: uppercase; }
+[data-mode="engineer"] .q-minion { color: #ff8a94; }
+
+/* the notebook's line-up of minions: beaten ones by name, the rest a question mark */
+.nb-minions { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.nb-minions li { display: grid; justify-items: center; gap: 2px; padding: 6px 4px; border: 2px dashed color-mix(in srgb, var(--muted) 45%, transparent); border-radius: var(--radius-s); text-align: center; opacity: 0.6; }
+.nb-minions li.beaten { border-style: solid; border-color: var(--rule-c, currentColor); opacity: 1; background: var(--well); }
+.nb-minions li.boss.beaten { background: color-mix(in srgb, #e63946 16%, var(--paper)); }
+.nb-minions span { font-size: 24px; line-height: 1; }
+.nb-minions small { font-size: 10px; font-weight: 800; line-height: 1.15; }
+
+/* the quick run's one-line how-to */
+.q-tip { margin: 0; padding: 8px 10px; border-radius: var(--radius-s); background: color-mix(in srgb, var(--c, #2f80ed) 12%, var(--paper)); font-weight: 800; font-size: 14px; }
+[data-mode="engineer"] .q-tip { background: color-mix(in srgb, var(--c, #2f80ed) 18%, #0f1828); }
