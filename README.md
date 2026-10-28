@@ -176,8 +176,9 @@ random and played in its short version, then a two-question quiz from the level'
 each win lifts the clouds off the whole level, and Lord Lag ends it with two rounds
 replaying games from the run. Each way of playing has its own board. The quick run also
 keeps the reading short: one card before each game (the villain, one line of taunt, one
-line of how to play), the quiz straight after the game, and a short win card that points
-to the notebook for the full lesson. In the
+line of how to play), a breather after the game (the minion beaten, one line of the game,
+the lesson's first sentence as a hint, and no clock until "I'm ready"), then the quiz, and
+a short win card that points to the notebook for the full lesson. In the
 story the planet starts under cloud. Lord Lag has switched Netlandia off, and each
 network is won back stop by stop, in the order a phone's packets travel: the **city's
 businesses and homes**, the **cell towers**, the **core**. That finishes the packet
